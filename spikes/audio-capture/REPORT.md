@@ -25,8 +25,8 @@ speakers. Code is in `spikes/audio-capture/` on branch `spike/11-audio-capture`
 | Build: mic via `cpal`, system audio via process tap, from Rust | **Met** | `cargo build --release`. The ScreenCaptureKit fallback builds with `--features sck`. |
 | Capture paths without user interaction | **Partial (TCC)** | **Mic:** works with real signal (the parent process already had mic access). **Process tap:** the tap, the aggregate device and the IOProc are created and run at full rate, but the audio is **all zeros** until System Audio Recording is granted, with no error. **ScreenCaptureKit:** fails with an explicit TCC error. |
 | Process killed mid-recording → audio recoverable | **Met** | `kill -9` after ~15.5 s. Both WAVs open as-is: 14.5 s, up to the last 1 s checkpoint. After `trama-rec repair`: 15.30 s mic, 15.17 s system. Loss is at most ~0.1 s. |
-| Drift between tracks < 100 ms over 60 min | **Met on one shared clock; separate clocks pending real call** | 10-min run, built-in mic + tap on built-in speakers: both tracks −3.6 ppm against the host clock, relative drift 0.0 ppm (0.0 ms extrapolated to 60 min). Anchor jitter ≤ 0.04 ms, 0 dropped frames, 0 gaps. A second 10-min run (tap-only aggregate + a virtual mic): both exactly host-clocked. **Not measured:** devices on separate hardware clocks (USB or Bluetooth headset). Typical ±20–50 ppm means 72–180 ms raw drift at 60 min; the sidecar mapping below removes it (residual < 0.1 ms). |
-| 60-min recording with Teams/Meet/Zoom, both tracks complete | **Pending maintainer test** | Needs the TCC grant and a real call. |
+| Drift between tracks < 100 ms over 60 min | **Met on one shared clock; separate clocks not measured** | 10-min run, built-in mic + tap on built-in speakers: both tracks −3.6 ppm against the host clock, relative drift 0.0 ppm (0.0 ms extrapolated to 60 min). Anchor jitter ≤ 0.04 ms, 0 dropped frames, 0 gaps. A second 10-min run (tap-only aggregate + a virtual mic): both exactly host-clocked. **Not measured:** devices on separate hardware clocks (USB or Bluetooth headset). Typical ±20–50 ppm means 72–180 ms raw drift at 60 min; the sidecar mapping below removes it (residual < 0.1 ms). |
+| 60-min recording with Teams/Meet/Zoom, both tracks complete | **Skipped (maintainer decision)** | Capture, permissions and rebuilds were verified on the maintainer's machine; a 60-minute call was not run. Remaining risks (separate-clock headsets, device changes during a call) are carried into the implementation. |
 | Permissions requested once across rebuilds | **Met** | Signed with an "Apple Development" identity. After granting Microphone and System Audio Recording once, a rebuilt binary (different cdhash, same designated requirement) recorded both tracks with sound and **no prompt** (maintainer test, 2026-11-27). Ad-hoc signing pins the cdhash, so any code change makes TCC ask again. |
 | Windows notes for the stack ADR | **Done** | Below. |
 
@@ -104,7 +104,7 @@ sound, 0 dropped frames and 0.0 ppm relative drift (0.03 ms misalignment at the 
 - **Conclusion:** only the capture backend is per-OS (~300 lines each). Ring buffers,
   writer, sidecar and realignment are shared, consistent with ADR 0005.
 
-### To finish the spike (maintainer)
+### Reproducing the tests
 
 Run all commands from `spikes/audio-capture/`.
 
