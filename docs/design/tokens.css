@@ -1,0 +1,128 @@
+/*
+ * Trama design tokens — reference values for the visual direction.
+ * See docs/design/visual-direction.md and ADR 0006.
+ *
+ * These are the values validated in the prototype. The implementation may move them
+ * to another format (for example a tokens JSON or platform colour sets), but the
+ * values and roles stay the same.
+ */
+
+/* Accent: same lightness and chroma for every accent, only the hue changes. */
+@property --h { syntax: '<number>'; inherits: true; initial-value: 128; }
+@property --c { syntax: '<number>'; inherits: true; initial-value: 0.17; }
+
+.t-app {
+  --h: 128;
+  --c: 0.17;
+  --acc: oklch(0.8 var(--c) var(--h));
+  --acc-ink: oklch(0.2 0.04 var(--h));
+  --danger: oklch(0.66 0.2 25); /* recording only */
+
+  /* Motion */
+  --d1: 120ms;
+  --d2: 200ms;
+  --d3: 320ms;
+  --d4: 520ms;
+  --e-out: cubic-bezier(.22, 1, .36, 1);
+  --e-in: cubic-bezier(.55, 0, .8, .3);
+  --e-io: cubic-bezier(.65, 0, .35, 1);
+  --e-spring: linear(0, .009, .035 2.1%, .141 4.4%, .723 12.9%, .938 16.7%, 1.017, 1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, .991, .977 51%, .974 53.8%, .975 57.1%, .997 69.8%, 1.003 76.9%, 1.004 83.8%, 1);
+  --e-soft: linear(0, .006, .025 2.8%, .101 6.1%, .539 18.9%, .721 25.3%, .849 31.5%, .937 38.1%, .968 41.8%, .991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.9%, 1);
+
+  /* Typography */
+  --font: Geist, system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, monospace;
+
+  transition: --h var(--d4) var(--e-out), --c var(--d4) var(--e-out);
+}
+
+.acc-lime     { --h: 128; } /* default */
+.acc-blue     { --h: 250; }
+.acc-purple   { --h: 300; }
+.acc-pink     { --h: 350; }
+.acc-red      { --h: 25; }
+.acc-orange   { --h: 55; }
+.acc-yellow   { --h: 90; }
+.acc-green    { --h: 155; }
+.acc-graphite { --h: 270; --c: 0.012; }
+
+/* Project colours (data, not interface) */
+.t-pc1 { --pc: oklch(0.72 0.13 25); }
+.t-pc2 { --pc: oklch(0.72 0.13 230); }
+.t-pc3 { --pc: oklch(0.72 0.13 300); }
+.t-pc4 { --pc: oklch(0.72 0.13 155); }
+.t-pc5 { --pc: oklch(0.76 0.13 85); }
+.t-pc6 { --pc: oklch(0.72 0.13 350); }
+
+/* Dark theme */
+.t-app.t-dark {
+  --wall: radial-gradient(50% 60% at 10% 12%, oklch(0.46 0.1 var(--h) / .85), transparent),
+          radial-gradient(60% 70% at 96% 92%, oklch(0.36 0.08 calc(var(--h) + 140)), transparent),
+          oklch(0.2 0.02 270);
+  --frame: oklch(0.2 0.012 270 / .55);
+  --fink: oklch(0.95 0.005 270);
+  --fmute: oklch(0.76 0.01 270);
+  --fhover: oklch(1 0 0 / .06);
+  --fsel: oklch(1 0 0 / .13);
+  --sheet: oklch(0.165 0.006 270 / .93);
+  --card: oklch(0.215 0.008 270);
+  --pop: oklch(0.235 0.012 270 / .96);
+  --panel: oklch(1 0 0 / .035);
+  --panel-2: oklch(1 0 0 / .07);
+  --edge: oklch(1 0 0 / .11);
+  --line: oklch(1 0 0 / .07);
+  --ink: oklch(0.96 0.004 270);
+  --mute: oklch(0.71 0.01 270);
+  --faint: oklch(0.58 0.01 270);
+  --acc-t: oklch(0.85 calc(var(--c) * .85) var(--h));
+  --acc-soft: oklch(0.8 var(--c) var(--h) / .14);
+  --kbg: oklch(1 0 0 / .1);
+  --kink: oklch(0.84 0.006 270);
+  --shadow: 0 30px 80px oklch(0 0 0 / .5);
+}
+
+/* Light theme */
+.t-app.t-light {
+  --wall: radial-gradient(50% 60% at 10% 12%, oklch(0.88 0.08 var(--h)), transparent),
+          radial-gradient(60% 70% at 96% 92%, oklch(0.87 0.06 calc(var(--h) + 140)), transparent),
+          oklch(0.93 0.01 270);
+  --frame: oklch(0.97 0.006 270 / .5);
+  --fink: oklch(0.22 0.01 270);
+  --fmute: oklch(0.43 0.01 270);
+  --fhover: oklch(0 0 0 / .045);
+  --fsel: oklch(1 0 0 / .75);
+  --sheet: oklch(0.995 0.002 270 / .95);
+  --card: oklch(1 0 0);
+  --pop: oklch(0.995 0.003 270 / .97);
+  --panel: oklch(0 0 0 / .022);
+  --panel-2: oklch(0 0 0 / .05);
+  --edge: oklch(0 0 0 / .1);
+  --line: oklch(0 0 0 / .07);
+  --ink: oklch(0.2 0.01 270);
+  --mute: oklch(0.46 0.01 270);
+  --faint: oklch(0.58 0.01 270);
+  --acc-t: oklch(0.48 calc(var(--c) * .9) var(--h));
+  --acc-soft: oklch(0.8 var(--c) var(--h) / .22);
+  --kbg: oklch(0 0 0 / .075);
+  --kink: oklch(0.38 0.01 270);
+  --shadow: 0 30px 80px oklch(0.3 0.03 270 / .22);
+}
+
+/* Reduce transparency: opaque surfaces, no blur */
+.t-app.t-dark.t-opaque  { --frame: oklch(0.235 0.012 270); --sheet: oklch(0.165 0.006 270); --pop: oklch(0.235 0.012 270); }
+.t-app.t-light.t-opaque { --frame: oklch(0.925 0.006 270); --sheet: oklch(0.995 0.002 270); --pop: oklch(0.995 0.003 270); }
+.t-app.t-opaque * { backdrop-filter: none !important; }
+
+/* Reduce motion: the in-app setting (.t-calm) and the system setting */
+.t-app.t-calm, .t-app.t-calm *, .t-app.t-calm *::before, .t-app.t-calm *::after {
+  animation-duration: .01ms !important; animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important; transition-delay: 0s !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .t-app, .t-app *, .t-app *::before, .t-app *::after {
+    animation-duration: .01ms !important; animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important; transition-delay: 0s !important;
+  }
+}
