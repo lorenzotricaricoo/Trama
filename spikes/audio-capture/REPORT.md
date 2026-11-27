@@ -27,8 +27,11 @@ speakers. Code is in `spikes/audio-capture/` on branch `spike/11-audio-capture`
 | Process killed mid-recording → audio recoverable | **Met** | `kill -9` after ~15.5 s. Both WAVs open as-is: 14.5 s, up to the last 1 s checkpoint. After `trama-rec repair`: 15.30 s mic, 15.17 s system. Loss is at most ~0.1 s. |
 | Drift between tracks < 100 ms over 60 min | **Met on one shared clock; separate clocks pending real call** | 10-min run, built-in mic + tap on built-in speakers: both tracks −3.6 ppm against the host clock, relative drift 0.0 ppm (0.0 ms extrapolated to 60 min). Anchor jitter ≤ 0.04 ms, 0 dropped frames, 0 gaps. A second 10-min run (tap-only aggregate + a virtual mic): both exactly host-clocked. **Not measured:** devices on separate hardware clocks (USB or Bluetooth headset). Typical ±20–50 ppm means 72–180 ms raw drift at 60 min; the sidecar mapping below removes it (residual < 0.1 ms). |
 | 60-min recording with Teams/Meet/Zoom, both tracks complete | **Pending maintainer test** | Needs the TCC grant and a real call. |
-| Permissions requested once across rebuilds | **Met in principle; prompt test pending** | With an "Apple Development" identity the designated requirement stays the same across rebuilds (only the cdhash changes), and build N+1 satisfies build N's requirement (`codesign -v -R=…` passes), which is the check TCC performs. Ad-hoc signing pins the cdhash, so any code change makes TCC ask again. |
+| Permissions requested once across rebuilds | **Met** | Signed with an "Apple Development" identity. After granting Microphone and System Audio Recording once, a rebuilt binary (different cdhash, same designated requirement) recorded both tracks with sound and **no prompt** (maintainer test, 2026-11-27). Ad-hoc signing pins the cdhash, so any code change makes TCC ask again. |
 | Windows notes for the stack ADR | **Done** | Below. |
+
+Maintainer tests on 2026-11-27: after the grant, a clean 60 s run had both tracks with
+sound, 0 dropped frames and 0.0 ppm relative drift (0.03 ms misalignment at the end).
 
 ### Chosen approach
 
@@ -78,7 +81,12 @@ speakers. Code is in `spikes/audio-capture/` on branch `spike/11-audio-capture`
    started from a terminal inherits the terminal's permissions.
 5. **Mic level.** Float input does not clip: the built-in mic produced 1,788 samples
    above 1.0 in 10 minutes. Clamp before converting to int16 for transcription.
-6. **API ergonomics.** `objc2-core-audio` exposes the whole process-tap API, all
+6. **The system track starts with the first sound.** With the grant in place, the
+   tap's first frame arrived only when the Mac first played audio (2.5–8 s after the
+   mic in the maintainer's tests); after that it runs continuously, silences included.
+   The sidecar realigns the tracks; the app should pad the start of the system track
+   (or treat the offset explicitly) so both files share the same timeline.
+7. **API ergonomics.** `objc2-core-audio` exposes the whole process-tap API, all
    `unsafe`, so it needs a ~250-line wrapper.
 
 ### Windows notes (for the stack ADR)
