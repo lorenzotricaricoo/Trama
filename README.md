@@ -21,6 +21,7 @@ Desktop app for meetings, transcription and dictation — macOS & Windows.
 ## Documentation
 
 - [Vision](docs/vision.md) — what Trama is, how it works, and the MVP scope
+- [Information architecture](docs/design/information-architecture.md) — objects, screens, navigation and flows of the MVP
 - [Principles](docs/principles.md) — rules for process and architecture
 - [Architecture Decision Records](docs/adr/) — decisions and their reasons
 
