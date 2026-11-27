@@ -1,0 +1,3 @@
+/* Permission prompts (keep in sync with Info.plist). */
+"NSMicrophoneUsageDescription" = "Trama records your voice during meetings.";
+"NSAudioCaptureUsageDescription" = "Trama records the other participants of your meetings.";

@@ -10,5 +10,10 @@
     <string>en</string>
     <string>it</string>
   </array>
+  <!-- Shown in the permission prompts. Translations: macos/<lang>.lproj/InfoPlist.strings -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Trama records your voice during meetings.</string>
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Trama records the other participants of your meetings.</string>
 </dict>
 </plist>

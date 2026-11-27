@@ -41,3 +41,6 @@ tmp/
 # --- Node / frontend ---
 node_modules/
 apps/desktop/dist/
+
+# --- Firma locale (identità scelta da ciascuno) ---
+.signing-identity
