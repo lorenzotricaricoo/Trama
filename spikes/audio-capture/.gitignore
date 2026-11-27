@@ -1,0 +1,10 @@
+# Never commit recordings or build output
+target/
+build/
+recordings/
+out/
+*.wav
+*.caf
+*.raw
+*.aiff
+*.m4a
