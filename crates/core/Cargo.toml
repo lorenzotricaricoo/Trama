@@ -9,7 +9,7 @@ repository.workspace = true
 
 [dependencies]
 fluent-bundle = "0.16"
-fluent-langneg = "0.13"
+fluent-langneg = "0.14"
 rusqlite = { version = "0.43", features = ["bundled"] }
 serde_json = "1"
 sys-locale = "0.3"
