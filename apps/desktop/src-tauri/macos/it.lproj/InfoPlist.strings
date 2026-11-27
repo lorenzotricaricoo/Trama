@@ -1,0 +1,3 @@
+/* Richieste di permesso. */
+"NSMicrophoneUsageDescription" = "Trama registra la tua voce durante i meeting.";
+"NSAudioCaptureUsageDescription" = "Trama registra gli altri partecipanti ai tuoi meeting.";

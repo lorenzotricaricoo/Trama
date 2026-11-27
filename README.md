@@ -44,7 +44,7 @@ From `apps/desktop`, after `npm ci`:
 | Command | What it does |
 |---------|--------------|
 | `npm run tauri dev` | Runs the app with hot reload |
-| `npm run tauri build` | Builds `Trama.app` and the `.dmg` in `target/release/bundle` |
+| `npm run bundle` | Builds `Trama.app` and the `.dmg`, signed, in `target/release/bundle` ([signing setup](docs/development/macos-signing.md)) |
 | `npm test` | Frontend tests (Vitest) |
 | `npm run lint` | ESLint, including the check for text not taken from `locales/` |
 | `npm run typecheck` | TypeScript |

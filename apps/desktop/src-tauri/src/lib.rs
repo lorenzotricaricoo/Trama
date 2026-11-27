@@ -156,6 +156,35 @@ mod tests {
         }
     }
 
+    /// Info.plist strings shown to the user, translated in `macos/<lang>.lproj`.
+    const USAGE_KEYS: &[&str] = &[
+        "NSMicrophoneUsageDescription",
+        "NSAudioCaptureUsageDescription",
+    ];
+
+    #[test]
+    fn permission_prompts_are_translated() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let info_plist = std::fs::read_to_string(dir.join("Info.plist")).unwrap();
+        for key in USAGE_KEYS {
+            assert!(
+                info_plist.contains(&format!("<key>{key}</key>")),
+                "{key} missing in Info.plist"
+            );
+        }
+        for locale in trama_core::i18n::SUPPORTED_LOCALES {
+            let path = dir.join(format!("macos/{locale}.lproj/InfoPlist.strings"));
+            let strings = std::fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("missing {}", path.display()));
+            for key in USAGE_KEYS {
+                assert!(
+                    strings.contains(&format!("\"{key}\" = \"")),
+                    "{key} missing in {locale}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn labels_use_the_brand_name() {
         let l10n = Localizer::new(&["it"], CATALOGS).unwrap();
