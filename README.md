@@ -66,6 +66,7 @@ try another language, set `TRAMA_LOCALE`, for example `TRAMA_LOCALE=en npm run t
 - [Vision](docs/vision.md) — what Trama is, how it works, and the MVP scope
 - [Information architecture](docs/design/information-architecture.md) — objects, screens, navigation and flows of the MVP
 - [Visual direction](docs/design/visual-direction.md) — look, colours, type, motion and design tokens
+- [Data model](docs/architecture/data-model.md) — how sources, meetings and notes are stored, versioned and searched
 - [Principles](docs/principles.md) — rules for process and architecture
 - [Architecture Decision Records](docs/adr/) — decisions and their reasons
 
