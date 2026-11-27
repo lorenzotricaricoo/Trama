@@ -245,7 +245,7 @@ impl Client {
     /// The provider's model catalogue.
     pub fn list_models(&self) -> Result<Vec<CatalogEntry>, ProviderError> {
         let body = self.request("models", None)?;
-        parse_catalog(&body)
+        parse_catalog(&body).map_err(|err| self.scrub(err))
     }
 
     /// A chat completion, checked: never truncated, filtered or empty.
@@ -278,7 +278,8 @@ impl Client {
                     }
                     Err(err) => return Err(err),
                     Ok(reply) => {
-                        let value = parse_structured(&reply.content, &schema.schema)?;
+                        let value = parse_structured(&reply.content, &schema.schema)
+                            .map_err(|err| self.scrub(err))?;
                         return Ok(StructuredReply { value, reply });
                     }
                 }
@@ -345,7 +346,7 @@ impl Client {
         }
 
         let text = self.request("chat/completions", Some(&body))?;
-        parse_chat_reply(&text)
+        parse_chat_reply(&text).map_err(|err| self.scrub(err))
     }
 
     /// Sends a request with transport retries; returns the body of a 2xx reply.
@@ -442,6 +443,13 @@ impl Client {
     }
 
     /// The start of a reply body, for an error's detail, without the key.
+    /// Shortens an error's detail and removes the key from it: details built from a reply
+    /// (a provider's error object, for example) may echo what was sent.
+    fn scrub(&self, mut err: ProviderError) -> ProviderError {
+        err.detail = self.snippet(&err.detail);
+        err
+    }
+
     fn snippet(&self, text: &str) -> String {
         let mut snippet: String = text.chars().take(DETAIL_CHARS).collect();
         if text.chars().nth(DETAIL_CHARS).is_some() {

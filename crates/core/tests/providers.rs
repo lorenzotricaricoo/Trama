@@ -257,6 +257,21 @@ fn a_refused_key_is_not_retried_and_never_echoed() {
 }
 
 #[test]
+fn an_error_object_in_a_successful_reply_is_redacted_and_shortened() {
+    let server = MockServer::start();
+    let long = "x".repeat(2000);
+    let body = json!({"error": {"message": format!("bad key {KEY} {long}")}}).to_string();
+    for _ in 0..3 {
+        server.push(Reply::json(200, body.clone()));
+    }
+    let (client, _) = fast_client(&server);
+    let err = client.chat(&request(), limits()).unwrap_err();
+    assert_eq!(err.kind, ErrorKind::InvalidResponse);
+    assert!(!err.detail.contains(KEY), "{}", err.detail);
+    assert!(err.detail.chars().count() <= 301, "{}", err.detail.len());
+}
+
+#[test]
 fn http_errors_map_to_codes() {
     let cases = [
         (404, ErrorKind::NotFound, "not_found"),
