@@ -61,6 +61,10 @@ From the repository root:
 The interface follows the system language (Italian or English, otherwise English). To
 try another language, set `TRAMA_LOCALE`, for example `TRAMA_LOCALE=en npm run tauri dev`.
 
+The app keeps its data in `~/Library/Application Support/io.github.lorenzotricaricoo.trama/Library`.
+To keep development data apart, set `TRAMA_LIBRARY` to another folder, for example
+`TRAMA_LIBRARY=/tmp/trama-dev npm run tauri dev`.
+
 ## Documentation
 
 - [Vision](docs/vision.md) — what Trama is, how it works, and the MVP scope

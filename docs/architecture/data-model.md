@@ -60,6 +60,7 @@ Library/
 erDiagram
     SOURCE ||--|{ SOURCE_VERSION : "has versions"
     SOURCE ||--o| MEETING : "is a"
+    SOURCE ||--o{ JOB : "is worked on by"
     MEETING ||--|{ TRACK : "records"
     MEETING ||--o{ RECORDING_NOTE : "has"
     SOURCE_VERSION ||--o{ TRANSCRIPT_SEGMENT : "contains"
@@ -120,6 +121,7 @@ The recording side of a meeting source.
 | `status` | `recording`, `processing` (transcription and summary), `ready` or `failed` |
 | `duration_ms` | Length of the recording |
 | `audio_deleted_at` | When the audio was removed by the retention rule; empty while it exists |
+| `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording |
 
 ### Track
 
@@ -182,14 +184,39 @@ A key/value table for preferences that belong to the library: meeting language, 
 retention, and so on. Each key is documented where it is used. Secrets are never stored
 here: provider keys live in the macOS Keychain and the database keeps only a reference.
 
-### Coming with later phase 1 issues
+### Job
 
-These tables follow the same rules and arrive, each with its own migration, together
-with the code that uses them:
+Background work on a source: transcription, summary, removal of audio. Jobs are stored,
+so they survive a restart, and run one at a time.
+
+| Field | Meaning |
+|-------|---------|
+| `id` | UUIDv7 |
+| `kind` | `transcribe`, `summarize` or `delete_audio` |
+| `target_id` | The source the job works on |
+| `state` | `queued`, `running`, `done`, `failed` or `cancelled`. At most one queued or running job of each kind per source |
+| `attempts`, `max_attempts` | Attempts started so far, and the limit (5) |
+| `run_after` | A queued job doesn't start before this time |
+| `error_code`, `error_detail` | The last error: a code the interface translates, and technical detail for diagnostics |
+| `created_at`, `updated_at`, `finished_at` | Bookkeeping |
+
+- A **retryable** error (a busy resource, a network error) puts the job back in the
+  queue after 30 seconds, doubling at each attempt up to one hour; after the last
+  attempt, or on a permanent error, the job is `failed` and the interface shows why
+  ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)). The user can retry it.
+- **Quitting the app** stops the running job and leaves it in the queue, without
+  counting the attempt; it resumes at the next start in the same place.
+- **After a crash**, opening the library puts running jobs back in the queue (or marks
+  them `failed` with `interrupted` if that was their last attempt) and marks meetings
+  that were recording as failed with `recording_interrupted`.
+- Jobs on a source in the trash wait until it is restored, and are removed with it.
+- Progress (for example "transcribing 62%") is not stored: the core sends it to the
+  interface as an event, together with every state change.
+
+### Coming with later phase 1 issues
 
 | Table | What it holds | Issue |
 |-------|---------------|-------|
-| `job` | Background work (transcription, summary, audio cleanup): kind, target, state, attempts, last error | [#24](https://github.com/lorenzotricaricoo/Trama/issues/24) |
 | `provider`, `provider_model`, `task_model` | AI providers (with a Keychain reference, never the key), their model catalogue with limits ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)), and which model each task uses | [#28](https://github.com/lorenzotricaricoo/Trama/issues/28) |
 
 ## Search

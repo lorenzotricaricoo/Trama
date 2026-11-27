@@ -3,9 +3,16 @@
 //! The shell owns windows, menus and the bridge to the frontend. Everything else
 //! belongs to the core library (principle A1).
 
+mod jobs;
+
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
 use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Manager, Runtime, State};
+use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
+use trama_core::jobs::{DeleteAudio, JobHandler, Runner};
+use trama_core::storage::Library;
 
 /// Catalogs used by the shell itself (native menus). The frontend loads its own.
 const CATALOGS: &[Catalog] = &[
@@ -24,6 +31,13 @@ const CATALOGS: &[Catalog] = &[
 /// Overrides the system language in development, for example `TRAMA_LOCALE=en`.
 const LOCALE_OVERRIDE_ENV: &str = "TRAMA_LOCALE";
 
+/// Overrides the library folder, for example to keep development data apart from the
+/// installed app: `TRAMA_LIBRARY=/tmp/trama-dev`.
+const LIBRARY_OVERRIDE_ENV: &str = "TRAMA_LIBRARY";
+
+/// Name of the library folder inside the app data folder.
+const LIBRARY_DIR: &str = "Library";
+
 /// State shared with Tauri commands.
 struct AppState {
     locale: String,
@@ -35,6 +49,32 @@ fn requested_locales() -> Vec<String> {
         Ok(locale) if !locale.trim().is_empty() => vec![locale],
         _ => system_locales(),
     }
+}
+
+/// The library folder: the override if set, otherwise inside the app data folder
+/// (`~/Library/Application Support/<identifier>/Library` on macOS).
+fn library_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+    match std::env::var_os(LIBRARY_OVERRIDE_ENV) {
+        Some(dir) if !dir.is_empty() => Ok(PathBuf::from(dir)),
+        _ => Ok(app.path().app_data_dir()?.join(LIBRARY_DIR)),
+    }
+}
+
+/// Opens the library and starts the job runner with the handlers available so far.
+fn start_core<R: Runtime>(app: &AppHandle<R>) -> Result<jobs::Core, Box<dyn std::error::Error>> {
+    let library = Library::open(library_dir(app)?)?;
+    let recovery = library.recovery();
+    if !recovery.is_empty() {
+        eprintln!("trama: recovered after an unclean stop: {recovery:?}");
+    }
+    let library = Arc::new(Mutex::new(library));
+    let handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(DeleteAudio)];
+    let runner = Runner::start(
+        Arc::clone(&library),
+        handlers,
+        jobs::event_sink(app.clone()),
+    );
+    Ok(jobs::Core { library, runner })
 }
 
 /// The interface locale negotiated by the core, so the shell and the frontend agree.
@@ -105,8 +145,14 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(AppState { locale })
-        .invoke_handler(tauri::generate_handler![app_locale])
+        .invoke_handler(tauri::generate_handler![
+            app_locale,
+            jobs::active_jobs,
+            jobs::retry_job,
+            jobs::cancel_job
+        ])
         .setup(move |app| {
+            app.manage(start_core(app.handle())?);
             let menu = app_menu(app.handle(), &l10n)?;
             app.set_menu(menu)?;
             if let Some(window) = app.get_webview_window("main") {
@@ -114,8 +160,16 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running the Trama desktop app");
+        .build(tauri::generate_context!())
+        .expect("error while building the Trama desktop app")
+        .run(|app, event| {
+            if let RunEvent::Exit = event
+                && let Some(core) = app.try_state::<jobs::Core>()
+            {
+                // Unfinished jobs stay queued and resume at the next start.
+                core.runner.stop();
+            }
+        });
 }
 
 #[cfg(test)]

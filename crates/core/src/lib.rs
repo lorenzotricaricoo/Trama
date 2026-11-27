@@ -5,6 +5,7 @@
 //! and the MCP server, are clients of this library.
 
 pub mod i18n;
+pub mod jobs;
 pub mod storage;
 
 /// Version of the core library.

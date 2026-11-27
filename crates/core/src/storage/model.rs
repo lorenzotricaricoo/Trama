@@ -140,6 +140,14 @@ pub struct Meeting {
     pub status: MeetingStatus,
     pub duration_ms: Option<i64>,
     pub audio_deleted_at: Option<Timestamp>,
+    /// Why the meeting failed, as a code the interface translates (see [`meeting_error`]).
+    pub error_code: Option<String>,
+}
+
+/// Codes stored in [`Meeting::error_code`].
+pub mod meeting_error {
+    /// The app stopped while the meeting was recording; the audio may be incomplete.
+    pub const RECORDING_INTERRUPTED: &str = "recording_interrupted";
 }
 
 /// One audio track of a meeting.
