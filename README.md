@@ -2,8 +2,9 @@
 
 Desktop app for meetings, transcription and dictation — macOS & Windows.
 
-> **Status: early planning.** No release is available yet. The architecture and
-> tech stack are still being defined.
+> **Status: planning.** No release is available yet. The tech stack is decided
+> ([ADR 0007](docs/adr/0007-tech-stack.md)): a Rust core with a Tauri and React
+> interface. Development has not started.
 
 ## Goals
 
