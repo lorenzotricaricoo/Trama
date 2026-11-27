@@ -10,11 +10,16 @@ repository.workspace = true
 [dependencies]
 fluent-bundle = "0.16"
 fluent-langneg = "0.13"
+rusqlite = { version = "0.43", features = ["bundled"] }
+serde_json = "1"
 sys-locale = "0.3"
+thiserror = "2"
 unic-langid = { version = "0.9", features = ["macros"] }
+uuid = { version = "1.29", features = ["v7"] }
 
 [lints]
 workspace = true
 
 [dev-dependencies]
 fluent-syntax = "0.12"
+tempfile = "3"

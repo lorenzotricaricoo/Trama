@@ -5,6 +5,7 @@
 //! and the MCP server, are clients of this library.
 
 pub mod i18n;
+pub mod storage;
 
 /// Version of the core library.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
