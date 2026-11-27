@@ -1,0 +1,55 @@
+@import '../../../docs/design/tokens.css';
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+.app {
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  background: var(--wall);
+  color: var(--ink);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Height of the macOS title bar, drawn over the content (titleBarStyle: Overlay). */
+.titlebar {
+  position: fixed;
+  inset: 0 0 auto;
+  height: 28px;
+}
+
+.welcome {
+  max-width: 34rem;
+  margin: 1.5rem;
+  padding: 2.5rem;
+  background: var(--sheet);
+  border: 1px solid var(--edge);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+
+.welcome h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.75rem;
+  letter-spacing: -0.02em;
+}
+
+.welcome p {
+  margin: 0.5rem 0;
+  line-height: 1.5;
+}
+
+.muted {
+  color: var(--mute);
+}
+
+.faint {
+  color: var(--faint);
+  font-size: 0.875rem;
+}

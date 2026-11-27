@@ -1,0 +1,21 @@
+[package]
+name = "trama-desktop"
+description = "Trama desktop app: Tauri shell over the core library"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "trama_desktop"
+
+[build-dependencies]
+tauri-build = { version = "2.7.6", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.7", features = [] }
+trama-core.workspace = true
+
+[lints]
+workspace = true

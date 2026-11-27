@@ -1,0 +1,20 @@
+[package]
+name = "trama-core"
+description = "Trama core library: capture, transcription, curator, index and storage, independent of the UI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+fluent-bundle = "0.16"
+fluent-langneg = "0.13"
+sys-locale = "0.3"
+unic-langid = { version = "0.9", features = ["macros"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+fluent-syntax = "0.12"
