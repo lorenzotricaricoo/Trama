@@ -1,8 +1,8 @@
 # Information architecture
 
 What Trama shows and how the user moves through it. This document covers the
-**MVP** only and says nothing about visual style, which is the subject of the
-visual direction work. Phases refer to the [MVP phases](../vision.md#mvp).
+**MVP** only and says nothing about visual style, which is described in the
+[visual direction](visual-direction.md). Phases refer to the [MVP phases](../vision.md#mvp).
 
 ## Objects
 
@@ -106,4 +106,5 @@ checked by listening; the curator is not affected, since it works on transcripts
 Low-fidelity wireframes of every screen above were drawn and validated by the
 maintainer. Three Home variants were compared (feed of changes, dashboard, daily
 brief); the **dashboard** was chosen. The wireframes are deliberately plain: the MVP
-interface can stay simple, and the visual identity is designed separately.
+interface can stay simple, and the visual identity is designed separately in the
+[visual direction](visual-direction.md).
