@@ -35,4 +35,9 @@ $RECYCLE.BIN/
 *.log
 tmp/
 
-# Le regole specifiche dello stack (es. Rust: /target) si aggiungono quando lo stack è deciso.
+# --- Rust ---
+/target/
+
+# --- Node / frontend ---
+node_modules/
+apps/desktop/dist/
