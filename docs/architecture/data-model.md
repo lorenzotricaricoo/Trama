@@ -65,6 +65,8 @@ erDiagram
     MEETING ||--o{ RECORDING_NOTE : "has"
     SOURCE_VERSION ||--o{ TRANSCRIPT_SEGMENT : "contains"
     SOURCE_VERSION ||--o{ SUMMARY : "is summarized by"
+    PROVIDER ||--o{ PROVIDER_MODEL : "offers"
+    PROVIDER_MODEL ||--o{ TASK_MODEL : "is chosen for"
 ```
 
 ### Source
@@ -213,11 +215,55 @@ so they survive a restart, and run one at a time.
 - Progress (for example "transcribing 62%") is not stored: the core sends it to the
   interface as an event, together with every state change.
 
-### Coming with later phase 1 issues
+### Provider
 
-| Table | What it holds | Issue |
-|-------|---------------|-------|
-| `provider`, `provider_model`, `task_model` | AI providers (with a Keychain reference, never the key), their model catalogue with limits ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)), and which model each task uses | [#28](https://github.com/lorenzotricaricoo/Trama/issues/28) |
+An OpenAI-compatible endpoint for language models
+([ADR 0003](../adr/0003-hybrid-ai-providers.md)). Several can be configured at once.
+
+| Field | Meaning |
+|-------|---------|
+| `id` | UUIDv7 |
+| `name` | Chosen by the user |
+| `base_url` | Base URL of the API without a trailing slash, for example `https://api.example.com/v1` |
+| `key_ref` | Name of the Keychain item that holds the API key; empty for a provider that needs no key (a local server) |
+| `catalog_fetched_at` | Last successful read of the model catalogue |
+| `created_at`, `updated_at` | Bookkeeping |
+
+**The API key is never in the database** (nor in logs or error details). It is a generic
+password in the user's macOS Keychain with service `trama-provider-<provider id>` and
+account `api-key`; `key_ref` holds the service name. Removing a provider removes its
+Keychain item.
+
+### Provider model
+
+A model offered by a provider, read from its catalogue (`GET /models`) or added by hand.
+
+| Field | Meaning |
+|-------|---------|
+| `provider_id`, `model_id` | The provider, and the model id as the provider names it |
+| `listed` | Listed at the last catalogue read. A model that disappears is kept, with its overrides, so a task that uses it fails with a clear error |
+| `context_tokens`, `max_output_tokens` | Limits read from the catalogue, when the provider exposes them |
+| `context_tokens_override`, `max_output_tokens_override` | Limits set by the user; they win over the catalogue |
+| `updated_at` | Bookkeeping |
+
+Limits are never hard-coded ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)):
+the core reads them from the catalogue under the field names providers use
+(`context_length`, `context_window`, `max_context_length`, `max_output_tokens`,
+`max_completion_tokens`, …). When the provider doesn't expose them, the user sets them;
+a model whose context size is unknown is refused for tasks (`limits_unknown`). Reading
+the catalogue again updates the catalogue limits and never touches the overrides.
+
+### Task model
+
+The model chosen for each task.
+
+| Field | Meaning |
+|-------|---------|
+| `task` | The task: `summary` in phase 1; the curator's tasks (extraction, page writing, chat) are added in phase 2 without a migration, because the core checks the names |
+| `provider_id`, `model_id` | The model; removing it (or its provider) leaves the task without a model |
+| `updated_at` | Bookkeeping |
+
+A task without a model fails with `no_model_for_task`, which the interface translates.
 
 ## Search
 

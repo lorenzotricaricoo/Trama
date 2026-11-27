@@ -71,6 +71,7 @@ To keep development data apart, set `TRAMA_LIBRARY` to another folder, for examp
 - [Information architecture](docs/design/information-architecture.md) — objects, screens, navigation and flows of the MVP
 - [Visual direction](docs/design/visual-direction.md) — look, colours, type, motion and design tokens
 - [Data model](docs/architecture/data-model.md) — how sources, meetings and notes are stored, versioned and searched
+- [AI providers](docs/architecture/providers.md) — providers, models per task and how calls stay robust
 - [Principles](docs/principles.md) — rules for process and architecture
 - [Architecture Decision Records](docs/adr/) — decisions and their reasons
 

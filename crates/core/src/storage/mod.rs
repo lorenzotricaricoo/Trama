@@ -13,6 +13,7 @@ mod error;
 mod jobs;
 mod meetings;
 mod migrations;
+mod providers;
 mod search;
 mod sources;
 
@@ -26,6 +27,7 @@ pub use error::{Result, StorageError};
 pub use jobs::*;
 pub use migrations::SCHEMA_VERSION;
 pub use model::*;
+pub use providers::*;
 
 /// Database file inside the library folder.
 pub const DATABASE_FILE: &str = "trama.db";
