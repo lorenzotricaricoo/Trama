@@ -5,10 +5,14 @@
 //! other client goes through the owner's API. The data model is described in
 //! `docs/architecture/data-model.md`.
 
+// First, so its `text_enum!` macro is visible to the modules below.
+#[macro_use]
+mod model;
+
 mod error;
+mod jobs;
 mod meetings;
 mod migrations;
-mod model;
 mod search;
 mod sources;
 
@@ -19,6 +23,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use rusqlite::{Connection, OptionalExtension, params};
 
 pub use error::{Result, StorageError};
+pub use jobs::*;
 pub use migrations::SCHEMA_VERSION;
 pub use model::*;
 
@@ -62,6 +67,7 @@ pub struct Library {
     root: PathBuf,
     conn: Connection,
     clock: Box<dyn Clock>,
+    recovery: Recovery,
     // Held for the lifetime of the library; the OS releases it when the file is closed.
     _lock: File,
 }
@@ -105,11 +111,13 @@ impl Library {
         conn.pragma_update(None, "foreign_keys", false)?;
         migrations::migrate(&mut conn, migrations::MIGRATIONS)?;
         conn.pragma_update(None, "foreign_keys", true)?;
+        let recovery = jobs::recover(&mut conn, clock.now())?;
 
         Ok(Self {
             root,
             conn,
             clock,
+            recovery,
             _lock: lock,
         })
     }
@@ -160,7 +168,8 @@ impl Library {
         Ok(())
     }
 
-    fn now(&self) -> Timestamp {
+    /// The current time, from the library's clock.
+    pub fn now(&self) -> Timestamp {
         self.clock.now()
     }
 }

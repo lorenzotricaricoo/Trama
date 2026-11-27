@@ -9,7 +9,10 @@ use rusqlite::Connection;
 use super::error::{Result, StorageError};
 
 /// The schema migrations, in order. Migration `n` (1-based) brings the schema to version `n`.
-pub(crate) const MIGRATIONS: &[&str] = &[include_str!("migrations/0001_initial.sql")];
+pub(crate) const MIGRATIONS: &[&str] = &[
+    include_str!("migrations/0001_initial.sql"),
+    include_str!("migrations/0002_jobs.sql"),
+];
 
 /// Schema version written by this build.
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -88,6 +91,7 @@ mod tests {
             "recording_note",
             "summary",
             "setting",
+            "job",
             "segment_search",
             "text_search",
         ] {

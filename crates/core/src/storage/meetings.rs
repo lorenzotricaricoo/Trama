@@ -15,6 +15,7 @@ fn meeting_row(row: &Row<'_>) -> rusqlite::Result<Meeting> {
         status: enum_column(row, 1)?,
         duration_ms: row.get(2)?,
         audio_deleted_at: row.get(3)?,
+        error_code: row.get(4)?,
     })
 }
 
@@ -77,7 +78,7 @@ impl Library {
     pub fn meeting(&self, id: Id) -> Result<Meeting> {
         self.conn
             .query_row(
-                "SELECT source_id, status, duration_ms, audio_deleted_at FROM meeting WHERE source_id = ?1",
+                "SELECT source_id, status, duration_ms, audio_deleted_at, error_code FROM meeting WHERE source_id = ?1",
                 [id.to_string()],
                 meeting_row,
             )
@@ -96,8 +97,25 @@ impl Library {
         let tx = self.conn.transaction()?;
         live_source(&tx, id, SourceKind::Meeting)?;
         tx.execute(
-            "UPDATE meeting SET status = ?2, duration_ms = COALESCE(?3, duration_ms) WHERE source_id = ?1",
+            "UPDATE meeting SET status = ?2, duration_ms = COALESCE(?3, duration_ms), error_code = NULL
+             WHERE source_id = ?1",
             params![id.to_string(), status.as_str(), duration_ms],
+        )?;
+        touch_source(&tx, id, now)?;
+        tx.commit()?;
+        self.meeting(id)
+    }
+
+    /// Marks a meeting as failed, with a code the interface translates (see [`meeting_error`]).
+    ///
+    /// [`meeting_error`]: super::meeting_error
+    pub fn set_meeting_failed(&mut self, id: Id, error_code: &str) -> Result<Meeting> {
+        let now = self.now();
+        let tx = self.conn.transaction()?;
+        live_source(&tx, id, SourceKind::Meeting)?;
+        tx.execute(
+            "UPDATE meeting SET status = 'failed', error_code = ?2 WHERE source_id = ?1",
+            params![id.to_string(), error_code],
         )?;
         touch_source(&tx, id, now)?;
         tx.commit()?;
