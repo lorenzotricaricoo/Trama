@@ -1,0 +1,58 @@
+# Synthetic test set for the spike (text only; audio is generated locally with macOS `say`
+# by scripts/make_test_audio.sh and never committed).
+# Columns: set <TAB> file_id <TAB> lang (it|en) <TAB> text
+# Consecutive rows with the same file_id are spoken in order into one file.
+# The script maps lang to a voice per profile ("natural": Alice / Samantha / Daniel;
+# "eloquence": the robotic Eddy/Flo voices). Mixed files either alternate languages
+# between speakers (inter-sentence) or put English terms inside Italian sentences
+# (intra-sentence code-switching, spoken by the Italian voice).
+mixed	mix01_alternating	it	Buongiorno a tutti, iniziamo la riunione settimanale del progetto.
+mixed	mix01_alternating	en	Thanks, I will share my screen so everyone can see the roadmap.
+mixed	mix01_alternating	it	Perfetto, partiamo dalle attività rimaste aperte la settimana scorsa.
+mixed	mix01_alternating	en	The payment integration is almost done, we only need the final review from the security team.
+mixed	mix01_alternating	it	Bene, allora chiediamo a Giulia di organizzare la revisione entro venerdì.
+mixed	mix02_alternating	en	Before we start, could someone summarise what the customer said yesterday?
+mixed	mix02_alternating	it	Certo, il cliente è soddisfatto ma vuole ridurre i tempi di consegna.
+mixed	mix02_alternating	en	That is a reasonable request, but we need more people on the mobile application.
+mixed	mix02_alternating	it	Possiamo spostare Marco dal gruppo di analisi per un mese.
+mixed	mix02_alternating	en	Great, please send me an email with the new plan after the meeting.
+mixed	mix03_codeswitch	it	Facciamo un quick check sulla roadmap prima della demo con il cliente.
+mixed	mix03_codeswitch	it	Il deployment in staging è andato bene, ma la pipeline di build è ancora lenta.
+mixed	mix03_codeswitch	it	Dobbiamo aprire un ticket per il bug sul login e assegnarlo al team frontend.
+mixed	mix03_codeswitch	it	Secondo me la priorità resta la customer experience, non le nuove feature.
+mixed	mix04_codeswitch	it	Ho parlato con il product owner e la deadline è confermata per la fine del mese.
+mixed	mix04_codeswitch	it	Il backlog è troppo lungo, facciamo una sessione di grooming domani mattina.
+mixed	mix04_codeswitch	it	Nel prossimo sprint ci concentriamo sul refactoring del database e sui test automatici.
+mixed	mix04_codeswitch	it	Mandatemi il feedback entro stasera così preparo il report per il management.
+mixed	mix05_alternating	it	Allora, qual è lo stato del contratto con il nuovo fornitore?
+mixed	mix05_alternating	en	Legal approved the draft this morning, so we can sign it next week.
+mixed	mix05_alternating	it	Ottimo, però ricordiamoci di verificare le clausole sulla protezione dei dati.
+mixed	mix05_alternating	en	Agreed, I will ask the privacy officer to double check everything.
+mixed	mix06_codeswitch	it	Il meeting di kickoff con il team di Londra è spostato a giovedì pomeriggio.
+mixed	mix06_codeswitch	it	Loro useranno la nuova dashboard per monitorare le performance delle campagne.
+mixed	mix06_codeswitch	it	Ci serve un owner per ogni action item, altrimenti nessuno fa follow up.
+mixed	mix06_codeswitch	it	Io mi prendo il budget, tu ti occupi della timeline e degli stakeholder.
+mixed	mix07_alternating	en	Let me play devil's advocate here: do we really need a new framework?
+mixed	mix07_alternating	it	Secondo me sì, perché quello attuale non è più mantenuto da anni.
+mixed	mix07_alternating	en	Fine, but the migration must not block the release planned for the spring.
+mixed	mix07_alternating	it	Facciamo una prova su un modulo piccolo e poi decidiamo insieme.
+mixed	mix08_codeswitch	it	Ragazzi, il cliente ha chiesto una call di allineamento perché il preventivo non torna.
+mixed	mix08_codeswitch	it	Preparo io le slide con il recap delle milestone e dei rischi principali.
+mixed	mix08_codeswitch	it	Se serve facciamo anche una breve live demo della nuova interfaccia.
+mixed	mix08_codeswitch	en	Sounds good, just keep it short because they only have half an hour.
+mono_it	it01	it	La biblioteca comunale resterà chiusa per lavori di ristrutturazione fino alla fine dell'estate.
+mono_it	it01	it	I cittadini potranno comunque restituire i libri presso la sede del municipio.
+mono_it	it02	it	Durante la riunione abbiamo discusso il bilancio dell'anno e le nuove assunzioni.
+mono_it	it02	it	La direzione ha deciso di investire nella formazione del personale.
+mono_it	it03	it	Il treno per Milano è in ritardo a causa di un guasto sulla linea.
+mono_it	it03	it	I passeggeri sono pregati di consultare i tabelloni per gli aggiornamenti.
+mono_it	it04	it	Per preparare il risotto bisogna tostare il riso e aggiungere il brodo poco alla volta.
+mono_it	it04	it	Alla fine si manteca con burro e parmigiano e si lascia riposare un minuto.
+mono_en	en01	en	The library will stay closed for renovation work until the end of the summer.
+mono_en	en01	en	Citizens can still return their books at the town hall during opening hours.
+mono_en	en02	en	During the meeting we discussed the annual budget and the new hires.
+mono_en	en02	en	Management decided to invest more in training for the whole staff.
+mono_en	en03	en	The train to London is delayed because of a signal failure near the station.
+mono_en	en03	en	Passengers are asked to check the departure boards for further updates.
+mono_en	en04	en	To make a good risotto you toast the rice and add the stock a little at a time.
+mono_en	en04	en	At the end you stir in butter and parmesan and let it rest for a minute.

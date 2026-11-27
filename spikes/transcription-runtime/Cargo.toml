@@ -1,0 +1,12 @@
+[package]
+name = "trama-stt"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.105"
+clap = { version = "4.6.10", features = ["derive", "env"] }
+hound = "3.5.1"
+libc = "0.2.191"
+sherpa-onnx = "2.0.3"
+unicode-normalization = "0.1.26"

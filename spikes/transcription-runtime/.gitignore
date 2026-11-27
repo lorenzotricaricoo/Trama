@@ -1,0 +1,10 @@
+/target/
+*.wav
+*.m4a
+*.mp3
+*.flac
+*.onnx
+*.tar.bz2
+models/
+eval-out/
+data/audio/
