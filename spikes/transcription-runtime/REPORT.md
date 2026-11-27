@@ -1,5 +1,48 @@
 # Spike #10: local transcription runtime (report)
 
+## Update: benchmark run (2026-11-27)
+
+The harness was run on the maintainer's benchmark sets, read in place (real meeting audio
+and transcripts are not copied anywhere; only aggregate numbers are reported). The
+benchmark's reference engine was Parakeet Ultra converted to **Core ML** (FluidAudio,
+encoder int8, decoder/joint fp16, CPU + Neural Engine, fixed ~15 s overlapping windows).
+Re-scoring its original outputs with this harness reproduces the benchmark exactly
+(FLEURS 1.82%, real-meeting set 8.77%, long file 2.66%), so the normalizations match.
+
+| Set | Core ML (benchmark) | sherpa-onnx **int8**, VAD defaults | sherpa-onnx **fp32**, VAD 1.0 s / 30 s / 500 ms |
+|---|---|---|---|
+| FLEURS Italian, 200 clips, 47.8 min | 1.82% | 3.28% | **2.15%** |
+| Real meetings, 8 × 60 s, 946 words | 8.77% | 19.24% | **12.05%** |
+| Long file, 30.2 min | 2.66% | 3.27% | **1.72%** |
+| Silence and noise, 4 × 30 s | 0 words | 0 words | **0 words** |
+| Synthetic mixed IT/EN (8 files) | – | 3.09% | **2.38%** |
+| Speed (M3 Pro, CPU, 4 threads) | Neural Engine | 16.5× | **≈ 23×** |
+| Peak memory | – | ≈ 1.25 GB | ≈ 2.8 GB |
+
+Findings:
+
+- **The int8 export was the problem, not the runtime.** With the fp32 export, FLEURS is
+  within 0.33 points of the benchmark (target: within 1 point) and the long file is
+  better. fp32 is also faster than int8 on Apple Silicon.
+- **The sentence-drop risk at language switches came from int8.** With fp32, longer VAD
+  segments no longer drop sentences on the synthetic mixed set (worst file 7.8%, was
+  43%), so segments can be long.
+- **Chunking matters on spontaneous speech.** On the real-meeting set, the default VAD
+  (0.5 s silence, 20 s max) gives 17%; 1.0 s silence, 30 s max and 500 ms padding gives
+  12%; fixed windows without overlap give 11–14% but hurt the long file (4.1%).
+- **The real-meeting gap (12.05% vs 8.77%) is partly the reference.** That reference
+  was built from the agreement between Whisper and the Core ML engine, with the
+  maintainer judging only their disagreements, so it favours those two engines and
+  penalizes any third one. FLEURS is the fair comparison.
+
+Updated recommendation: **sherpa-onnx with the fp32 Parakeet Ultra export**
+(`csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-ultra` on Hugging Face, 2.4 GB,
+CC-BY-4.0, SHA-256 verified), Silero VAD with 1.0 s minimum silence, 30 s maximum
+segment and 500 ms padding. Still open: a run on Windows x64, and segment stitching with
+overlap (as Core ML's chunker does) if real meetings need it.
+
+## Original report (synthetic data, int8)
+
 ## Answer
 
 **Yes, with one condition still open.** Parakeet runs from Rust through **sherpa-onnx**
