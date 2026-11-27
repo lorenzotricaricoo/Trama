@@ -1,0 +1,4 @@
+# Run outputs (raw model replies, scores) and caches stay out of git
+out/
+__pycache__/
+*.pyc

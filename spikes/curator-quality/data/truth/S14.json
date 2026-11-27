@@ -1,0 +1,25 @@
+{
+  "id": "S14",
+  "type": "meeting",
+  "date": "2026-10-05",
+  "file": "sources/S14.md",
+  "projects": [],
+  "hard_cases": ["no project, but a project (Portale Faro) is named explicitly as an example: a mention is not membership", "company-wide process decisions and actions without a project", "people who work on projects (Paolo, Giulia) appear in a non-project context"],
+  "entities": {
+    "people": [
+      {"name": "Paolo Greco", "aliases": ["Paolo"], "role": null, "role_keywords": [], "evidence": "Allora, Paolo qui."},
+      {"name": "Giulia", "aliases": ["Giulia Ferri", "Giulia Conti"], "role": null, "role_keywords": [], "optional": true, "evidence": "Giulia qui, per me va bene"}
+    ],
+    "decisions": [
+      {"text": "Timesheet compilati ogni venerdì entro le diciotto, con promemoria automatico", "keywords": ["timesheet", "venerdi"], "date": "2026-10-05", "reason": "a fine mese metà delle ore non sono segnate e non si riesce a fatturare", "supersedes": null, "evidence": "timesheet compilati ogni venerdì entro le diciotto, con promemoria automatico"}
+    ],
+    "actions": [
+      {"text": "Proporre un template unico per le stime entro fine mese", "keywords": ["template", "stime"], "owner": "Io", "status": "open", "evidence": "Sì, proponilo tu entro fine mese"},
+      {"text": "Attivare il promemoria automatico del venerdì per i timesheet", "keywords": ["promemoria"], "owner": null, "status": "open", "optional": true, "evidence": "Si può fare, lo attivo io."}
+    ],
+    "requirements": [],
+    "open_questions": [
+      {"text": "Il template delle stime vale anche per i progetti interni o solo per i clienti?", "keywords": ["interni"], "evidence": "il template vale anche per i progetti interni o solo per i clienti?"}
+    ]
+  }
+}

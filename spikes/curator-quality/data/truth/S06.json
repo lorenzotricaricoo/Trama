@@ -1,0 +1,27 @@
+{
+  "id": "S06",
+  "type": "meeting",
+  "date": "2026-09-17",
+  "file": "sources/S06.md",
+  "projects": ["bussola"],
+  "hard_cases": ["project mentioned only indirectly ('la cosa dei nuovi arrivati'), never by name", "person introduced by first name only (Sara)", "action owner is a third person reported by another speaker (Tommaso)", "action closed later in S17"],
+  "entities": {
+    "people": [
+      {"name": "Sara Mancini", "aliases": ["Sara"], "role": null, "role_keywords": [], "evidence": "Sono Sara, per la cosa dei nuovi arrivati."},
+      {"name": "Tommaso Rinaldi", "aliases": ["Tommaso"], "role": "IT", "role_keywords": ["it"], "evidence": "Ho sentito Tommaso Rinaldi, dell'IT"}
+    ],
+    "decisions": [
+      {"text": "Ogni neoassunto ha un buddy (un collega di riferimento) per il primo mese", "keywords": ["buddy"], "date": "2026-09-17", "reason": "i nuovi spesso non fanno domande al responsabile per paura di disturbare", "supersedes": null, "evidence": "Facciamolo: un buddy per ogni neoassunto, per il primo mese."}
+    ],
+    "actions": [
+      {"text": "Preparare una checklist degli accessi da fare prima dell'arrivo dei neoassunti", "keywords": ["checklist", "accessi"], "owner": "Tommaso Rinaldi", "status": "open", "evidence": "mi ha detto che prepara lui una checklist degli accessi da fare prima dell'arrivo"},
+      {"text": "Proporre a Sara tre nomi di buddy per i neoassunti di ottobre entro venerdì", "keywords": ["buddy", "nomi"], "owner": "Io", "status": "open", "evidence": "Sì, entro venerdì ti do tre nomi."}
+    ],
+    "requirements": [
+      {"text": "Gli accessi (email, VPN, repository) devono essere pronti la mattina del primo giorno", "keywords": ["accessi", "primo giorno"], "vague": false, "evidence": "Email, VPN, repository, tutto pronto la mattina del primo giorno."}
+    ],
+    "open_questions": [
+      {"text": "Che budget c'è per il kit di benvenuto?", "keywords": ["budget", "kit"], "evidence": "Non so ancora che budget abbiamo, devo chiedere."}
+    ]
+  }
+}

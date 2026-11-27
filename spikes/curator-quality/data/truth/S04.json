@@ -1,0 +1,29 @@
+{
+  "id": "S04",
+  "type": "meeting",
+  "date": "2026-09-14",
+  "file": "sources/S04.md",
+  "projects": ["ghianda"],
+  "hard_cases": ["two people named Giulia in the same meeting: owners must be disambiguated from context", "vague requirement ('semplice, anche per gli anziani')", "actions closed later in S12"],
+  "entities": {
+    "people": [
+      {"name": "Giulia Conti", "aliases": [], "role": "responsabile marketing di Forni Ghianda", "role_keywords": ["marketing"], "evidence": "sono Giulia Conti, responsabile marketing di Forni Ghianda"},
+      {"name": "Giulia Ferri", "aliases": [], "role": "project manager (Studio Corvino)", "role_keywords": ["project manager", "pm"], "evidence": "Giulia Ferri, faccio da project manager dal lato Studio Corvino"},
+      {"name": "Chiara Villa", "aliases": ["Chiara"], "role": "sviluppatrice backend", "role_keywords": ["backend", "svilupp"], "evidence": "Chiara Villa, sviluppo backend."}
+    ],
+    "decisions": [
+      {"text": "Un punto per ogni euro speso, moltiplicatori eventualmente in seguito", "keywords": ["punto", "euro"], "date": "2026-09-14", "reason": "deve essere semplice da comunicare", "supersedes": null, "evidence": "decidiamo un punto per ogni euro speso"},
+      {"text": "Obiettivo: lancio prima di Pasqua, con il design chiuso entro dicembre", "keywords": ["pasqua"], "date": "2026-09-14", "reason": "Pasqua è il periodo più forte per il cliente", "supersedes": null, "evidence": "l'obiettivo è il lancio prima di Pasqua, con il design chiuso entro dicembre"}
+    ],
+    "actions": [
+      {"text": "Mandare le brand guidelines", "keywords": ["brand", "guidelines"], "owner": "Giulia Conti", "status": "open", "evidence": "le brand guidelines ve le mando io questa settimana"},
+      {"text": "Preparare il piano di release con le milestone", "keywords": ["piano", "release"], "owner": "Giulia Ferri", "status": "open", "evidence": "Giulia Ferri, ti occupi tu di preparare il piano di release con le milestone?"},
+      {"text": "Fare uno spike sulle notifiche push", "keywords": ["notifiche", "push"], "owner": "Chiara Villa", "status": "open", "evidence": "le notifiche push sono la parte che conosciamo meno. Fai uno spike di un paio di giorni?"}
+    ],
+    "requirements": [
+      {"text": "L'app deve essere disponibile su iOS e Android dal lancio", "keywords": ["ios", "android"], "vague": false, "evidence": "l'app deve esserci su tutti e due dal primo giorno"},
+      {"text": "L'app deve essere semplice anche per i clienti anziani", "keywords": ["semplice", "anzian"], "vague": true, "evidence": "L'app deve essere semplice, anche per loro."}
+    ],
+    "open_questions": []
+  }
+}

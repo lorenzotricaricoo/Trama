@@ -1,0 +1,29 @@
+{
+  "id": "S13",
+  "type": "document",
+  "date": "2026-10-02",
+  "file": "sources/S13.md",
+  "projects": ["bussola"],
+  "hard_cases": ["easy assignment (project named in the title): control case", "checklist items look like actions but are requirements of the process, not tasks with an owner", "vague requirement ('deve sentirsi accolto')", "answers an open question from S06 (budget)"],
+  "entities": {
+    "people": [
+      {"name": "Sara Mancini", "aliases": [], "role": "HR, owner del documento", "role_keywords": ["hr"], "evidence": "Owner del documento: Sara Mancini (HR)."},
+      {"name": "Tommaso Rinaldi", "aliases": [], "role": "IT", "role_keywords": ["it"], "evidence": "Contributi: Tommaso Rinaldi (IT)."}
+    ],
+    "decisions": [
+      {"text": "Budget del kit di benvenuto approvato: 80 euro a persona", "keywords": ["80 euro"], "aliases": ["kit di benvenuto da 80 euro per persona"], "date": "2026-10-02", "reason": null, "supersedes": null, "evidence": "il budget del kit di benvenuto è stato approvato: 80 euro a persona"}
+    ],
+    "actions": [],
+    "requirements": [
+      {"text": "Account email e calendario creati almeno due giorni lavorativi prima dell'arrivo", "keywords": ["due giorni"], "vague": false, "evidence": "Account email e calendario creati almeno due giorni lavorativi prima dell'arrivo"},
+      {"text": "Laptop configurato e testato, con VPN e accesso ai repository", "keywords": ["laptop"], "vague": false, "evidence": "Laptop configurato e testato, con VPN e accesso ai repository del team"},
+      {"text": "Badge d'ingresso pronto alla reception", "keywords": ["badge"], "vague": false, "evidence": "Badge d'ingresso pronto alla reception"},
+      {"text": "Colazione di benvenuto con il buddy il primo giorno", "keywords": ["colazione"], "vague": false, "optional": true, "evidence": "Colazione di benvenuto con il buddy"},
+      {"text": "Giro dell'ufficio e presentazione al team", "keywords": ["giro", "ufficio"], "vague": false, "optional": true, "evidence": "Giro dell'ufficio e presentazione al team"},
+      {"text": "Consegna del kit di benvenuto il primo giorno", "keywords": ["consegna", "kit"], "vague": false, "optional": true, "evidence": "Consegna del kit di benvenuto"},
+      {"text": "Incontro con il responsabile nella prima settimana per definire gli obiettivi del primo mese", "keywords": ["obiettivi"], "vague": false, "optional": true, "evidence": "Incontro con il responsabile per definire gli obiettivi del primo mese"},
+      {"text": "Il nuovo arrivato deve sentirsi accolto", "keywords": ["accolto"], "vague": true, "evidence": "Il nuovo arrivato deve sentirsi accolto"}
+    ],
+    "open_questions": []
+  }
+}

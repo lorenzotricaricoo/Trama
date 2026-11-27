@@ -1,0 +1,22 @@
+{
+  "id": "S11",
+  "type": "note",
+  "date": "2026-09-29",
+  "file": "sources/S11.md",
+  "projects": [],
+  "ambiguous": true,
+  "hard_cases": ["genuinely ambiguous: 'Marco' could be Marco Bellini (Faro) or Marco Ricci (Marea); 'accessi' and 'permessi' fit Marea (service account), Bussola (onboarding accesses) and Faro (login)", "the desired behaviour is no confident assignment: either none, or a low confidence that sends it to review"],
+  "entities": {
+    "people": [
+      {"name": "Marco", "aliases": [], "role": null, "role_keywords": [], "optional": true, "evidence": "sentire Marco per la questione degli accessi"}
+    ],
+    "decisions": [],
+    "actions": [
+      {"text": "Sentire Marco per la questione degli accessi prima di fine mese", "keywords": ["accessi"], "owner": "Io", "status": "open", "evidence": "sentire Marco per la questione degli accessi, prima di fine mese"}
+    ],
+    "requirements": [],
+    "open_questions": [
+      {"text": "Chi decide sulla questione dei permessi?", "keywords": ["permessi"], "optional": true, "evidence": "la storia dei permessi non è ancora chiara a nessuno, chiedere chi decide"}
+    ]
+  }
+}

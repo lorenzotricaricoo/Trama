@@ -1,0 +1,26 @@
+{
+  "id": "S17",
+  "type": "meeting",
+  "date": "2026-10-15",
+  "file": "sources/S17.md",
+  "projects": ["marea", "bussola"],
+  "hard_cases": ["two projects, both mentioned only indirectly ('nuova piattaforma dati', 'neoassunti', 'documento del primo giorno')", "actions opened in S03 and S06 closed here", "security requirement stated by IT"],
+  "entities": {
+    "people": [
+      {"name": "Tommaso Rinaldi", "aliases": ["Tommaso"], "role": null, "role_keywords": [], "evidence": "Ciao Tommaso, facciamo il punto"},
+      {"name": "Marco Ricci", "aliases": [], "role": null, "role_keywords": [], "evidence": "Marco Ricci l'ha già usato per i job notturni."},
+      {"name": "Sara Mancini", "aliases": ["Sara"], "role": null, "role_keywords": [], "evidence": "Sara l'ha messa nel documento del primo giorno"}
+    ],
+    "decisions": [],
+    "actions": [
+      {"text": "Creare il service account sulla nuova piattaforma dati", "keywords": ["service account"], "owner": "Tommaso Rinaldi", "status": "closed", "evidence": "il service account per i job della nuova piattaforma dati è creato"},
+      {"text": "Preparare la checklist degli accessi per i neoassunti", "keywords": ["checklist", "accessi"], "owner": "Tommaso Rinaldi", "status": "closed", "evidence": "la checklist degli accessi per i neoassunti è fatta"},
+      {"text": "Preparare i laptop per i due neoassunti di novembre entro fine mese", "keywords": ["laptop"], "owner": "Tommaso Rinaldi", "status": "open", "evidence": "Preparo io i laptop, entro fine mese sono pronti."},
+      {"text": "Mandare a Tommaso l'elenco dei permessi del service account", "keywords": ["permessi"], "owner": "Io", "status": "closed", "optional": true, "evidence": "con i permessi che mi avevi mandato"}
+    ],
+    "requirements": [
+      {"text": "Le credenziali del service account vanno ruotate ogni novanta giorni", "keywords": ["ruotat", "novanta"], "vague": false, "evidence": "le credenziali del service account vanno ruotate ogni novanta giorni"}
+    ],
+    "open_questions": []
+  }
+}

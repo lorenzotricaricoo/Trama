@@ -1,0 +1,26 @@
+{
+  "id": "S10",
+  "type": "meeting",
+  "date": "2026-09-28",
+  "file": "sources/S10.md",
+  "projects": ["marea"],
+  "hard_cases": ["decision that changes an earlier one (freeze 1 Nov in S03 -> 15 Nov)", "action opened in S03 and closed here", "'Marco' here is Marco Ricci, not Marco Bellini: only the topic tells them apart", "vague requirement ('leggibili anche dal management')", "Davide mentioned in passing"],
+  "entities": {
+    "people": [
+      {"name": "Paolo Greco", "aliases": ["Paolo"], "role": null, "role_keywords": [], "evidence": "Ciao Paolo, ciao Marco."},
+      {"name": "Marco Ricci", "aliases": ["Marco"], "role": null, "role_keywords": [], "evidence": "Marco, lo script di confronto?"},
+      {"name": "Davide Longo", "aliases": ["Davide"], "role": null, "role_keywords": [], "optional": true, "evidence": "con Davide magari"}
+    ],
+    "decisions": [
+      {"text": "Il freeze dei report legacy si sposta dal primo al quindici novembre", "keywords": ["freeze", "quindici"], "date": "2026-09-28", "reason": "il primo novembre cade nella chiusura del trimestre, quando il controllo di gestione usa i report vecchi", "supersedes": "freeze dei report legacy dal primo novembre", "evidence": "spostiamo il freeze dei report legacy dal primo al quindici novembre"}
+    ],
+    "actions": [
+      {"text": "Preparare lo script di confronto tra i numeri del vecchio warehouse e quelli nuovi", "keywords": ["script", "confront"], "owner": "Marco Ricci", "status": "closed", "evidence": "Fatto e girato su tutti i report vendite. I numeri tornano al centesimo"},
+      {"text": "Preparare la dashboard vendite in staging per la demo a Paolo", "keywords": ["dashboard", "demo"], "owner": "Marco Ricci", "status": "open", "evidence": "prepari la dashboard vendite in staging?"}
+    ],
+    "requirements": [
+      {"text": "Le nuove dashboard devono essere leggibili anche dal management", "keywords": ["leggibil", "management"], "vague": true, "evidence": "le nuove dashboard devono essere leggibili anche dal management"}
+    ],
+    "open_questions": []
+  }
+}

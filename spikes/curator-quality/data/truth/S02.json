@@ -1,0 +1,27 @@
+{
+  "id": "S02",
+  "type": "note",
+  "date": "2026-09-08",
+  "file": "sources/S02.md",
+  "projects": ["faro"],
+  "hard_cases": ["project never named: only the client (Valmora) and context identify it", "actions owned by the user ('Io')", "proposals that are not decisions (marked optional)"],
+  "entities": {
+    "people": [
+      {"name": "Elena Sartori", "aliases": ["Elena"], "role": null, "role_keywords": [], "evidence": "mandarlo a Elena entro mercoledì"},
+      {"name": "Marco Bellini", "aliases": [], "role": null, "role_keywords": [], "evidence": "Chiedere a Marco Bellini se la stima include anche l'ambiente di staging"}
+    ],
+    "decisions": [
+      {"text": "Usare il numero di richieste 'dov'è il mio ordine' prima e dopo come metrica del pilota", "keywords": ["metrica"], "date": "2026-09-08", "reason": "il problema del cliente è il customer care intasato", "supersedes": null, "optional": true, "evidence": "Usare questo come metrica del pilota"}
+    ],
+    "actions": [
+      {"text": "Scrivere il documento di perimetro del pilota e mandarlo a Elena entro mercoledì", "keywords": ["documento", "perimetro"], "owner": "Io", "status": "open", "evidence": "Scrivere il documento di perimetro del pilota e mandarlo a Elena entro mercoledì"},
+      {"text": "Chiedere a Marco Bellini se la stima include l'ambiente di staging", "keywords": ["staging"], "owner": "Io", "status": "open", "evidence": "Chiedere a Marco Bellini se la stima include anche l'ambiente di staging"}
+    ],
+    "requirements": [
+      {"text": "Pagina ordini sotto i 2 secondi con 5 anni di storico", "keywords": ["2 secondi"], "vague": false, "optional": true, "evidence": "propongo pagina ordini sotto i 2 secondi con 5 anni di storico"}
+    ],
+    "open_questions": [
+      {"text": "Chi fa il supporto di primo livello ai clienti del pilota?", "keywords": ["supporto", "primo livello"], "evidence": "Chi fa il supporto di primo livello ai clienti del pilota, noi o il loro customer care?"}
+    ]
+  }
+}

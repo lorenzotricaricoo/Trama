@@ -1,0 +1,33 @@
+{
+  "id": "S01",
+  "type": "meeting",
+  "date": "2026-09-07",
+  "file": "sources/S01.md",
+  "projects": ["faro"],
+  "hard_cases": ["two-track transcript without speaker names", "owners inferred from addressing ('Marco, riesci...')", "vague requirement ('deve essere veloce')", "decision later changed in S07"],
+  "entities": {
+    "people": [
+      {"name": "Elena Sartori", "aliases": ["Elena"], "role": "IT manager di Tessiture Valmora", "role_keywords": ["it"], "evidence": "io sono Elena Sartori, seguo l'IT di Valmora"},
+      {"name": "Andrea Fontana", "aliases": ["Andrea"], "role": "responsabile logistica di Tessiture Valmora", "role_keywords": ["logistica"], "evidence": "Andrea Fontana che è il responsabile della logistica"},
+      {"name": "Marco Bellini", "aliases": [], "role": "tech lead del Portale Faro", "role_keywords": ["tech lead", "tecnico"], "evidence": "Marco Bellini, che farà da tech lead"},
+      {"name": "Davide Longo", "aliases": ["Davide"], "role": "UX designer", "role_keywords": ["ux", "design"], "evidence": "Davide Longo per la parte di UX"}
+    ],
+    "decisions": [
+      {"text": "L'accesso al portale avviene in SSO tramite il sistema di identità già usato da Valmora", "keywords": ["sso", "identita"], "date": "2026-09-07", "reason": "i clienti usano le credenziali che hanno già, senza una nuova password", "supersedes": null, "evidence": "l'accesso al portale passa dal sistema di identità che Valmora usa già, in SSO"},
+      {"text": "Pilota con venti clienti selezionati", "keywords": ["pilota", "venti clienti"], "date": "2026-09-07", "reason": "limitare il rischio prima di aprire a tutti", "supersedes": null, "evidence": "confermiamo il pilota con venti clienti selezionati"}
+    ],
+    "actions": [
+      {"text": "Preparare la stima dell'effort per il pilota entro venerdì", "keywords": ["stima"], "owner": "Marco Bellini", "status": "open", "evidence": "Marco, riesci a preparare una stima dell'effort per il pilota entro venerdì?"},
+      {"text": "Inviare l'elenco dei clienti del pilota", "keywords": ["elenco", "clienti"], "owner": "Elena Sartori", "status": "open", "evidence": "Elena, ci mandi tu l'elenco dei clienti del pilota?"},
+      {"text": "Preparare i primi wireframe delle schermate ordini e tracking", "keywords": ["wireframe"], "owner": "Davide Longo", "status": "open", "evidence": "Davide, tu parti con i primi wireframe delle schermate ordini e tracking?"}
+    ],
+    "requirements": [
+      {"text": "Tracking delle spedizioni con lo stato aggiornato", "keywords": ["tracking", "spedizion"], "vague": false, "evidence": "il cliente deve vedere lo stato della spedizione aggiornato"},
+      {"text": "Fatture scaricabili in PDF, storico degli ultimi cinque anni", "keywords": ["fattur", "pdf"], "vague": false, "evidence": "Le fatture devono essere scaricabili in PDF, almeno lo storico degli ultimi cinque anni"},
+      {"text": "Il portale deve essere veloce", "keywords": ["veloce"], "vague": true, "evidence": "il portale deve essere veloce, i clienti non devono aspettare"}
+    ],
+    "open_questions": [
+      {"text": "Le fatture arrivano direttamente dal gestionale di Valmora o da un export periodico?", "keywords": ["gestionale", "export"], "evidence": "le fatture le prendiamo direttamente dal vostro gestionale o ci mandate un export periodico?"}
+    ]
+  }
+}

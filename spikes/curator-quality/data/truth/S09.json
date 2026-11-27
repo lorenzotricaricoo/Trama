@@ -1,0 +1,28 @@
+{
+  "id": "S09",
+  "type": "document",
+  "date": "2026-09-25",
+  "file": "sources/S09.md",
+  "projects": ["faro"],
+  "hard_cases": ["easy assignment (project named in the title): a control case", "requirement list in a table", "vague requirement ('deve essere performante')", "language requirement later reduced in S18", "out-of-scope items are not requirements"],
+  "entities": {
+    "people": [
+      {"name": "Elena Sartori", "aliases": [], "role": "IT, Tessiture Valmora", "role_keywords": ["it"], "evidence": "Redatto da: Elena Sartori (IT, Tessiture Valmora)"}
+    ],
+    "decisions": [
+      {"text": "Pagamenti online e apertura di reclami sono fuori dal perimetro del pilota", "keywords": ["pagamenti", "reclami"], "date": "2026-09-25", "reason": null, "supersedes": null, "optional": true, "evidence": "Fuori perimetro del pilota"}
+    ],
+    "actions": [],
+    "requirements": [
+      {"text": "Elenco ordini degli ultimi 5 anni con filtri per data e stato", "keywords": ["ordini", "filtri"], "vague": false, "evidence": "Elenco ordini degli ultimi 5 anni, con filtri per data e stato"},
+      {"text": "Tracking della spedizione con stato aggiornato e link al corriere", "keywords": ["tracking"], "vague": false, "evidence": "Tracking della spedizione con stato aggiornato e link al corriere"},
+      {"text": "Download delle fatture in PDF", "keywords": ["fatture", "pdf"], "vague": false, "evidence": "Download delle fatture in PDF"},
+      {"text": "Export degli ordini in CSV", "keywords": ["csv"], "vague": false, "evidence": "Export degli ordini in CSV"},
+      {"text": "Interfaccia disponibile in italiano, inglese e tedesco", "keywords": ["tedesco"], "vague": false, "evidence": "Interfaccia disponibile in italiano, inglese e tedesco"},
+      {"text": "Il sistema deve essere performante", "keywords": ["performante"], "vague": true, "evidence": "Il sistema deve essere performante"}
+    ],
+    "open_questions": [
+      {"text": "Inviare notifiche email ai clienti quando una spedizione è in ritardo?", "keywords": ["ritardo"], "evidence": "Inviare notifiche email ai clienti quando una spedizione è in ritardo?"}
+    ]
+  }
+}

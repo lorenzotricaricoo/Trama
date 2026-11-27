@@ -1,0 +1,27 @@
+{
+  "id": "S07",
+  "type": "meeting",
+  "date": "2026-09-21",
+  "file": "sources/S07.md",
+  "projects": ["faro"],
+  "hard_cases": ["decision that changes an earlier one (SSO at kickoff in S01 -> magic link for the pilot)", "actions opened in S01 and closed here", "project never named; only people and topic identify it"],
+  "entities": {
+    "people": [
+      {"name": "Elena Sartori", "aliases": ["Elena"], "role": null, "role_keywords": [], "evidence": "Ciao Elena, ciao Marco."},
+      {"name": "Marco Bellini", "aliases": ["Marco"], "role": null, "role_keywords": [], "evidence": "Marco, la stima?"}
+    ],
+    "decisions": [
+      {"text": "Per il pilota login con email e magic link; l'SSO passa alla fase due", "keywords": ["magic link"], "date": "2026-09-21", "reason": "il team identità di Valmora non riesce a esporre l'SSO prima di dicembre e il pilota parte a metà novembre", "supersedes": "accesso in SSO con il sistema di identità di Valmora (decisione del kickoff)", "evidence": "per il pilota login con email e magic link, l'SSO passa alla fase due"}
+    ],
+    "actions": [
+      {"text": "Preparare la stima dell'effort per il pilota", "keywords": ["stima"], "owner": "Marco Bellini", "status": "closed", "evidence": "Fatta, l'ho mandata giovedì. Sono circa otto settimane per il pilota, staging incluso."},
+      {"text": "Inviare l'elenco dei clienti del pilota", "keywords": ["elenco", "clienti"], "owner": "Elena Sartori", "status": "closed", "evidence": "l'elenco dei clienti del pilota l'abbiamo ricevuto, sono ventidue alla fine"},
+      {"text": "Implementare il login con magic link nello sprint che parte lunedì", "keywords": ["magic link"], "owner": "Marco Bellini", "status": "open", "evidence": "Marco, il magic link lo implementi tu?"},
+      {"text": "Verificare con la sicurezza la durata di validità del magic link", "keywords": ["sicurezza"], "owner": "Elena Sartori", "status": "open", "optional": true, "evidence": "Devo verificare con la sicurezza, vi faccio sapere."}
+    ],
+    "requirements": [],
+    "open_questions": [
+      {"text": "Quanto dura il magic link prima di scadere?", "keywords": ["scad", "link"], "evidence": "quanto dura il link prima di scadere?"}
+    ]
+  }
+}

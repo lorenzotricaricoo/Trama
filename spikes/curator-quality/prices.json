@@ -1,0 +1,28 @@
+{
+  "_comment": "USD per 1M tokens (input / output). EDITABLE. 'models' are list prices shown by the provider used for the spike run (Nov 2026); check them against your provider before relying on the cost figures. 'classes' are typical OpenAI-like placeholders used for planning and as fallback: a model not listed here is priced at 'fallback_class' (the most expensive class, so the budget guard stays conservative).",
+  "fallback_class": "strong",
+  "classes": {
+    "nano":   {"input": 0.05, "output": 0.40},
+    "mini":   {"input": 0.25, "output": 2.00},
+    "strong": {"input": 2.50, "output": 12.00},
+    "frontier": {"input": 5.00, "output": 25.00}
+  },
+  "models": {
+    "claude-haiku-5-5":            {"input": 0.11,  "output": 0.55,  "class": "nano"},
+    "gpt-6-luna":                  {"input": 0.12,  "output": 0.60,  "class": "nano"},
+    "gpt-5-nano":                  {"input": 0.055, "output": 0.44,  "class": "nano"},
+    "gemini-3.5-flash-lite":       {"input": 0.33,  "output": 2.75,  "class": "mini"},
+    "gpt-oss-120b":                {"input": 0.20,  "output": 0.79,  "class": "mini"},
+    "qwen3-235b":                  {"input": 0.22,  "output": 0.88,  "class": "mini"},
+    "nemotron-3-super-120b":       {"input": 0.18,  "output": 0.78,  "class": "mini"},
+    "deepseek-v4-flash-sovereign": {"input": 0.0,   "output": 0.0,   "class": "free"},
+    "qwen-3.6-35b-sovereign":      {"input": 0.0,   "output": 0.0,   "class": "free"},
+    "claude-sonnet-5-5":           {"input": 2.20,  "output": 11.00, "class": "strong"},
+    "gpt-6.2-sol":                 {"input": 2.40,  "output": 12.00, "class": "strong"},
+    "gemini-4-hydrogen":           {"input": 1.65,  "output": 8.25,  "class": "strong"},
+    "claude-opus-5-5":             {"input": 4.40,  "output": 22.00, "class": "frontier"},
+    "mock-good":                   {"input": 0.25,  "output": 2.00,  "class": "mini"},
+    "mock-noisy":                  {"input": 0.05,  "output": 0.40,  "class": "nano"},
+    "mock-bad":                    {"input": 0.05,  "output": 0.40,  "class": "nano"}
+  }
+}

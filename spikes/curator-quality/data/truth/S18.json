@@ -1,0 +1,28 @@
+{
+  "id": "S18",
+  "type": "meeting",
+  "date": "2026-10-19",
+  "file": "sources/S18.md",
+  "projects": ["faro"],
+  "hard_cases": ["decision that changes a requirement of the document S09 (three languages -> two for the pilot)", "a vague requirement made concrete ('più veloce' -> under two seconds)", "project never named; only people and topic identify it"],
+  "entities": {
+    "people": [
+      {"name": "Elena Sartori", "aliases": ["Elena"], "role": null, "role_keywords": [], "evidence": "Ciao Elena, ciao Andrea."},
+      {"name": "Andrea Fontana", "aliases": ["Andrea"], "role": null, "role_keywords": [], "evidence": "Andrea qui. Per il tracking vi serve un campione dei codici dei corrieri"}
+    ],
+    "decisions": [
+      {"text": "Pilota in italiano e inglese; il tedesco passa alla fase due", "keywords": ["tedesco"], "date": "2026-10-19", "reason": "le traduzioni del catalogo non sono pronte e i clienti del pilota sono quasi tutti italiani", "supersedes": "interfaccia in italiano, inglese e tedesco (requisito RF-05)", "evidence": "pilota in italiano e inglese, il tedesco passa alla fase due"},
+      {"text": "Criterio di velocità: la pagina ordini deve caricarsi in meno di due secondi", "keywords": ["due secondi"], "date": "2026-10-19", "reason": "fissare un numero al posto di 'deve essere più veloce'", "supersedes": null, "optional": true, "evidence": "la pagina ordini deve caricarsi in meno di due secondi"}
+    ],
+    "actions": [
+      {"text": "Mandare un campione dei codici di tracking dei corrieri entro mercoledì", "keywords": ["campione", "codici"], "owner": "Andrea Fontana", "status": "open", "evidence": "Ve lo mando entro mercoledì."},
+      {"text": "Verificare se il corriere per l'estero ha un tracking via API", "keywords": ["estero"], "owner": "Andrea Fontana", "status": "open", "optional": true, "evidence": "Devo verificare."}
+    ],
+    "requirements": [
+      {"text": "La pagina ordini deve caricarsi in meno di due secondi, anche con cinque anni di storico", "keywords": ["due secondi"], "vague": false, "evidence": "la pagina ordini deve caricarsi in meno di due secondi, anche con cinque anni di storico"}
+    ],
+    "open_questions": [
+      {"text": "Chi gestisce le spedizioni estere e il loro corriere ha un tracking via API?", "keywords": ["estere"], "evidence": "le spedizioni estere chi le gestisce?"}
+    ]
+  }
+}

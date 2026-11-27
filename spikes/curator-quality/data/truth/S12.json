@@ -1,0 +1,31 @@
+{
+  "id": "S12",
+  "type": "meeting",
+  "date": "2026-10-01",
+  "file": "sources/S12.md",
+  "projects": ["ghianda"],
+  "hard_cases": ["three actions opened in S04 closed here", "both Giulias present, addressed by full name", "decision driven by an outcome of a closed action (push spike)", "project never named: 'l'app', 'i forni'"],
+  "entities": {
+    "people": [
+      {"name": "Giulia Conti", "aliases": [], "role": null, "role_keywords": [], "evidence": "Giulia Conti c'è?"},
+      {"name": "Giulia Ferri", "aliases": [], "role": null, "role_keywords": [], "evidence": "Giulia Ferri, il piano di release?"},
+      {"name": "Chiara Villa", "aliases": ["Chiara"], "role": null, "role_keywords": [], "evidence": "Chiara, com'è andato lo spike sulle push?"},
+      {"name": "Davide Longo", "aliases": ["Davide"], "role": null, "role_keywords": [], "optional": true, "evidence": "Davide le sta già usando"}
+    ],
+    "decisions": [
+      {"text": "Le notifiche push si inviano solo con consenso esplicito (opt-in), mai attive di default", "keywords": ["consenso", "push"], "date": "2026-10-01", "reason": "le notifiche marketing richiedono il consenso esplicito per la privacy", "supersedes": null, "evidence": "le notifiche push si inviano solo a chi dà il consenso esplicito, opt-in, mai attive di default"},
+      {"text": "Piano di release approvato: beta interna a febbraio, store a metà marzo", "keywords": ["beta", "febbraio"], "date": "2026-09-30", "reason": null, "supersedes": null, "optional": true, "evidence": "Presentato ieri al cliente e approvato: beta interna a febbraio, store a metà marzo."}
+    ],
+    "actions": [
+      {"text": "Mandare le brand guidelines", "keywords": ["brand", "guidelines"], "owner": "Giulia Conti", "status": "closed", "evidence": "Le brand guidelines ve le ho mandate lunedì, con il logo nuovo."},
+      {"text": "Preparare il piano di release", "keywords": ["piano", "release"], "owner": "Giulia Ferri", "status": "closed", "evidence": "Presentato ieri al cliente e approvato"},
+      {"text": "Fare lo spike sulle notifiche push", "keywords": ["spike", "push"], "owner": "Chiara Villa", "status": "closed", "evidence": "Fatto. Tecnicamente nessun problema."},
+      {"text": "Integrare l'app con le casse dei negozi appena disponibili le API del fornitore", "keywords": ["casse"], "owner": "Chiara Villa", "status": "open", "evidence": "l'integrazione con le casse. Chiara, la prendi tu appena abbiamo le API del fornitore?"},
+      {"text": "Organizzare una call con il fornitore delle casse", "keywords": ["call", "fornitore"], "owner": "Io", "status": "open", "evidence": "La organizzo io, grazie a tutti."}
+    ],
+    "requirements": [
+      {"text": "La tessera nell'app deve funzionare anche offline, senza connessione", "keywords": ["offline", "tessera"], "vague": false, "evidence": "La tessera nell'app deve funzionare anche offline"}
+    ],
+    "open_questions": []
+  }
+}

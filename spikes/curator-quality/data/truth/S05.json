@@ -1,0 +1,19 @@
+{
+  "id": "S05",
+  "type": "note",
+  "date": "2026-09-15",
+  "file": "sources/S05.md",
+  "projects": [],
+  "hard_cases": ["no project: personal training notes", "the word 'trattativa' and an office rent role play could tempt a wrong assignment", "nothing that is a requirement or decision"],
+  "entities": {
+    "people": [
+      {"name": "Federica Moro", "aliases": [], "role": "formatrice esterna", "role_keywords": ["formatric", "docente"], "evidence": "Docente: Federica Moro, formatrice esterna."}
+    ],
+    "decisions": [],
+    "actions": [
+      {"text": "Rileggere gli appunti sull'ancoraggio prima della giornata 2 del corso", "keywords": ["ancoraggio"], "owner": "Io", "status": "open", "optional": true, "evidence": "Rileggere gli appunti sull'ancoraggio prima della giornata 2"}
+    ],
+    "requirements": [],
+    "open_questions": []
+  }
+}

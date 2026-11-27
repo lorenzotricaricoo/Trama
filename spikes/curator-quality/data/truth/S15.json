@@ -1,0 +1,27 @@
+{
+  "id": "S15",
+  "type": "meeting",
+  "date": "2026-10-08",
+  "file": "sources/S15.md",
+  "projects": ["ghianda"],
+  "hard_cases": ["meeting mostly in English with Italian turns", "project mentioned only indirectly ('the loyalty app for the bakery chain')", "external person from a vendor", "closes implicitly the 'organize a call with the till vendor' action of S12 (not scored: the closure is implicit)"],
+  "entities": {
+    "people": [
+      {"name": "Kevin Walsh", "aliases": ["Kevin"], "role": "solutions engineer di Rivermill (fornitore del software di cassa)", "role_keywords": ["solutions engineer", "rivermill"], "evidence": "Kevin Walsh, I'm a solutions engineer at Rivermill"},
+      {"name": "Chiara Villa", "aliases": ["Chiara"], "role": null, "role_keywords": [], "evidence": "Con noi c'è anche Chiara dal nostro team"}
+    ],
+    "decisions": [
+      {"text": "Integrazione con le casse tramite REST API e webhook in tempo reale, non con il file batch notturno", "keywords": ["api", "webhook"], "aliases": ["We go with the REST API and the webhook, not the batch file"], "date": "2026-10-08", "reason": "il cliente deve vedere i punti subito dopo l'acquisto", "supersedes": null, "evidence": "let's decide: we go with the REST API and the webhook, not the batch file"}
+    ],
+    "actions": [
+      {"text": "Fornire le credenziali della sandbox entro la prossima settimana", "keywords": ["sandbox"], "aliases": ["Provide sandbox credentials by next week"], "owner": "Kevin Walsh", "status": "open", "evidence": "I can give you sandbox credentials by next week"},
+      {"text": "Verificare i rate limit dell'API con il platform team", "keywords": ["rate limit"], "aliases": ["Check the API rate limits with the platform team"], "owner": "Kevin Walsh", "status": "open", "optional": true, "evidence": "I need to check with our platform team"}
+    ],
+    "requirements": [
+      {"text": "Il cliente deve vedere i punti nell'app entro pochi secondi dall'acquisto", "keywords": ["punti", "secondi"], "aliases": ["The customer must see the points in the app within a few seconds of the purchase"], "vague": false, "evidence": "The customer must see the points in the app within a few seconds of the purchase."}
+    ],
+    "open_questions": [
+      {"text": "Quali sono i rate limit dell'API delle casse?", "keywords": ["rate limit"], "aliases": ["What are the rate limits of the API?"], "evidence": "what are the rate limits of the API?"}
+    ]
+  }
+}

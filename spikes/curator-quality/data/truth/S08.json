@@ -1,0 +1,28 @@
+{
+  "id": "S08",
+  "type": "meeting",
+  "date": "2026-09-24",
+  "file": "sources/S08.md",
+  "projects": ["faro", "ghianda"],
+  "hard_cases": ["source that belongs to two projects (resource split)", "projects named only indirectly ('il portale di Valmora', 'l'app dei forni')", "'Giulia' speaking is Giulia Ferri, while Giulia Conti is mentioned as a third person", "'Marco' is Marco Bellini (portal context)"],
+  "entities": {
+    "people": [
+      {"name": "Davide Longo", "aliases": ["Davide"], "role": null, "role_keywords": [], "evidence": "dobbiamo decidere come dividere Davide"},
+      {"name": "Giulia Ferri", "aliases": [], "role": null, "role_keywords": [], "evidence": "Giulia qui. Dal lato app, il design va chiuso entro dicembre"},
+      {"name": "Marco Bellini", "aliases": [], "role": null, "role_keywords": [], "evidence": "Marco. Sul portale i wireframe ordini e tracking non sono ancora finiti"},
+      {"name": "Giulia Conti", "aliases": [], "role": null, "role_keywords": [], "evidence": "lo dico io a Giulia Conti domani"},
+      {"name": "Elena Sartori", "aliases": ["Elena"], "role": null, "role_keywords": [], "optional": true, "evidence": "Lo comunico io a Elena."}
+    ],
+    "decisions": [
+      {"text": "Davide al 60% sull'app dei forni (Ghianda) e al 40% sul portale (Faro) fino a dicembre", "keywords": ["sessanta", "quaranta"], "aliases": ["Davide 60% su Ghianda e 40% su Faro fino a dicembre"], "date": "2026-09-24", "reason": "il design dell'app va chiuso entro dicembre per il lancio prima di Pasqua", "supersedes": null, "evidence": "Davide al sessanta per cento sull'app dei forni e al quaranta sul portale, fino a dicembre"},
+      {"text": "I wireframe del portale slittano di una settimana", "keywords": ["wireframe", "settimana"], "date": "2026-09-24", "reason": "Davide è al 40% sul portale", "supersedes": null, "evidence": "accettiamo lo slittamento di una settimana dei wireframe del portale"}
+    ],
+    "actions": [
+      {"text": "Comunicare a Elena lo slittamento dei wireframe del portale", "keywords": ["elena"], "owner": "Io", "status": "open", "evidence": "Lo comunico io a Elena."},
+      {"text": "Avvisare il cliente dei forni (Giulia Conti) che Davide non è al 100%", "keywords": ["avvis", "giulia conti"], "owner": "Giulia Ferri", "status": "open", "evidence": "Giulia, avvisi tu il cliente dei forni che Davide non è al cento per cento?"},
+      {"text": "Aggiornare il piano risorse", "keywords": ["piano risorse"], "owner": "Io", "status": "open", "evidence": "Io aggiorno il piano risorse stasera."}
+    ],
+    "requirements": [],
+    "open_questions": []
+  }
+}

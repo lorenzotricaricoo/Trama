@@ -1,0 +1,30 @@
+{
+  "id": "S03",
+  "type": "meeting",
+  "date": "2026-09-10",
+  "file": "sources/S03.md",
+  "projects": ["marea"],
+  "hard_cases": ["project never named: 'migrazione dei report' identifies Marea", "first 'Marco' of the set who is NOT Marco Bellini (same first name)", "decision later changed in S10 (freeze date)", "actions closed later in S10 and S17"],
+  "entities": {
+    "people": [
+      {"name": "Paolo Greco", "aliases": ["Paolo"], "role": "direttore finanziario", "role_keywords": ["finanz", "cfo"], "evidence": "Io vi dico solo una cosa da direttore finanziario"},
+      {"name": "Marco Ricci", "aliases": [], "role": "data engineer", "role_keywords": ["data engineer"], "evidence": "Marco Ricci, per chi non mi conosce, seguo la parte data engineering"},
+      {"name": "Tommaso Rinaldi", "aliases": ["Tommaso"], "role": null, "role_keywords": [], "evidence": "Tommaso qui. Per far girare i job vi serve un service account"}
+    ],
+    "decisions": [
+      {"text": "Migrazione in due fasi: prima le vendite, poi il magazzino", "keywords": ["due fasi"], "date": "2026-09-10", "reason": "il magazzino ha la data quality peggiore (anagrafiche duplicate); evitare un big bang", "supersedes": null, "evidence": "migrazione in due fasi, prima le vendite e poi il magazzino"},
+      {"text": "Freeze dei report legacy dal primo novembre (solo lettura)", "keywords": ["freeze"], "date": "2026-09-10", "reason": "evitare la doppia manutenzione", "supersedes": null, "evidence": "Propongo il freeze dei report legacy dal primo novembre"}
+    ],
+    "actions": [
+      {"text": "Preparare uno script che confronti i numeri del vecchio warehouse con quelli nuovi, report per report", "keywords": ["script", "confront"], "owner": "Marco Ricci", "status": "open", "evidence": "ci serve uno script che confronti i numeri del vecchio warehouse con quelli nuovi"},
+      {"text": "Creare il service account sulla nuova piattaforma", "keywords": ["service account"], "owner": "Tommaso Rinaldi", "status": "open", "evidence": "vi serve un service account sulla nuova piattaforma, giusto? Lo creo io"},
+      {"text": "Mandare a Tommaso l'elenco dei permessi del service account", "keywords": ["permessi"], "owner": "Io", "status": "open", "evidence": "Ti mando l'elenco dei permessi oggi."}
+    ],
+    "requirements": [
+      {"text": "I report vendite devono essere aggiornati con i numeri del giorno prima entro le sette di mattina", "keywords": ["sette"], "vague": false, "evidence": "Entro le sette, quando arrivano i commerciali, i numeri del giorno prima devono essere aggiornati."}
+    ],
+    "open_questions": [
+      {"text": "Chi è l'owner dei dati di magazzino?", "keywords": ["owner", "magazzino"], "evidence": "chi è l'owner dei dati di magazzino?"}
+    ]
+  }
+}

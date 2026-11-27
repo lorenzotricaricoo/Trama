@@ -1,0 +1,22 @@
+{
+  "type": "object",
+  "properties": {
+    "assignments": {
+      "type": "array",
+      "description": "Projects the source belongs to. Empty when it belongs to none.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "project_id": {"type": "string", "description": "Id from the project list.", "enum": ["__PROJECT_IDS__"]},
+          "confidence": {"type": "number", "description": "0 to 1."},
+          "reason": {"type": "string", "description": "Short reason in Italian, pointing to the evidence."}
+        },
+        "required": ["project_id", "confidence", "reason"],
+        "additionalProperties": false
+      }
+    },
+    "decision_confidence": {"type": "number", "description": "0 to 1: confidence that the whole set is exactly right, including an empty set."}
+  },
+  "required": ["assignments", "decision_confidence"],
+  "additionalProperties": false
+}

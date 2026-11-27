@@ -1,0 +1,78 @@
+{
+  "type": "object",
+  "properties": {
+    "people": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "role": {"type": ["string", "null"]},
+          "evidence": {"type": "string"},
+          "confidence": {"type": "number"}
+        },
+        "required": ["name", "role", "evidence", "confidence"],
+        "additionalProperties": false
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string"},
+          "date": {"type": ["string", "null"], "description": "YYYY-MM-DD"},
+          "reason": {"type": ["string", "null"]},
+          "supersedes": {"type": ["string", "null"]},
+          "evidence": {"type": "string"},
+          "confidence": {"type": "number"}
+        },
+        "required": ["text", "date", "reason", "supersedes", "evidence", "confidence"],
+        "additionalProperties": false
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string"},
+          "owner": {"type": ["string", "null"]},
+          "status": {"type": "string", "enum": ["open", "closed"]},
+          "evidence": {"type": "string"},
+          "confidence": {"type": "number"}
+        },
+        "required": ["text", "owner", "status", "evidence", "confidence"],
+        "additionalProperties": false
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string"},
+          "evidence": {"type": "string"},
+          "confidence": {"type": "number"}
+        },
+        "required": ["text", "evidence", "confidence"],
+        "additionalProperties": false
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string"},
+          "evidence": {"type": "string"},
+          "confidence": {"type": "number"}
+        },
+        "required": ["text", "evidence", "confidence"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["people", "decisions", "actions", "requirements", "open_questions"],
+  "additionalProperties": false
+}

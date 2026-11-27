@@ -1,0 +1,26 @@
+{
+  "_comment": "Fictional projects. Everything in this data set is invented: companies, products and people do not exist. The 'description' is what the curator would know about each project (a short project brief); it is sent to the model in the assignment task.",
+  "user_company": "Studio Corvino (agenzia digitale fittizia)",
+  "projects": [
+    {
+      "id": "faro",
+      "name": "Portale Faro",
+      "description": "Portale web self-service per i clienti B2B di Tessiture Valmora (cliente): consultazione ordini, tracking delle spedizioni, storico fatture. Pilota con un gruppo ristretto di clienti, poi rilascio generale."
+    },
+    {
+      "id": "marea",
+      "name": "Marea",
+      "description": "Progetto interno di Studio Corvino: migrazione della reportistica commerciale dal vecchio data warehouse a una nuova piattaforma dati, con nuove dashboard per vendite e magazzino e spegnimento dei report legacy."
+    },
+    {
+      "id": "ghianda",
+      "name": "Ghianda Loyalty",
+      "description": "App mobile (iOS e Android) di fidelizzazione per la catena di panetterie Forni Ghianda (cliente): raccolta punti, coupon, notifiche, integrazione con le casse dei negozi."
+    },
+    {
+      "id": "bussola",
+      "name": "Bussola",
+      "description": "Progetto interno di Studio Corvino con HR e IT: nuovo percorso di onboarding per i neoassunti (accessi pronti il primo giorno, buddy, materiali di benvenuto, checklist)."
+    }
+  ]
+}

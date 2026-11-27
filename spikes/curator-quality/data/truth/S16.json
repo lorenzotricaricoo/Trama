@@ -1,0 +1,28 @@
+{
+  "id": "S16",
+  "type": "note",
+  "date": "2026-10-12",
+  "file": "sources/S16.md",
+  "projects": ["faro", "marea"],
+  "hard_cases": ["two projects in one note, each in its own section", "two Marcos distinguished only by initial ('Marco B.', 'Marco R.')", "three actions opened earlier (S01, S07, S10) closed here", "a personal item (dentist) that belongs to no project"],
+  "entities": {
+    "people": [
+      {"name": "Marco Bellini", "aliases": ["Marco B."], "role": null, "role_keywords": [], "evidence": "Marco B. ha chiuso il magic link"},
+      {"name": "Davide Longo", "aliases": ["Davide"], "role": null, "role_keywords": [], "evidence": "Davide ha consegnato i wireframe di ordini e tracking"},
+      {"name": "Elena Sartori", "aliases": ["Elena"], "role": null, "role_keywords": [], "evidence": "Elena li ha approvati."},
+      {"name": "Paolo Greco", "aliases": ["Paolo"], "role": null, "role_keywords": [], "evidence": "Demo della dashboard vendite a Paolo fatta giovedì"},
+      {"name": "Marco Ricci", "aliases": ["Marco R."], "role": null, "role_keywords": [], "evidence": "Marco R. ha preparato tutto in staging."}
+    ],
+    "decisions": [
+      {"text": "Freeze dei report legacy al 15 novembre confermato", "keywords": ["freeze"], "date": "2026-10-12", "reason": null, "supersedes": null, "optional": true, "evidence": "Freeze del legacy al 15/11 confermato."},
+      {"text": "Partire con la migrazione del magazzino a dicembre", "keywords": ["magazzino", "dicembre"], "date": "2026-10-12", "reason": null, "supersedes": null, "optional": true, "evidence": "Prossimo step: partire con il magazzino a dicembre."}
+    ],
+    "actions": [
+      {"text": "Implementare il login con magic link", "keywords": ["magic link"], "owner": "Marco Bellini", "status": "closed", "evidence": "Marco B. ha chiuso il magic link: è in staging da mercoledì"},
+      {"text": "Preparare i wireframe delle schermate ordini e tracking", "keywords": ["wireframe"], "owner": "Davide Longo", "status": "closed", "evidence": "Davide ha consegnato i wireframe di ordini e tracking"},
+      {"text": "Preparare la dashboard vendite in staging per la demo a Paolo", "keywords": ["dashboard", "demo"], "owner": "Marco Ricci", "status": "closed", "evidence": "Demo della dashboard vendite a Paolo fatta giovedì, gli è piaciuta. Marco R. ha preparato tutto in staging."}
+    ],
+    "requirements": [],
+    "open_questions": []
+  }
+}
