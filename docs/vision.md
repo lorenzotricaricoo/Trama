@@ -26,6 +26,10 @@ reconstructing context from scratch.
 
 The user corrects instead of organizing — and less and less over time.
 
+There are no areas or folders to maintain: a source belongs to zero, one or more
+projects, and material without a project stays searchable and useful. Actions found
+in sources are opened and closed by the curator, not ticked off by hand.
+
 ## Knowledge model
 
 Knowledge is built in four layers. Each layer is derived from the one below and
@@ -81,6 +85,10 @@ Providers are generic (OpenAI-compatible endpoints, more than one at a time), wi
 model catalogue read from the provider and a model chosen per task.
 See [ADR 0002](adr/0002-local-transcription-parakeet.md) and [ADR 0003](adr/0003-hybrid-ai-providers.md).
 
+The transcript is the source; meeting audio is optional. By default it is deleted as
+soon as the transcription succeeds, and a setting can keep it for 7 days, 30 days
+or always.
+
 ## Platforms and languages
 
 - **macOS first**; architecture and stack chosen so that Windows can follow.
@@ -90,22 +98,24 @@ See [ADR 0002](adr/0002-local-transcription-parakeet.md) and [ADR 0003](adr/0003
 
 ## MVP
 
-**In scope** (macOS):
+The MVP (macOS) ships in three phases. Each phase is usable on its own, so real
+meetings start piling up while the rest is still being built.
 
-1. **Capture**: meeting recording on two tracks (the user's microphone and the other
-   participants) with local transcription; Markdown notes; import of documents and files
-   (PDF, DOCX, MD, TXT).
-2. **Curator**: assignment to projects, extraction of entities and relations,
-   review queue, undoable change history.
-3. **Wiki pages** for projects, people and topics, maintained automatically, with citations.
-4. **Chat and search** over the knowledge base, with citations.
-5. **MCP server**: project brief, task brief, access to sources.
-6. **Configurable providers** (OpenAI-compatible) with a model per task.
+| Phase | What the user can do | Why in this order |
+|-------|----------------------|-------------------|
+| **1. Record and summarize** | Record meetings on two tracks (the user's microphone and the other participants) with local transcription, notes pinned to the minute while recording, and a global shortcut; get a summary and a title for each meeting; write Markdown notes; browse and search sources; configure providers with a model per task; choose how long audio is kept | Start collecting real meetings as early as possible |
+| **2. The curator** | Projects and people found automatically; decisions, actions, requirements and open questions; wiki pages for projects and people, with citations; review queue; undoable change history | The curator also processes the sources recorded in phase 1 |
+| **3. Use the knowledge** | Chat and search with citations; MCP server with project brief, task brief and access to sources; import of documents and files (PDF, DOCX, MD, TXT) | Arrives when the pages are already full |
+
+Screens, navigation and flows are described in the
+[information architecture](design/information-architecture.md).
 
 **Out of scope for the MVP** (backlog):
 
 - Dictation
 - Windows
+- Topic pages (subjects that cross projects)
+- A personal to-do view
 - Telling apart speakers among the other participants (diarization)
 - Graphs and advanced visualizations
 - Detecting ongoing calls
