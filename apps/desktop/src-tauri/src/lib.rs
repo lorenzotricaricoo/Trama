@@ -356,6 +356,9 @@ pub fn run() {
         })
         .setup(move |app| {
             let mut settings = load_settings(app.handle())?;
+            // The vibrancy follows the app's appearance, so it must match the chosen theme.
+            let theme = settings::native_theme(&settings.config().theme);
+            app.set_theme(theme);
             // A library chosen with TRAMA_LIBRARY is never swapped for the real one.
             let opening = open_with_fallback(
                 &settings.open_library,

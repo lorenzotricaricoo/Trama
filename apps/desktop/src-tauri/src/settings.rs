@@ -202,13 +202,24 @@ pub fn set_interface_language<R: Runtime>(
 /// Sets the theme and the accent colour.
 #[tauri::command]
 pub fn set_appearance(
+    app: AppHandle,
     settings: State<'_, Settings>,
     theme: String,
     accent: String,
 ) -> Result<(), String> {
-    settings
-        .update(|config| config.set_appearance(&theme, &accent))
-        .map(drop)
+    let config = settings.update(|config| config.set_appearance(&theme, &accent))?;
+    app.set_theme(native_theme(&config.theme));
+    Ok(())
+}
+
+/// The macOS appearance for a theme: forcing it makes the window's vibrancy (sidebar,
+/// glass) match the chosen theme instead of the system one. `None` follows the system.
+pub fn native_theme(theme: &str) -> Option<tauri::Theme> {
+    match theme {
+        "light" => Some(tauri::Theme::Light),
+        "dark" => Some(tauri::Theme::Dark),
+        _ => None,
+    }
 }
 
 /// Keeps the window opaque even when macOS keeps transparency on.
@@ -545,6 +556,13 @@ pub async fn budget_status(app: AppHandle) -> Result<BudgetPayload, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_theme_follows_the_chosen_theme() {
+        assert_eq!(native_theme("light"), Some(tauri::Theme::Light));
+        assert_eq!(native_theme("dark"), Some(tauri::Theme::Dark));
+        assert_eq!(native_theme("system"), None);
+    }
 
     fn settings(dir: &Path) -> Settings {
         Settings {
