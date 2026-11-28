@@ -27,7 +27,9 @@ export class Autosaver {
   private timer: ReturnType<typeof setTimeout> | undefined;
   /** When the oldest unsaved edit was made. */
   private since: number | undefined;
-  private running: Promise<void> | undefined;
+  private running: Promise<boolean> | undefined;
+  /** Waiting for {@link Autosaver.whenClean}. */
+  private cleanWaiters: (() => void)[] = [];
   private readonly save: (text: string) => Promise<unknown>;
   private readonly onStatus: (status: SaveStatus) => void;
   private readonly timing: AutosaveTiming;
@@ -57,10 +59,22 @@ export class Autosaver {
     this.schedule(Math.max(0, wait));
   }
 
-  /** Saves what is pending now; resolves once everything typed so far is written. */
-  async flush(): Promise<void> {
+  /**
+   * Saves what is pending now. Resolves to true once everything typed so far is written,
+   * or to false if a save failed (the text is kept and tried again later).
+   */
+  async flush(): Promise<boolean> {
     this.clearTimer();
-    await this.run();
+    for (;;) {
+      if (!(await this.run())) return false;
+      if (this.unsaved === null) return true;
+    }
+  }
+
+  /** Resolves once everything typed is written, however many retries it takes. */
+  whenClean(): Promise<void> {
+    if (!this.dirty) return Promise.resolve();
+    return new Promise((resolve) => this.cleanWaiters.push(resolve));
   }
 
   private schedule(wait: number) {
@@ -76,26 +90,33 @@ export class Autosaver {
     this.timer = undefined;
   }
 
-  private async run(): Promise<void> {
+  /** Writes what is pending; false if the write failed. */
+  private async run(): Promise<boolean> {
     // One save at a time: wait for the one in progress, then write what is left.
     while (this.running) await this.running;
-    if (this.unsaved === null) return;
+    if (this.unsaved === null) return true;
     const text = this.unsaved;
     this.unsaved = null;
     this.since = undefined;
     this.onStatus('saving');
     this.running = this.write(text);
     try {
-      await this.running;
+      return await this.running;
     } finally {
       this.running = undefined;
+      if (!this.dirty) {
+        const waiters = this.cleanWaiters;
+        this.cleanWaiters = [];
+        for (const resolve of waiters) resolve();
+      }
     }
   }
 
-  private async write(text: string): Promise<void> {
+  private async write(text: string): Promise<boolean> {
     try {
       await this.save(text);
       if (this.unsaved === null) this.onStatus('saved');
+      return true;
     } catch (error: unknown) {
       console.error('Cannot save the note', error);
       // Keep the text, unless newer text replaced it, and try again later.
@@ -103,6 +124,7 @@ export class Autosaver {
       this.since ??= Date.now();
       this.onStatus('error');
       this.schedule(this.timing.retry);
+      return false;
     }
   }
 }

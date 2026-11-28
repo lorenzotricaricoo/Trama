@@ -48,7 +48,13 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
   newNote: {
     label: '⌘N',
     // ⌘N has no editing meaning in text fields, so it acts there too, the editor included.
-    matches: (e) => mod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n',
+    // The physical key too, for layouts without Latin letters (Cyrillic, Greek…), but not
+    // where another Latin letter sits on it (Dvorak's B).
+    matches: (e) =>
+      mod(e) &&
+      !e.altKey &&
+      !e.shiftKey &&
+      (e.key.toLowerCase() === 'n' || (e.code === 'KeyN' && !/^[a-z]$/i.test(e.key))),
   },
 };
 

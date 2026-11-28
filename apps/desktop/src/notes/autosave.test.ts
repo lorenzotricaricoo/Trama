@@ -64,7 +64,7 @@ describe('Autosaver', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(done).toBe(false);
     calls[0]?.resolve();
-    await flushed;
+    expect(await flushed).toBe(true);
     expect(saver.dirty).toBe(false);
     // Nothing left for the timer.
     await vi.advanceTimersByTimeAsync(TIMING.maxWait);
@@ -97,31 +97,40 @@ describe('Autosaver', () => {
     saver.change('keep me');
     const flushed = saver.flush();
     calls[0]?.reject(new Error('disk full'));
-    await flushed;
+    expect(await flushed).toBe(false);
     expect(statuses.at(-1)).toBe('error');
     expect(saver.dirty).toBe(true);
+    let clean = false;
+    void saver.whenClean().then(() => (clean = true));
     await vi.advanceTimersByTimeAsync(TIMING.retry);
     expect(save).toHaveBeenLastCalledWith('keep me');
+    expect(clean).toBe(false);
     calls[1]?.resolve();
     await vi.advanceTimersByTimeAsync(0);
     expect(statuses.at(-1)).toBe('saved');
+    expect(clean).toBe(true);
     expect(error).toHaveBeenCalled();
     error.mockRestore();
   });
 });
 
 describe('flushAll', () => {
-  it('runs every registered write until it is removed', async () => {
-    const first = vi.fn(() => Promise.resolve());
-    const failing = vi.fn(() => Promise.reject(new Error('no')));
-    const removeFirst = onQuitFlush(first);
-    const removeFailing = onQuitFlush(failing);
-    await flushAll();
-    expect(first).toHaveBeenCalledOnce();
-    expect(failing).toHaveBeenCalledOnce();
-    removeFirst();
-    removeFailing();
-    await flushAll();
-    expect(first).toHaveBeenCalledOnce();
+  it('runs every registered write and says whether all of them saved', async () => {
+    const saved = vi.fn(() => Promise.resolve(true));
+    const unsaved = vi.fn(() => Promise.resolve(false));
+    const broken = vi.fn(() => Promise.reject(new Error('no')));
+    const removeSaved = onQuitFlush(saved);
+    expect(await flushAll()).toBe(true);
+    const removeUnsaved = onQuitFlush(unsaved);
+    expect(await flushAll()).toBe(false);
+    removeUnsaved();
+    const removeBroken = onQuitFlush(broken);
+    expect(await flushAll()).toBe(false);
+    removeBroken();
+    removeSaved();
+    expect(await flushAll()).toBe(true);
+    expect(saved).toHaveBeenCalledTimes(3);
+    expect(unsaved).toHaveBeenCalledOnce();
+    expect(broken).toHaveBeenCalledOnce();
   });
 });

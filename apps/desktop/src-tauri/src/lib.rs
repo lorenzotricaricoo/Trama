@@ -170,7 +170,8 @@ pub fn run() {
             notes::save_note,
             notes::get_note,
             notes::list_sources,
-            quit::quit_ready
+            quit::quit_ready,
+            quit::quit_cancelled
         ])
         .on_menu_event(|app, event| {
             if event.id() == quit::QUIT_MENU_ID {

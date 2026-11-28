@@ -6,6 +6,7 @@ import { NoteIcon } from '../ui/icons';
 import { createNote, getNote, saveNote } from './api';
 import { Autosaver, type SaveStatus } from './autosave';
 import { onQuitFlush } from './flush';
+import { afterLeftScreens, trackLeftScreen } from './pending';
 import { NoteEditor } from './NoteEditor';
 
 interface NoteScreenProps {
@@ -18,7 +19,7 @@ interface NoteScreenProps {
 
 type Loaded =
   | { state: 'loading' }
-  | { state: 'ready'; body: string; createdAt: number }
+  | { state: 'ready'; id: string | undefined; body: string; createdAt: number }
   | {
       state: 'failed';
     };
@@ -38,13 +39,9 @@ const STATUS_MESSAGE: Record<SaveStatus, string> = {
  */
 export default function NoteScreen({ noteId, entry, onCreated }: NoteScreenProps) {
   const { t, locale } = useI18n();
-  // The note this screen opened with; a new note gets its id later without reloading.
-  const [openedId] = useState(noteId);
-  const [loaded, setLoaded] = useState<Loaded>(() =>
-    openedId === undefined
-      ? { state: 'ready', body: '', createdAt: Date.now() }
-      : { state: 'loading' },
-  );
+  // What this screen opened with; a new note gets its id later without reloading.
+  const [opened] = useState({ noteId, entry });
+  const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' });
   const [status, setStatus] = useState<SaveStatus>('idle');
   const saver = useRef<Autosaver | null>(null);
   const latest = useRef({ entry, onCreated });
@@ -52,12 +49,19 @@ export default function NoteScreen({ noteId, entry, onCreated }: NoteScreenProps
     latest.current = { entry, onCreated };
   });
 
+  // Reads the note once the writes of screens left earlier are done: coming Back to a new
+  // note whose creation was still running opens that note instead of creating another.
   useEffect(() => {
-    if (openedId === undefined) return;
     let active = true;
-    getNote(openedId)
-      .then((note) => {
-        if (active) setLoaded({ state: 'ready', body: note.body, createdAt: note.createdAt });
+    afterLeftScreens(opened.entry)
+      .then(async (createdId): Promise<Loaded> => {
+        const id = opened.noteId ?? createdId;
+        if (id === undefined) return { state: 'ready', id, body: '', createdAt: Date.now() };
+        const note = await getNote(id);
+        return { state: 'ready', id, body: note.body, createdAt: note.createdAt };
+      })
+      .then((ready) => {
+        if (active) setLoaded(ready);
       })
       .catch((error: unknown) => {
         console.error('Cannot open the note', error);
@@ -66,11 +70,14 @@ export default function NoteScreen({ noteId, entry, onCreated }: NoteScreenProps
     return () => {
       active = false;
     };
-  }, [openedId]);
+  }, [opened]);
 
   // One autosaver for the life of the screen; leaving the screen writes what is pending.
+  const ready = loaded.state === 'ready';
+  const readyId = loaded.state === 'ready' ? loaded.id : undefined;
   useEffect(() => {
-    let id = openedId;
+    if (!ready) return;
+    let id = readyId;
     const autosaver = new Autosaver(async (text) => {
       if (id !== undefined) {
         await saveNote(id, text);
@@ -78,7 +85,7 @@ export default function NoteScreen({ noteId, entry, onCreated }: NoteScreenProps
       }
       const note = await createNote(text);
       id = note.id;
-      latest.current.onCreated(latest.current.entry, note.id);
+      latest.current.onCreated(opened.entry, note.id);
     }, setStatus);
     saver.current = autosaver;
     const flush = () => autosaver.flush();
@@ -89,13 +96,22 @@ export default function NoteScreen({ noteId, entry, onCreated }: NoteScreenProps
     document.addEventListener('visibilitychange', onHidden);
     window.addEventListener('pagehide', flush);
     return () => {
-      removeQuitFlush();
       document.removeEventListener('visibilitychange', onHidden);
       window.removeEventListener('pagehide', flush);
-      void flush();
       saver.current = null;
+      const first = flush();
+      // A screen opened later from the same entry waits for this attempt (not the retries).
+      trackLeftScreen(
+        opened.entry,
+        first.then(() => id),
+      );
+      // A failed save stays registered for the quit, and keeps retrying, until it lands.
+      void first.then(async (saved) => {
+        if (!saved) await autosaver.whenClean();
+        removeQuitFlush();
+      });
     };
-  }, [openedId]);
+  }, [ready, readyId, opened]);
 
   const created = useMemo(
     () =>

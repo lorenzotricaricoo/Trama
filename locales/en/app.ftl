@@ -69,3 +69,5 @@ note-load-failed-title = This note can't be opened
 note-load-failed-body = It may have been moved to the trash.
 sources-list-label = Sources
 source-kind-note = Note
+# Shown when quitting is cancelled because a note could not be saved.
+quit-unsaved = A note is not saved yet, so { -brand } stayed open. Quit again within 30 seconds to quit anyway.

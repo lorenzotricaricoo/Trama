@@ -12,7 +12,20 @@ const core = vi.hoisted(() => ({
   notes: new Map<string, { body: string; createdAt: number }>(),
   calls: [] as { cmd: string; args: Record<string, unknown> }[],
   handlers: new Map<string, (event: { payload: unknown }) => void>(),
+  /** Upcoming writes (create or save) that fail, like a full disk. */
+  failingWrites: 0,
+  /** While set, create_note waits for it, like a slow disk. */
+  createGate: null as Promise<void> | null,
 }));
+
+/** Fails if a write should fail now. */
+function write(): Promise<void> {
+  if (core.failingWrites > 0) {
+    core.failingWrites -= 1;
+    return Promise.reject(new Error('disk full'));
+  }
+  return Promise.resolve();
+}
 
 function noteOf(id: string): Note {
   const note = core.notes.get(id);
@@ -34,16 +47,21 @@ vi.mock('@tauri-apps/api/core', () => ({
     switch (cmd) {
       case 'active_jobs':
         return Promise.resolve([]);
-      case 'create_note': {
-        const id = `note-${core.notes.size + 1}`;
-        core.notes.set(id, { body: String(args.body), createdAt: Date.UTC(2026, 10, 27, 9, 30) });
-        return Promise.resolve(noteOf(id));
-      }
-      case 'save_note': {
-        const id = String(args.id);
-        core.notes.set(id, { ...noteOf(id), body: String(args.body) });
-        return Promise.resolve({ versionNumber: 1, savedAt: 0 });
-      }
+      case 'create_note':
+        return (core.createGate ?? Promise.resolve()).then(write).then(() => {
+          const id = `note-${core.notes.size + 1}`;
+          core.notes.set(id, {
+            body: String(args.body),
+            createdAt: Date.UTC(2026, 10, 27, 9, 30),
+          });
+          return noteOf(id);
+        });
+      case 'save_note':
+        return write().then(() => {
+          const id = String(args.id);
+          core.notes.set(id, { ...noteOf(id), body: String(args.body) });
+          return { versionNumber: 1, savedAt: 0 };
+        });
       case 'get_note':
         return Promise.resolve(noteOf(String(args.id)));
       case 'list_sources': {
@@ -58,6 +76,7 @@ vi.mock('@tauri-apps/api/core', () => ({
         return Promise.resolve({ sources: rows, next: null });
       }
       case 'quit_ready':
+      case 'quit_cancelled':
         return Promise.resolve(null);
       default:
         return Promise.reject(new Error(`unexpected command ${cmd}`));
@@ -99,8 +118,16 @@ beforeEach(() => {
   core.notes.clear();
   core.calls.length = 0;
   core.handlers.clear();
+  core.failingWrites = 0;
+  core.createGate = null;
   localStorage.clear();
 });
+
+/** Asks the app to quit, as the shell does for ⌘Q and the close button. */
+async function quit() {
+  await waitFor(() => expect(core.handlers.has(QUIT_REQUESTED_EVENT)).toBe(true));
+  act(() => core.handlers.get(QUIT_REQUESTED_EVENT)?.({ payload: null }));
+}
 
 describe('Notes (flow F3)', () => {
   it('⌘N opens an editor that saves on its own, and the note joins Sources', async () => {
@@ -151,11 +178,93 @@ describe('Notes (flow F3)', () => {
     const user = renderApp();
     await user.keyboard('{Meta>}n{/Meta}');
     await type('Last words');
-    await waitFor(() => expect(core.handlers.has(QUIT_REQUESTED_EVENT)).toBe(true));
-    act(() => core.handlers.get(QUIT_REQUESTED_EVENT)?.({ payload: null }));
+    await quit();
     await waitFor(() => expect(commands('quit_ready')).toHaveLength(1), { timeout: 150 });
     const order = core.calls.map((call) => call.cmd).filter((cmd) => cmd !== 'active_jobs');
     expect(order).toEqual(['create_note', 'quit_ready']);
+  });
+
+  it('stays open when a save fails at quit, and quits on a second request', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = renderApp();
+    await user.keyboard('{Meta>}n{/Meta}');
+    await type('Keep me');
+    core.failingWrites = 1;
+    await quit();
+    await waitFor(() => expect(commands('quit_cancelled')).toHaveLength(1));
+    expect(commands('quit_ready')).toHaveLength(0);
+    expect(await screen.findByText(/A note is not saved yet/)).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Not saved yet: trying again.');
+    // The text is still on screen.
+    const view = EditorView.findFromDOM(await editor());
+    expect(view?.state.doc.toString()).toBe('Keep me');
+
+    core.failingWrites = 1;
+    await quit();
+    await waitFor(() => expect(commands('quit_ready')).toHaveLength(1));
+    error.mockRestore();
+  });
+
+  it('keeps a failed save of a closed note in the quit until it lands', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const user = renderApp();
+    await user.keyboard('{Meta>}n{/Meta}');
+    await type('Written on a full disk');
+    core.failingWrites = 1;
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    await user.click(within(nav).getByRole('link', { name: 'Home' }));
+    await waitFor(() => expect(commands('create_note')).toHaveLength(1));
+    expect(core.notes.size).toBe(0);
+
+    // The editor is gone, but quitting still writes its text first.
+    await quit();
+    await waitFor(() => expect(commands('quit_ready')).toHaveLength(1));
+    expect(commands('quit_cancelled')).toHaveLength(0);
+    expect([...core.notes.values()].map((note) => note.body)).toEqual(['Written on a full disk']);
+    error.mockRestore();
+  });
+
+  it('going Back to a new note while it is being created opens that note', async () => {
+    let open = () => {};
+    core.createGate = new Promise((resolve) => (open = resolve));
+    const user = renderApp();
+    await user.keyboard('{Meta>}n{/Meta}');
+    await type('Slow start');
+    const nav = screen.getByRole('navigation', { name: 'Main' });
+    await user.click(within(nav).getByRole('link', { name: 'Home' }));
+    await screen.findByRole('heading', { level: 1, name: 'Welcome to Trama' });
+    await waitFor(() =>
+      expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument(),
+    );
+    expect(commands('create_note')).toHaveLength(1);
+    await user.click(screen.getByRole('button', { name: 'Back' }));
+    // Still creating: the screen waits instead of offering an empty new note.
+    expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument();
+    act(() => open());
+    await waitFor(async () => {
+      const view = EditorView.findFromDOM(await editor());
+      expect(view?.state.doc.toString()).toBe('Slow start');
+    });
+    await type(', then more');
+    await waitFor(() =>
+      expect(commands('save_note').at(-1)?.args).toEqual({
+        id: 'note-1',
+        body: 'Slow start, then more',
+      }),
+    );
+    expect(commands('create_note')).toHaveLength(1);
+    expect(core.notes.size).toBe(1);
+  });
+
+  it('⌘N follows the key on Latin layouts and the physical key on others', async () => {
+    renderApp();
+    // Dvorak: the physical N key types B, so ⌘ with it is not New note.
+    fireEvent.keyDown(window, { key: 'b', code: 'KeyN', metaKey: true });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument();
+    // Russian: the N key types т.
+    fireEvent.keyDown(window, { key: 'т', code: 'KeyN', metaKey: true });
+    expect(await editor()).toBeInTheDocument();
   });
 
   it('opens from the command bar, and ⌘N works while the bar is open', async () => {

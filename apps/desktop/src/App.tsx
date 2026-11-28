@@ -38,7 +38,8 @@ export function App() {
   const bar = useCommandBar();
   const jobs = useJobs();
   const notice = useNotice();
-  useFlushBeforeQuit();
+  // A note that could not be saved keeps the app open, with a way out.
+  useFlushBeforeQuit(() => notice.show(t('quit-unsaved')));
 
   // The theme classes go on <html>, so that overlays rendered in portals get the tokens too.
   useLayoutEffect(() => {

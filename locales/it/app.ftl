@@ -69,3 +69,5 @@ note-load-failed-title = Impossibile aprire questa nota
 note-load-failed-body = Potrebbe essere stata spostata nel cestino.
 sources-list-label = Fonti
 source-kind-note = Nota
+# Shown when quitting is cancelled because a note could not be saved.
+quit-unsaved = Una nota non è ancora salvata, quindi { -brand } è rimasta aperta. Esci di nuovo entro 30 secondi per uscire comunque.
