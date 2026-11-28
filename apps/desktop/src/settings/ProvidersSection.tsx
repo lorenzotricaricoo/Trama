@@ -77,25 +77,17 @@ interface Props {
   onLibrary: UpdateLibrary;
 }
 
-export function ProvidersSection({ library, onLibrary }: Props) {
-  const { t } = useI18n();
+/** The providers and the models chosen for each task, loaded together. */
+export function useProviders() {
   const [providers, setProviders] = useState<Provider[] | null>(null);
   const [tasks, setTasks] = useState<TaskModel[]>([]);
-  const [budget, setBudget] = useState<Budget | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState<Provider | 'new' | null>(null);
-  const [taskError, setTaskError] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     try {
-      const [list, choices, status] = await Promise.all([
-        api.listProviders(),
-        api.taskModels(),
-        api.budgetStatus(),
-      ]);
+      const [list, choices] = await Promise.all([api.listProviders(), api.taskModels()]);
       setProviders(list);
       setTasks(choices);
-      setBudget(status);
       setError(null);
     } catch (err) {
       setError(errorCode(err));
@@ -108,8 +100,109 @@ export function ProvidersSection({ library, onLibrary }: Props) {
     void reload();
   }, [reload]);
 
+  return { providers, setProviders, tasks, setTasks, error, reload };
+}
+
+export type ProvidersState = ReturnType<typeof useProviders>;
+
+export function ProvidersSection({ library, onLibrary }: Props) {
+  const state = useProviders();
+  const [budget, setBudget] = useState<Budget | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .budgetStatus()
+      .then((status) => {
+        if (active) setBudget(status);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  return (
+    <>
+      <ProvidersGroup state={state} currency={library.currency} />
+      <TasksGroup state={state} />
+      <BudgetGroup
+        library={library}
+        budget={budget}
+        unpriced={unpricedTaskModels(state.providers ?? [], state.tasks)}
+        onLibrary={async (change) => {
+          const code = await onLibrary(change);
+          if (code === null) setBudget(await api.budgetStatus().catch(() => budget));
+          return code;
+        }}
+      />
+    </>
+  );
+}
+
+/** The providers, each with its key, models and a connection test, and "Add provider". */
+export function ProvidersGroup({
+  state,
+  currency,
+  description,
+}: {
+  state: ProvidersState;
+  currency: string;
+  /** Replaces the description of Settings. */
+  description?: string;
+}) {
+  const { t } = useI18n();
+  const { providers, setProviders, error, reload } = state;
+  const [editing, setEditing] = useState<Provider | 'new' | null>(null);
+
   const replace = (provider: Provider) =>
     setProviders((list) => list?.map((p) => (p.id === provider.id ? provider : p)) ?? null);
+
+  return (
+    <Group
+      title={t('settings-group-providers')}
+      description={description ?? t('settings-providers-desc')}
+    >
+      <ErrorText code={error} />
+      {providers?.length === 0 && <p className="set-empty">{t('settings-providers-empty')}</p>}
+      {providers?.map((provider) => (
+        <ProviderCard
+          key={provider.id}
+          provider={provider}
+          currency={currency}
+          onChange={replace}
+          onEdit={() => setEditing(provider)}
+          onRemoved={() => void reload()}
+        />
+      ))}
+      <div className="set-actions">
+        <Button className="set-btn" onPress={() => setEditing('new')}>
+          <PlusIcon aria-hidden />
+          {t('settings-provider-add')}
+        </Button>
+      </div>
+      <ProviderDialog
+        key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id}
+        provider={editing}
+        onClose={() => setEditing(null)}
+        onSaved={(provider) => {
+          setEditing(null);
+          setProviders((list) =>
+            list?.some((p) => p.id === provider.id)
+              ? list.map((p) => (p.id === provider.id ? provider : p))
+              : [...(list ?? []), provider],
+          );
+        }}
+      />
+    </Group>
+  );
+}
+
+/** The model chosen for each task (phase 1: the summary). */
+export function TasksGroup({ state }: { state: ProvidersState }) {
+  const { t } = useI18n();
+  const { providers, tasks, setTasks } = state;
+  const [taskError, setTaskError] = useState<string | null>(null);
 
   const modelOptions = [
     { id: NO_MODEL, label: t('settings-task-no-model') },
@@ -143,76 +236,28 @@ export function ProvidersSection({ library, onLibrary }: Props) {
   };
 
   return (
-    <>
-      <Group title={t('settings-group-providers')} description={t('settings-providers-desc')}>
-        <ErrorText code={error} />
-        {providers?.length === 0 && <p className="set-empty">{t('settings-providers-empty')}</p>}
-        {providers?.map((provider) => (
-          <ProviderCard
-            key={provider.id}
-            provider={provider}
-            currency={library.currency}
-            onChange={replace}
-            onEdit={() => setEditing(provider)}
-            onRemoved={() => void reload()}
-          />
-        ))}
-        <div className="set-actions">
-          <Button className="set-btn" onPress={() => setEditing('new')}>
-            <PlusIcon aria-hidden />
-            {t('settings-provider-add')}
-          </Button>
-        </div>
-      </Group>
-
-      <Group title={t('settings-group-tasks')} description={t('settings-tasks-desc')}>
-        {TASKS.map((task) => {
-          const choice = tasks.find((existing) => existing.task === task);
-          return (
-            <Row
-              key={task}
+    <Group title={t('settings-group-tasks')} description={t('settings-tasks-desc')}>
+      {TASKS.map((task) => {
+        const choice = tasks.find((existing) => existing.task === task);
+        return (
+          <Row
+            key={task}
+            label={t(`settings-task-${task}`)}
+            description={t(`settings-task-${task}-desc`)}
+          >
+            <SelectField
               label={t(`settings-task-${task}`)}
-              description={t(`settings-task-${task}-desc`)}
-            >
-              <SelectField
-                label={t(`settings-task-${task}`)}
-                labelHidden
-                mono
-                options={modelOptions}
-                value={choice ? `${choice.providerId}${KEY_SEPARATOR}${choice.modelId}` : NO_MODEL}
-                onChange={(key) => void chooseTask(task, key)}
-              />
-            </Row>
-          );
-        })}
-        <ErrorText code={taskError} />
-      </Group>
-
-      <BudgetGroup
-        library={library}
-        budget={budget}
-        unpriced={unpricedTaskModels(providers ?? [], tasks)}
-        onLibrary={async (change) => {
-          const code = await onLibrary(change);
-          if (code === null) setBudget(await api.budgetStatus().catch(() => budget));
-          return code;
-        }}
-      />
-
-      <ProviderDialog
-        key={editing === null ? 'closed' : editing === 'new' ? 'new' : editing.id}
-        provider={editing}
-        onClose={() => setEditing(null)}
-        onSaved={(provider) => {
-          setEditing(null);
-          setProviders((list) =>
-            list?.some((p) => p.id === provider.id)
-              ? list.map((p) => (p.id === provider.id ? provider : p))
-              : [...(list ?? []), provider],
-          );
-        }}
-      />
-    </>
+              labelHidden
+              mono
+              options={modelOptions}
+              value={choice ? `${choice.providerId}${KEY_SEPARATOR}${choice.modelId}` : NO_MODEL}
+              onChange={(key) => void chooseTask(task, key)}
+            />
+          </Row>
+        );
+      })}
+      <ErrorText code={taskError} />
+    </Group>
   );
 }
 
