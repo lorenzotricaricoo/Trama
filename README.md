@@ -68,6 +68,12 @@ The transcription model (about 2.5 GB) is downloaded into `Models`, next to the 
 `TRAMA_MODELS` points development builds at another folder, so they can share one
 download ([downloaded models](docs/architecture/models.md)).
 
+The first Rust build downloads the prebuilt sherpa-onnx and ONNX Runtime libraries
+(about 22 MB) used for transcription, and stops if their checksum doesn't match the one
+pinned in `crates/core/build.rs` ([native libraries](docs/architecture/transcription.md#native-libraries)).
+Tests that need the transcription model are ignored by default; see
+[transcription tests](docs/architecture/transcription.md#tests) to run them.
+
 ## Documentation
 
 - [Vision](docs/vision.md) — what Trama is, how it works, and the MVP scope
@@ -77,6 +83,7 @@ download ([downloaded models](docs/architecture/models.md)).
 - [Audio capture](docs/architecture/audio-capture.md) — how a meeting is recorded on two aligned tracks ([manual checks](docs/development/audio-capture.md))
 - [Downloaded models](docs/architecture/models.md) — the pinned transcription model, where it lives and how it is downloaded
 - [AI providers](docs/architecture/providers.md) — providers, models per task and how calls stay robust
+- [Transcription](docs/architecture/transcription.md) — the local engine, how both tracks become one timeline, the background job and its tests
 - [Principles](docs/principles.md) — rules for process and architecture
 - [Architecture Decision Records](docs/adr/) — decisions and their reasons
 
@@ -86,4 +93,5 @@ To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-Released under the [MIT License](LICENSE).
+Released under the [MIT License](LICENSE). Third-party models, libraries and data, with
+their licenses and attributions, are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
