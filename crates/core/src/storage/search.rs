@@ -1,20 +1,125 @@
-//! Full-text search over transcripts, notes and notes typed while recording.
+//! Full-text search over transcripts, notes, notes typed while recording and titles.
+
+use std::collections::HashMap;
 
 use rusqlite::params;
 
-use super::{HitTarget, Library, Result, SearchHit, StorageError, parse_id};
+use super::{
+    HIGHLIGHT_END, HIGHLIGHT_START, HitTarget, Id, Library, Result, SearchHit, SourceKind,
+    SourceResult, StorageError, parse_id,
+};
 
 /// Words of context around a match in an excerpt.
 const EXCERPT_TOKENS: u32 = 16;
+
+/// Hits kept for each source by [`Library::search_sources`], besides the title.
+pub const HITS_PER_SOURCE: usize = 3;
+
+/// Hits read before grouping them by source in [`Library::search_sources`].
+const GROUPED_HITS: u32 = 400;
+
+/// The words of a search, as [`fts_query`] reads them.
+fn terms(input: &str) -> Vec<String> {
+    input
+        .split_whitespace()
+        .map(|word| word.replace('"', ""))
+        .filter(|word| word.chars().any(char::is_alphanumeric))
+        .collect()
+}
+
+/// Lower case without accents, one character for one, so positions in the folded text are
+/// positions in the original (the FTS index ignores case and accents the same way).
+fn fold(c: char) -> char {
+    let lower = c.to_lowercase().next().unwrap_or(c);
+    match lower {
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' => 'a',
+        'è' | 'é' | 'ê' | 'ë' => 'e',
+        'ì' | 'í' | 'î' | 'ï' => 'i',
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' => 'o',
+        'ù' | 'ú' | 'û' | 'ü' => 'u',
+        'ç' => 'c',
+        'ñ' => 'n',
+        'ý' | 'ÿ' => 'y',
+        other => other,
+    }
+}
+
+/// The title with every word that starts with one of `terms` marked like an FTS excerpt,
+/// or `None` unless every term starts some word of the title.
+pub(super) fn title_excerpt(title: &str, terms: &[String]) -> Option<String> {
+    let folded_terms: Vec<Vec<char>> = terms
+        .iter()
+        .map(|t| t.chars().map(fold).collect())
+        .collect();
+    if folded_terms.is_empty() {
+        return None;
+    }
+    // Words as runs of letters and digits, with their char positions.
+    let chars: Vec<char> = title.chars().collect();
+    let mut words: Vec<(usize, usize)> = Vec::new();
+    let mut start = None;
+    for (i, c) in chars.iter().enumerate() {
+        match (c.is_alphanumeric(), start) {
+            (true, None) => start = Some(i),
+            (false, Some(s)) => {
+                words.push((s, i));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    if let Some(s) = start {
+        words.push((s, chars.len()));
+    }
+    let starts_with = |(from, to): (usize, usize), term: &[char]| {
+        to - from >= term.len()
+            && chars[from..from + term.len()]
+                .iter()
+                .map(|c| fold(*c))
+                .eq(term.iter().copied())
+    };
+    // A term with punctuation inside (`e-mail`) is matched on its first word only.
+    let first_words: Vec<Vec<char>> = folded_terms
+        .iter()
+        .map(|term| {
+            term.iter()
+                .copied()
+                .take_while(|c| c.is_alphanumeric())
+                .collect()
+        })
+        .collect();
+    if first_words
+        .iter()
+        .any(|term| term.is_empty() || !words.iter().any(|w| starts_with(*w, term)))
+    {
+        return None;
+    }
+    let mut marked = String::with_capacity(title.len() + 8);
+    let mut cursor = 0;
+    for word in &words {
+        let longest = first_words
+            .iter()
+            .filter(|term| starts_with(*word, term))
+            .map(Vec::len)
+            .max();
+        if let Some(len) = longest {
+            marked.extend(&chars[cursor..word.0]);
+            marked.push(HIGHLIGHT_START);
+            marked.extend(&chars[word.0..word.0 + len]);
+            marked.push(HIGHLIGHT_END);
+            cursor = word.0 + len;
+        }
+    }
+    marked.extend(&chars[cursor..]);
+    Some(marked)
+}
 
 /// Turns what the user typed into an FTS5 query: every word must appear, as a prefix,
 /// so results show up while typing. FTS5 operators typed by the user are treated as
 /// plain text. Returns `None` when there is nothing to search for.
 pub(super) fn fts_query(input: &str) -> Option<String> {
-    let terms: Vec<String> = input
-        .split_whitespace()
-        .map(|word| word.replace('"', ""))
-        .filter(|word| word.chars().any(char::is_alphanumeric))
+    let terms: Vec<String> = terms(input)
+        .into_iter()
         .map(|word| format!("\"{word}\"*"))
         .collect();
     (!terms.is_empty()).then(|| terms.join(" "))
@@ -28,11 +133,11 @@ impl Library {
             return Ok(Vec::new());
         };
         let mut stmt = self.conn.prepare_cached(&format!(
-            "SELECT source_id, kind, ref, version_id, excerpt, rank FROM (
+            "SELECT source_id, kind, ref, version_id, excerpt, rank, at_ms FROM (
                  SELECT v.source_id AS source_id, 'segment' AS kind, CAST(seg.id AS TEXT) AS ref,
                         seg.version_id AS version_id,
                         snippet(segment_search, 0, char(2), char(3), '…', {EXCERPT_TOKENS}) AS excerpt,
-                        bm25(segment_search) AS rank
+                        bm25(segment_search) AS rank, seg.start_ms AS at_ms
                  FROM segment_search
                  JOIN transcript_segment seg ON seg.id = segment_search.rowid
                  JOIN source_version v ON v.id = seg.version_id
@@ -44,7 +149,9 @@ impl Library {
                  SELECT text_search.source_id, text_search.kind, text_search.ref,
                         CASE text_search.kind WHEN 'note' THEN text_search.ref END,
                         snippet(text_search, 0, char(2), char(3), '…', {EXCERPT_TOKENS}),
-                        bm25(text_search)
+                        bm25(text_search),
+                        CASE text_search.kind WHEN 'recording_note'
+                            THEN (SELECT at_ms FROM recording_note WHERE id = text_search.ref) END
                  FROM text_search
                  JOIN source s ON s.id = text_search.source_id
                  WHERE text_search MATCH ?1
@@ -65,11 +172,12 @@ impl Library {
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, f64>(5)?,
+                row.get::<_, Option<i64>>(6)?,
             ))
         })?;
         let mut hits = Vec::new();
         for row in rows {
-            let (source_id, kind, reference, version_id, excerpt, rank) = row?;
+            let (source_id, kind, reference, version_id, excerpt, rank, at_ms) = row?;
             let version_id = version_id.as_deref().map(parse_id).transpose()?;
             let target = match (kind.as_str(), version_id) {
                 ("segment", Some(version_id)) => HitTarget::Segment {
@@ -92,16 +200,105 @@ impl Library {
                 source_id: parse_id(&source_id)?,
                 target,
                 excerpt,
+                at_ms,
                 rank,
             });
         }
         Ok(hits)
     }
+
+    /// Sources whose title, text, transcript or recording notes contain every word typed,
+    /// best first, at most `limit`, optionally of one `kind`. A source whose title matches
+    /// comes before the others; each keeps its [`HITS_PER_SOURCE`] best hits, plus a
+    /// [`HitTarget::Title`] hit when the title matches.
+    pub fn search_sources(
+        &self,
+        input: &str,
+        kind: Option<SourceKind>,
+        limit: u32,
+    ) -> Result<Vec<SourceResult>> {
+        let terms = terms(input);
+        if terms.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut order: Vec<Id> = Vec::new();
+        let mut hits: HashMap<Id, Vec<SearchHit>> = HashMap::new();
+
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, title FROM source
+             WHERE deleted_at IS NULL AND title != '' AND (?1 IS NULL OR kind = ?1)
+             ORDER BY occurred_at DESC, id DESC",
+        )?;
+        let titles = stmt.query_map(params![kind.map(SourceKind::as_str)], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in titles {
+            let (id, title) = row?;
+            if let Some(excerpt) = title_excerpt(&title, &terms) {
+                let id = parse_id(&id)?;
+                order.push(id);
+                hits.entry(id).or_default().push(SearchHit {
+                    source_id: id,
+                    target: HitTarget::Title,
+                    excerpt,
+                    at_ms: None,
+                    rank: f64::NEG_INFINITY,
+                });
+            }
+        }
+
+        for hit in self.search(input, GROUPED_HITS)? {
+            let kept = hits.entry(hit.source_id).or_default();
+            if kept.is_empty() {
+                order.push(hit.source_id);
+            }
+            let text_hits = kept.iter().filter(|h| h.target != HitTarget::Title).count();
+            if text_hits < HITS_PER_SOURCE {
+                kept.push(hit);
+            }
+        }
+
+        let mut results = Vec::new();
+        // Read in pages, since the kind filter may drop some.
+        for chunk in order.chunks(64) {
+            for item in self.source_items(chunk)? {
+                if kind.is_some_and(|kind| item.source.kind != kind) {
+                    continue;
+                }
+                let hits = hits.remove(&item.source.id).unwrap_or_default();
+                results.push(SourceResult { item, hits });
+                if results.len() >= limit as usize {
+                    return Ok(results);
+                }
+            }
+        }
+        Ok(results)
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::fts_query;
+    use super::{fts_query, title_excerpt};
+
+    fn marked(title: &str, input: &str) -> Option<String> {
+        let terms: Vec<String> = input.split_whitespace().map(str::to_owned).collect();
+        title_excerpt(title, &terms).map(|t| t.replace('\u{2}', "[").replace('\u{3}', "]"))
+    }
+
+    #[test]
+    fn titles_match_word_prefixes_ignoring_case_and_accents() {
+        assert_eq!(
+            marked("Perché la Città?", "citta PERCH").as_deref(),
+            Some("[Perch]é la [Città]?")
+        );
+        assert_eq!(
+            marked("Revisione budget Q3", "bud").as_deref(),
+            Some("Revisione [bud]get Q3")
+        );
+        assert_eq!(marked("Revisione budget", "budget mensile"), None);
+        assert_eq!(marked("Rebudget", "budget"), None, "only word starts match");
+        assert_eq!(marked("Sync", ""), None);
+    }
 
     #[test]
     fn builds_prefix_queries() {

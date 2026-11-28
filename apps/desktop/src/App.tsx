@@ -184,7 +184,8 @@ export function App() {
             title={title}
             canGoBack={nav.canGoBack}
             onBack={nav.back}
-            jobs={jobs}
+            // Home shows the work in progress itself.
+            jobs={nav.screen === 'home' ? [] : jobs}
             recordingClock={recording.status ? formatClock(elapsed) : undefined}
             onShowRecording={showPanel}
           />
@@ -210,7 +211,15 @@ export function App() {
           </div>
           <Notice notice={notice.notice} onDismiss={notice.dismiss} />
         </main>
-        <CommandBar bar={bar} commands={commands} />
+        <CommandBar
+          bar={bar}
+          commands={commands}
+          onOpenSource={(source, atMs) =>
+            source.kind === 'meeting'
+              ? nav.navigate('meeting', source.id, atMs)
+              : nav.navigate('note', source.id)
+          }
+        />
       </div>
     </MotionConfig>
   );

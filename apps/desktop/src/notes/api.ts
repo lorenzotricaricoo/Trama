@@ -27,6 +27,31 @@ export interface SourceRow {
   updatedAt: number;
   /** For a note: its first line of text, shown while it has no title. */
   preview: string | null;
+  /** For a meeting: where it is in its life. */
+  status: 'recording' | 'processing' | 'ready' | 'failed' | null;
+  /** For a meeting: its length, once known. */
+  durationMs: number | null;
+}
+
+/** Where a search found the words, in a source. */
+export interface SearchHit {
+  kind: 'title' | 'transcript' | 'note' | 'recordingNote';
+  /** The text around the match; each match sits between U+0002 and U+0003. */
+  excerpt: string;
+  /** Where it is in a meeting, from its start. */
+  atMs: number | null;
+}
+
+/** A source found by a search, with its best hits. */
+export interface SearchResult {
+  source: SourceRow;
+  hits: SearchHit[];
+}
+
+/** How many sources there are of each kind. */
+export interface SourceCounts {
+  meetings: number;
+  notes: number;
 }
 
 /** Where a page of sources ends: pass it as `before` to get the next page. */
@@ -68,3 +93,17 @@ export const listSources = (
     before: options.before ?? null,
     limit: options.limit ?? null,
   });
+
+/** Sources containing every word typed, best first, optionally of one kind. */
+export const searchSources = (
+  query: string,
+  options: { kind?: SourceRow['kind']; limit?: number } = {},
+) =>
+  invoke<SearchResult[]>('search_sources', {
+    query,
+    kind: options.kind ?? null,
+    limit: options.limit ?? null,
+  });
+
+/** How many meetings and notes are not in the trash. */
+export const sourceCounts = () => invoke<SourceCounts>('source_counts');

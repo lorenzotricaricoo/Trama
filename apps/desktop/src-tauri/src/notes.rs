@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use trama_core::jobs::lock;
 use trama_core::storage::{
-    Id, Library, Source, SourceCursor, SourceKind, SourceListItem, Timestamp, TitleOrigin, Version,
+    HitTarget, Id, Library, SearchHit, Source, SourceCursor, SourceKind, SourceListItem,
+    SourceResult, Timestamp, TitleOrigin, Version,
 };
 
 use crate::jobs::Core;
@@ -16,6 +17,12 @@ const PREVIEW_CHARS: usize = 120;
 
 /// Most sources returned by one call to [`list_sources`].
 const MAX_SOURCES: u32 = 500;
+
+/// Most sources returned by one call to [`search_sources`].
+const MAX_RESULTS: u32 = 100;
+
+/// Longest search accepted, in characters; longer input is cut.
+const MAX_QUERY_CHARS: usize = 200;
 
 /// Longest title a note keeps, in characters.
 const MAX_TITLE_CHARS: usize = 200;
@@ -67,6 +74,38 @@ pub struct SourcePayload {
     pub updated_at: Timestamp,
     /// For a note: the first line of its text, shown while it has no title.
     pub preview: Option<String>,
+    /// For a meeting: `recording`, `processing`, `ready` or `failed`.
+    pub status: Option<&'static str>,
+    /// For a meeting: its length, once known.
+    pub duration_ms: Option<i64>,
+}
+
+/// One place a search found, in a source.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HitPayload {
+    /// `title`, `transcript`, `note` (the text of a note) or `recordingNote`.
+    pub kind: &'static str,
+    /// The text around the match; each match is between U+0002 and U+0003.
+    pub excerpt: String,
+    /// Where it is in a meeting, from its start.
+    pub at_ms: Option<i64>,
+}
+
+/// A source found by a search, with its best hits.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResultPayload {
+    pub source: SourcePayload,
+    pub hits: Vec<HitPayload>,
+}
+
+/// How many sources there are of each kind, for the filters of Sources.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceCountsPayload {
+    pub meetings: u32,
+    pub notes: u32,
 }
 
 /// Where a page of sources ends; passed back as `before` to get the next page.
@@ -112,6 +151,28 @@ fn source_payload(item: &SourceListItem) -> SourcePayload {
         occurred_at: source.occurred_at,
         updated_at: source.updated_at,
         preview: item.text_start.as_deref().and_then(preview),
+        status: item.meeting.map(|meeting| meeting.status.as_str()),
+        duration_ms: item.meeting.and_then(|meeting| meeting.duration_ms),
+    }
+}
+
+fn hit_payload(hit: &SearchHit) -> HitPayload {
+    HitPayload {
+        kind: match hit.target {
+            HitTarget::Title => "title",
+            HitTarget::Segment { .. } => "transcript",
+            HitTarget::Note { .. } => "note",
+            HitTarget::RecordingNote { .. } => "recordingNote",
+        },
+        excerpt: hit.excerpt.clone(),
+        at_ms: hit.at_ms,
+    }
+}
+
+fn result_payload(result: &SourceResult) -> SearchResultPayload {
+    SearchResultPayload {
+        source: source_payload(&result.item),
+        hits: result.hits.iter().map(hit_payload).collect(),
     }
 }
 
@@ -249,6 +310,40 @@ pub fn list_sources(
     Ok(page(&items, limit))
 }
 
+/// Sources containing every word of `query` (in the title, the text, the transcript or the
+/// notes typed while recording), best first, optionally of one `kind`, at most `limit`.
+/// Used by Sources and the command bar.
+#[tauri::command]
+pub fn search_sources(
+    core: State<'_, Core>,
+    query: String,
+    kind: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<SearchResultPayload>, String> {
+    let kind = kind
+        .map(|kind| kind.parse::<SourceKind>())
+        .transpose()
+        .map_err(|err| err.to_string())?;
+    let query: String = query.chars().take(MAX_QUERY_CHARS).collect();
+    let limit = limit.unwrap_or(MAX_RESULTS).clamp(1, MAX_RESULTS);
+    let results = lock(&core.library)
+        .search_sources(&query, kind, limit)
+        .map_err(|err| err.to_string())?;
+    Ok(results.iter().map(result_payload).collect())
+}
+
+/// How many meetings and notes are not in the trash.
+#[tauri::command]
+pub fn source_counts(core: State<'_, Core>) -> Result<SourceCountsPayload, String> {
+    let counts = lock(&core.library)
+        .source_counts()
+        .map_err(|err| err.to_string())?;
+    Ok(SourceCountsPayload {
+        meetings: counts.meetings,
+        notes: counts.notes,
+    })
+}
+
 fn page(items: &[SourceListItem], limit: u32) -> SourcePagePayload {
     let full = u32::try_from(items.len()).is_ok_and(|len| len >= limit);
     SourcePagePayload {
@@ -263,6 +358,30 @@ fn page(items: &[SourceListItem], limit: u32) -> SourcePagePayload {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn search_results_say_where_each_hit_is() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut library = Library::open(dir.path()).unwrap();
+        let meeting = library.create_meeting("it", 0).unwrap();
+        library
+            .add_recording_note(meeting.id, 42_000, "budget")
+            .unwrap();
+        library.create_note("Budget", "").unwrap();
+        let results: Vec<_> = library
+            .search_sources("budget", None, 10)
+            .unwrap()
+            .iter()
+            .map(result_payload)
+            .collect();
+        assert_eq!(results[0].source.kind, "note");
+        assert_eq!(results[0].hits[0].kind, "title");
+        assert_eq!(results[0].source.status, None);
+        assert_eq!(results[1].source.kind, "meeting");
+        assert_eq!(results[1].source.status, Some("recording"));
+        assert_eq!(results[1].hits[0].kind, "recordingNote");
+        assert_eq!(results[1].hits[0].at_ms, Some(42_000));
+    }
 
     #[test]
     fn titles_are_kept_on_one_short_line() {
@@ -334,8 +453,12 @@ mod tests {
             occurred_at: 1,
             updated_at: 2,
             preview: Some("Weekly sync".into()),
+            status: Some("ready"),
+            duration_ms: Some(60_000),
         })
         .unwrap();
+        assert_eq!(source["durationMs"], 60_000);
+        assert_eq!(source["status"], "ready");
         assert_eq!(source["occurredAt"], 1);
         assert_eq!(source["updatedAt"], 2);
         assert_eq!(source["preview"], "Weekly sync");

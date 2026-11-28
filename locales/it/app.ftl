@@ -72,6 +72,7 @@ command-bar-label = Barra dei comandi
 command-input = Scrivi un comando
 command-group-navigate = Vai a
 command-group-actions = Azioni
+command-group-sources = Nelle fonti
 command-empty-title = Nessun risultato
 command-empty-body = Prova con il nome di una schermata o di un'azione.
 command-hint-move = per muoverti
@@ -83,12 +84,47 @@ key-escape = esc
 ## Schermate
 
 welcome-title = Benvenuto in { -brand }
-home-description = Porta qui meeting, note e documenti: al resto pensa il curatore.
 home-empty-title = La tua panoramica parte da qui
-home-empty-body = Qui compariranno gli ultimi meeting, le azioni aperte e i progetti attivi.
+home-empty-body = Qui compariranno gli ultimi meeting e le note recenti. Inizia registrando un meeting o scrivendo una nota.
 sources-description = Meeting, note e documenti, tenuti così come li hai portati.
 sources-empty-title = Qui arriva tutto quello che porti in { -brand }
-sources-empty-body = Inizia registrando un meeting o scrivendo una nota. L'elenco completo, con filtri e ricerca, arriva in una prossima versione.
+sources-empty-body = Inizia registrando un meeting o scrivendo una nota.
+home-title = Panoramica
+home-latest-meetings = Ultimi meeting
+home-all-sources = Tutte le fonti
+home-no-meetings = Ancora nessun meeting.
+home-recent-notes = Note recenti
+home-no-notes = Ancora nessuna nota.
+sources-search = Cerca nelle fonti
+sources-search-clear = Cancella la ricerca
+sources-filter = Mostra
+sources-filter-all = Tutte
+sources-filter-meetings = Meeting
+sources-filter-notes = Note
+sources-count = { $count ->
+    [one] 1 fonte
+   *[other] { $count } fonti
+}
+sources-results = { $count ->
+    [one] 1 risultato
+   *[other] { $count } risultati
+}
+sources-results-label = Risultati della ricerca
+sources-column-title = TITOLO
+sources-column-when = QUANDO
+sources-column-length = DURATA
+sources-none-of-kind = Ancora niente di questo tipo.
+sources-no-results = Nessun risultato per «{ $query }»
+sources-no-results-body = Prova con un'altra parola o togli i filtri.
+sources-reset = Azzera filtri
+# Pulsante con il minuto accanto a un passaggio trovato in un meeting.
+sources-open-at = Apri a { $time }: { $text }
+sources-more = Mostra altre
+# Durata di un meeting negli elenchi.
+source-duration = { $minutes } min
+source-status-recording = In registrazione
+source-status-processing = In elaborazione
+source-status-failed = Non riuscito
 
 ## Notes
 

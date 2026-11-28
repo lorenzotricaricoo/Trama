@@ -76,9 +76,17 @@ vi.mock('@tauri-apps/api/core', () => ({
           occurredAt: note.createdAt,
           updatedAt: 0,
           preview: note.body.replace(/^[#\s]+/, '').split('\n')[0] || null,
+          status: null,
+          durationMs: null,
         }));
-        return Promise.resolve({ sources: rows, next: null });
+        const kind = args.kind as string | null;
+        return Promise.resolve({
+          sources: kind === 'meeting' ? [] : rows,
+          next: null,
+        });
       }
+      case 'source_counts':
+        return Promise.resolve({ meetings: 0, notes: core.notes.size });
       case 'quit_ready':
       case 'quit_cancelled':
       case 'recording_status':
@@ -278,7 +286,7 @@ describe('Notes (flow F3)', () => {
     await type('Slow start');
     const nav = screen.getByRole('navigation', { name: 'Main' });
     await user.click(within(nav).getByRole('link', { name: 'Home' }));
-    await screen.findByRole('heading', { level: 1, name: 'Welcome to Trama' });
+    await screen.findByRole('heading', { level: 1, name: 'Overview' });
     await waitFor(() =>
       expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument(),
     );

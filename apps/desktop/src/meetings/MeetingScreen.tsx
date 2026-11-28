@@ -28,6 +28,8 @@ import { SummaryTile, Timestamp } from './SummaryTile';
 
 interface MeetingScreenProps {
   meetingId: string;
+  /** Opens at this moment, in milliseconds from the start: a search hit. */
+  startAtMs?: number;
   jobs: readonly Job[];
   onNotice: (message: string) => void;
 }
@@ -130,7 +132,12 @@ const TranscriptLine = memo(function TranscriptLine({
  * whose timestamps lead to that moment, where the processing stands, the audio while it is
  * kept, and the transcript of the two tracks with the notes taken while recording.
  */
-export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScreenProps) {
+export default function MeetingScreen({
+  meetingId,
+  startAtMs,
+  jobs,
+  onNotice,
+}: MeetingScreenProps) {
   const { t, locale } = useI18n();
   const { reduceMotion } = useAppearance();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
@@ -224,6 +231,14 @@ export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScre
   );
 
   const seekOnly = useCallback((ms: number) => player.current?.seek(ms), []);
+
+  // A search hit opens the meeting at its moment, once the transcript is there.
+  const started = useRef(false);
+  useEffect(() => {
+    if (started.current || startAtMs === undefined || transcript.length === 0) return;
+    started.current = true;
+    jump(startAtMs);
+  }, [startAtMs, transcript, jump]);
 
   if (missing) {
     return (

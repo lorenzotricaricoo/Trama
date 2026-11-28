@@ -72,6 +72,7 @@ command-bar-label = Command bar
 command-input = Type a command
 command-group-navigate = Go to
 command-group-actions = Actions
+command-group-sources = In your sources
 command-empty-title = No results
 command-empty-body = Try the name of a screen or an action.
 command-hint-move = to move
@@ -83,12 +84,47 @@ key-escape = esc
 ## Screens
 
 welcome-title = Welcome to { -brand }
-home-description = Bring your meetings, notes and documents here: the curator takes care of the rest.
 home-empty-title = Your overview starts here
-home-empty-body = Latest meetings, open actions and active projects will appear here.
+home-empty-body = Your latest meetings and recent notes will appear here. Start by recording a meeting or writing a note.
 sources-description = Meetings, notes and documents, kept as you brought them.
 sources-empty-title = Everything you bring into { -brand } lands here
-sources-empty-body = Record a meeting or write a note to start. The full list, with filters and search, comes in a next version.
+sources-empty-body = Record a meeting or write a note to start.
+home-title = Overview
+home-latest-meetings = Latest meetings
+home-all-sources = All sources
+home-no-meetings = No meetings yet.
+home-recent-notes = Recent notes
+home-no-notes = No notes yet.
+sources-search = Search sources
+sources-search-clear = Clear the search
+sources-filter = Show
+sources-filter-all = All
+sources-filter-meetings = Meetings
+sources-filter-notes = Notes
+sources-count = { $count ->
+    [one] 1 source
+   *[other] { $count } sources
+}
+sources-results = { $count ->
+    [one] 1 result
+   *[other] { $count } results
+}
+sources-results-label = Search results
+sources-column-title = TITLE
+sources-column-when = WHEN
+sources-column-length = LENGTH
+sources-none-of-kind = Nothing of this kind yet.
+sources-no-results = Nothing found for “{ $query }”
+sources-no-results-body = Try another word, or clear the filters.
+sources-reset = Clear filters
+# A timestamp button next to a passage found in a meeting.
+sources-open-at = Open at { $time }: { $text }
+sources-more = Show more
+# Length of a meeting in lists.
+source-duration = { $minutes } min
+source-status-recording = Recording
+source-status-processing = Processing
+source-status-failed = Failed
 
 ## Notes
 

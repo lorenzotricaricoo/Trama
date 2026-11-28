@@ -273,6 +273,8 @@ pub enum HitTarget {
     Note { version_id: Id },
     /// A note typed while recording.
     RecordingNote { note_id: Id },
+    /// The source's title.
+    Title,
 }
 
 /// Position in the list of sources, newest first: the last source of a page. The next
@@ -300,6 +302,31 @@ pub struct SourceListItem {
     /// The first [`crate::storage::LIST_TEXT_CHARS`] characters of a note's current
     /// version; `None` for meetings and notes without text.
     pub text_start: Option<String>,
+    /// Status and length of a meeting; `None` for notes.
+    pub meeting: Option<MeetingBrief>,
+}
+
+/// What a list shows of a meeting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct MeetingBrief {
+    pub status: MeetingStatus,
+    pub duration_ms: Option<i64>,
+}
+
+/// How many sources not in the trash there are, of each kind.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SourceCounts {
+    pub meetings: u32,
+    pub notes: u32,
+}
+
+/// A source found by [`crate::storage::Library::search_sources`], with its best hits.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceResult {
+    pub item: SourceListItem,
+    /// Best first; at most [`crate::storage::HITS_PER_SOURCE`], plus the title when it
+    /// matches.
+    pub hits: Vec<SearchHit>,
 }
 
 /// One search result.
@@ -309,6 +336,9 @@ pub struct SearchHit {
     pub target: HitTarget,
     /// Excerpt with matches between [`HIGHLIGHT_START`] and [`HIGHLIGHT_END`].
     pub excerpt: String,
+    /// Where the hit is in a meeting, in milliseconds from its start: the start of a
+    /// segment or the moment of a recording note. `None` for notes and titles.
+    pub at_ms: Option<i64>,
     /// Lower is better.
     pub rank: f64,
 }
