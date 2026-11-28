@@ -5,6 +5,7 @@
 
 mod jobs;
 mod models;
+mod summary;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -13,7 +14,9 @@ use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
 use trama_core::jobs::{DeleteAudio, JobHandler, Runner, Transcribe};
+use trama_core::providers::{ClientConfig, Keychain};
 use trama_core::storage::Library;
+use trama_core::summary::Summarize;
 use trama_core::transcription::SherpaLoader;
 
 /// Catalogs used by the shell itself (native menus). The frontend loads its own.
@@ -72,7 +75,11 @@ fn start_core<R: Runtime>(app: &AppHandle<R>) -> Result<jobs::Core, Box<dyn std:
     let library = Arc::new(Mutex::new(library));
     // The transcription model is loaded from the folder the model manager downloads into.
     let transcribe = Transcribe::new(SherpaLoader::new(models::models_dir(app)?));
-    let handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(DeleteAudio), Arc::new(transcribe)];
+    let handlers: Vec<Arc<dyn JobHandler>> = vec![
+        Arc::new(DeleteAudio),
+        Arc::new(transcribe),
+        Arc::new(Summarize::new(Arc::new(Keychain), ClientConfig::default())),
+    ];
     let runner = Runner::start(
         Arc::clone(&library),
         handlers,
@@ -158,7 +165,10 @@ pub fn run() {
             models::download_model,
             models::cancel_model_download,
             models::verify_model,
-            models::remove_model
+            models::remove_model,
+            summary::source_summary,
+            summary::regenerate_summary,
+            summary::set_source_title
         ])
         .setup(move |app| {
             app.manage(start_core(app.handle())?);

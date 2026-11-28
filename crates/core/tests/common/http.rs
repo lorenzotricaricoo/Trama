@@ -1,7 +1,7 @@
 //! A scripted HTTP server on localhost, standing in for an AI provider.
 //!
-//! Each request gets the next scripted reply, in order; requests are recorded so tests
-//! can check what the client sent. Every connection is served on its own thread, so a
+//! Each request gets the next scripted reply, in order, or the reply of a responder
+//! function; requests are recorded so tests can check what the client sent. Every connection is served on its own thread, so a
 //! reply delayed past the client's timeout doesn't hold up the next attempt.
 
 use std::collections::VecDeque;
@@ -64,10 +64,14 @@ impl Recorded {
     }
 }
 
+/// Builds the reply to a request, instead of a script.
+type Responder = Box<dyn Fn(&Recorded) -> Reply + Send>;
+
 #[derive(Default)]
 struct State {
     replies: VecDeque<Reply>,
     requests: Vec<Recorded>,
+    responder: Option<Responder>,
 }
 
 /// The server; it runs until the test process ends.
@@ -77,6 +81,13 @@ pub struct MockServer {
 }
 
 impl MockServer {
+    /// A server that answers every request with `responder`.
+    pub fn start_with(responder: impl Fn(&Recorded) -> Reply + Send + 'static) -> Self {
+        let server = Self::start();
+        server.state.lock().unwrap().responder = Some(Box::new(responder));
+        server
+    }
+
     pub fn start() -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap();
@@ -114,11 +125,12 @@ fn serve(stream: TcpStream, state: &Mutex<State>) {
     };
     let reply = {
         let mut state = state.lock().unwrap();
+        let reply = match &state.responder {
+            Some(responder) => Some(responder(&request)),
+            None => state.replies.pop_front(),
+        };
         state.requests.push(request);
-        state
-            .replies
-            .pop_front()
-            .unwrap_or_else(|| Reply::json(500, r#"{"error":"no scripted reply"}"#))
+        reply.unwrap_or_else(|| Reply::json(500, r#"{"error":"no scripted reply"}"#))
     };
     thread::sleep(reply.delay);
     let mut head = format!(
