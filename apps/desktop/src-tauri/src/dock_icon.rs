@@ -37,7 +37,10 @@ const DEBUG_ICONS: Icons = &[
     ("orange", include_bytes!("../icons/debug/dock/orange.png")),
     ("yellow", include_bytes!("../icons/debug/dock/yellow.png")),
     ("green", include_bytes!("../icons/debug/dock/green.png")),
-    ("graphite", include_bytes!("../icons/debug/dock/graphite.png")),
+    (
+        "graphite",
+        include_bytes!("../icons/debug/dock/graphite.png"),
+    ),
 ];
 
 #[cfg(all(target_os = "macos", not(debug_assertions)))]
@@ -110,7 +113,11 @@ mod tests {
     #[test]
     fn every_accent_but_lime_has_its_dock_icon() {
         for accent in trama_core::config::ACCENTS {
-            assert_eq!(find(RELEASE_ICONS, accent).is_some(), *accent != "lime", "{accent}");
+            assert_eq!(
+                find(RELEASE_ICONS, accent).is_some(),
+                *accent != "lime",
+                "{accent}"
+            );
         }
         assert_eq!(RELEASE_ICONS.len(), trama_core::config::ACCENTS.len() - 1);
         assert_readable(RELEASE_ICONS);
