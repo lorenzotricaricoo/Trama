@@ -213,6 +213,7 @@ pub fn set_appearance(
 ) -> Result<(), String> {
     let config = settings.update(|config| config.set_appearance(&theme, &accent))?;
     app.set_theme(native_theme(&config.theme));
+    crate::dock_icon::show(&app, &config.accent);
     Ok(())
 }
 

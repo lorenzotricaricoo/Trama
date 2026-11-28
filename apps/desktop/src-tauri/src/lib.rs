@@ -3,6 +3,7 @@
 //! The shell owns windows, menus and the bridge to the frontend. Everything else
 //! belongs to the core library (principle A1).
 
+mod dock_icon;
 mod jobs;
 mod meetings;
 mod menu;
@@ -361,6 +362,7 @@ pub fn run() {
             // The vibrancy follows the app's appearance, so it must match the chosen theme.
             let theme = settings::native_theme(&settings.config().theme);
             app.set_theme(theme);
+            dock_icon::show(app.handle(), &settings.config().accent);
             // A library chosen with TRAMA_LIBRARY is never swapped for the real one.
             let opening = open_with_fallback(
                 &settings.open_library,
