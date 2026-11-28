@@ -17,7 +17,7 @@ describe('createTranslate', () => {
   it('formats messages with arguments and terms', () => {
     const t = createTranslate(createBundle('it'));
     expect(t('welcome-title')).toBe('Benvenuto in Trama');
-    expect(t('today', { date: 'lunedì' })).toBe('Oggi è lunedì.');
+    expect(t('job-more', { count: 2 })).toBe('+2');
   });
 
   it('returns the id of a missing message and reports it', () => {

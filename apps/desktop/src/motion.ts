@@ -14,3 +14,12 @@ export const ease = {
   in: [0.55, 0, 0.8, 0.3],
   inOut: [0.65, 0, 0.35, 1],
 } as const;
+
+/**
+ * Springs mirroring `--e-spring` (small elements: badges, chips, popovers) and `--e-soft`
+ * (large movements: sidebar, active indicator).
+ */
+export const spring = {
+  pop: { type: 'spring', visualDuration: duration.d3, bounce: 0.35 },
+  soft: { type: 'spring', visualDuration: duration.d4, bounce: 0.12 },
+} as const;

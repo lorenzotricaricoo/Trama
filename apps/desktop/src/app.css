@@ -1,5 +1,16 @@
 @import '../../../docs/design/tokens.css';
 
+/* The theme classes (.t-app, .t-dark/.t-light, .t-opaque/.t-translucent) sit on <html>. */
+.t-app {
+  /* Geist is bundled (Fontsource), so the family names carry the "Variable" suffix. */
+  --font: 'Geist Variable', Geist, system-ui, sans-serif;
+  --font-mono: 'Geist Mono Variable', 'Geist Mono', ui-monospace, monospace;
+  /* The accent tint of the wallpaper, laid over the glass frame. */
+  --frame-tint: radial-gradient(70% 55% at 0% 0%, oklch(0.8 var(--c) var(--h) / 0.12), transparent);
+  --tip: oklch(0.27 0.01 270);
+  --tip-ink: oklch(0.97 0.004 270);
+}
+
 html,
 body,
 #root {
@@ -7,14 +18,59 @@ body,
   margin: 0;
 }
 
-.app {
-  min-height: 100%;
-  display: grid;
-  place-items: center;
-  background: var(--wall);
-  color: var(--ink);
+/* A light frame over the Liquid Glass, so the desktop shows through. */
+.t-app.t-light.t-translucent {
+  --frame: oklch(0.97 0.006 270 / 0.12);
+}
+.t-app.t-dark.t-translucent {
+  --frame: oklch(0.2 0.012 270 / 0.2);
+}
+
+/* Transparent, so that the macOS vibrancy shows through the frame. */
+html,
+body {
+  background: transparent;
+  overflow: hidden;
+}
+
+body {
   font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  /* A desktop app: text is selectable only where it is content. */
+  user-select: none;
+  cursor: default;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible,
+[data-focus-visible] {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
+}
+
+/* ---------- Window: the glass frame with the sidebar, and the content sheet */
+
+.app {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  gap: 8px;
+  padding: 8px;
+  box-sizing: border-box;
+  background: var(--frame-tint), var(--frame);
+  transition: grid-template-columns var(--d4) var(--e-soft);
+}
+
+.app[data-collapsed] {
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
 /* Height of the macOS title bar, drawn over the content (titleBarStyle: Overlay). */
@@ -24,32 +80,721 @@ body,
   height: 28px;
 }
 
-.welcome {
-  max-width: 34rem;
-  margin: 1.5rem;
-  padding: 2.5rem;
+.sheet {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
   background: var(--sheet);
-  border: 1px solid var(--edge);
-  border-radius: 20px;
-  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
 }
 
-.welcome h1 {
-  margin: 0 0 0.75rem;
-  font-size: 1.75rem;
-  letter-spacing: -0.02em;
+/* ---------- Sidebar */
+
+.side {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 2px 2px;
+  color: var(--fink);
 }
 
-.welcome p {
-  margin: 0.5rem 0;
-  line-height: 1.5;
+/* Room for the traffic lights; the collapse button sits next to them, or below when collapsed. */
+.side-head {
+  position: relative;
+  flex: none;
+  height: 44px;
+  transition: height var(--d4) var(--e-soft);
 }
 
-.muted {
+.app[data-collapsed] .side-head {
+  height: 76px;
+}
+
+.side-toggle {
+  position: absolute;
+  top: 8px;
+  left: 0;
+  width: 26px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fmute);
+  font-size: 17px;
+  transform: translateX(81px);
+  transition:
+    transform var(--d4) var(--e-soft),
+    background-color var(--d2),
+    color var(--d2);
+}
+
+.app[data-collapsed] .side-toggle {
+  transform: translate(23px, 36px);
+}
+
+.side-toggle[data-hovered] {
+  background: var(--fhover);
+  color: var(--fink);
+}
+
+.side-toggle[data-pressed] {
+  background: var(--fsel);
+}
+
+.side-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.side-nav {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.side-grow {
+  flex: 1;
+}
+
+.side-search,
+.side-rec,
+.side-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  box-sizing: border-box;
+  white-space: nowrap;
+  text-align: left;
+  overflow: hidden;
+}
+
+.side-search {
+  gap: 8px;
+  margin: 0 2px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--fhover);
+  color: var(--fmute);
+  transition:
+    color var(--d2),
+    border-color var(--d2);
+}
+
+.side-search[data-hovered] {
+  color: var(--fink);
+  border-color: var(--edge);
+}
+
+.side-rec {
+  gap: 8px;
+  margin: 0 2px 14px;
+  padding: 9px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-weight: 600;
+  transition:
+    transform var(--d1) var(--e-out),
+    filter var(--d2);
+}
+
+.side-rec[data-hovered] {
+  filter: brightness(1.07);
+}
+
+.side-rec[data-pressed] {
+  transform: scale(0.97);
+}
+
+.side-recdot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--acc-ink);
+  transition: transform var(--d4) var(--e-soft);
+}
+
+.side-item {
+  isolation: isolate;
+  gap: 9px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  color: var(--fmute);
+  font-weight: 500;
+  text-decoration: none;
+  transition:
+    background-color var(--d2),
+    color var(--d2),
+    transform var(--d1) var(--e-out);
+}
+
+.side-item[data-hovered] {
+  background: var(--fhover);
+  color: var(--fink);
+}
+
+.side-item[data-pressed] {
+  transform: scale(0.98);
+}
+
+.side-item[aria-current='page'] {
+  color: var(--fink);
+}
+
+/* The active indicator: one element, moved by Motion from item to item. */
+.side-ind {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: 7px;
+  background: var(--fsel);
+}
+
+.side-ic {
+  width: 18px;
+  flex: none;
+  font-size: 17px;
+  transition: transform var(--d4) var(--e-soft);
+}
+
+.side-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  transition: opacity var(--d2);
+}
+
+.side-kbd {
+  margin-left: auto;
+}
+
+.side-rec .kbd {
+  background: oklch(0.2 0.02 270 / 0.16);
+  color: inherit;
+}
+
+/* Collapsed: the icon rail. Labels fade, icons slide to the middle of the rail. */
+.app[data-collapsed] .side-label,
+.app[data-collapsed] .side-kbd {
+  opacity: 0;
+}
+
+.app[data-collapsed] .side-item .side-ic {
+  transform: translateX(11px);
+}
+
+.app[data-collapsed] .side-search .side-ic {
+  transform: translateX(8px);
+}
+
+.app[data-collapsed] .side-recdot {
+  transform: translateX(13px) scale(1.25);
+}
+
+/* ---------- Keyboard hints and tooltips */
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  box-sizing: border-box;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 5px;
+  background: var(--kbg);
+  color: var(--kink);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: opacity var(--d2);
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--tip);
+  color: var(--tip-ink);
+  font: 500 12px/1.3 var(--font);
+  white-space: nowrap;
+  box-shadow: 0 6px 18px oklch(0 0 0 / 0.28);
+}
+
+.hint-kbd {
+  background: oklch(1 0 0 / 0.14);
+  color: inherit;
+}
+
+.hint[data-entering] {
+  animation: hint-in var(--d2) var(--e-out);
+}
+
+@keyframes hint-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+}
+
+.hint[data-placement='bottom'][data-entering] {
+  animation-name: hint-in-below;
+}
+
+@keyframes hint-in-below {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* ---------- Top bar of the sheet */
+
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.topbar-end {
+  flex: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.icon-btn {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--mute);
+  font-size: 15px;
+  transition:
+    background-color var(--d2),
+    color var(--d2),
+    transform var(--d1) var(--e-out),
+    opacity var(--d2);
+}
+
+.icon-btn[data-hovered] {
+  background: var(--panel-2);
+  color: var(--ink);
+}
+
+.icon-btn[data-pressed] {
+  transform: scale(0.9);
+}
+
+.icon-btn[aria-disabled='true'] {
+  opacity: 0.3;
+  background: none;
   color: var(--mute);
 }
 
-.faint {
+/* Background work */
+.job {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--mute);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.job-pulse {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--acc);
+  --pulse: oklch(0.8 var(--c) var(--h) / 0.55);
+  animation: pulse 1.6s var(--e-out) infinite;
+}
+
+.job-pct {
+  min-width: 30px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.bar {
+  position: relative;
+  display: block;
+  width: 80px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--acc);
+  transform-origin: left;
+  transition: transform var(--d4) var(--e-out);
+}
+
+.bar-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.6), transparent);
+  animation: shimmer 1.5s var(--e-io) infinite;
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 var(--pulse);
+  }
+  70% {
+    box-shadow: 0 0 0 7px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ---------- Screens */
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+
+.stage-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.screen-top {
+  padding: 22px 28px 0;
+}
+
+.kicker {
+  color: var(--mute);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.kicker::first-letter {
+  text-transform: uppercase;
+}
+
+.screen-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.screen-desc {
+  margin: 6px 0 0;
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 18px 28px 24px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--mute);
+  text-align: center;
+}
+
+.empty-ic {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--panel-2);
+  font-size: 20px;
+}
+
+.empty-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.empty-body {
+  max-width: 380px;
+  margin: 0;
+}
+
+/* ---------- Notices */
+
+.notices {
+  position: absolute;
+  z-index: 25;
+  inset: auto 0 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  max-width: 460px;
+  box-sizing: border-box;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 11px;
+  background: var(--pop);
+  box-shadow: 0 14px 40px oklch(0 0 0 / 0.3);
+  backdrop-filter: blur(30px);
+  pointer-events: auto;
+}
+
+.notice-ic {
+  flex: none;
+  color: var(--acc-t);
+  font-size: 18px;
+}
+
+.notice-text {
+  font-weight: 500;
+}
+
+/* ---------- Command bar */
+
+.cmd-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+
+.cmd-scrim {
+  position: absolute;
+  inset: 0;
+  background: oklch(0 0 0 / 0.3);
+  backdrop-filter: blur(5px);
+}
+
+.cmd-modal {
+  position: absolute;
+  top: 104px;
+  left: 50%;
+  width: min(560px, calc(100vw - 32px));
+  translate: -50% 0;
+  outline: none;
+}
+
+.cmd {
+  box-sizing: border-box;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--pop);
+  box-shadow: 0 30px 90px oklch(0 0 0 / 0.5);
+  backdrop-filter: blur(40px) saturate(1.5);
+  color: var(--ink);
+  overflow: hidden;
+  transform-origin: 50% 0;
+}
+
+.cmd-dialog {
+  outline: none;
+}
+
+.cmd-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 50px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--mute);
+  font-size: 15px;
+}
+
+.cmd-field-ic {
+  flex: none;
+}
+
+.cmd-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+}
+
+.cmd-input::placeholder {
   color: var(--faint);
-  font-size: 0.875rem;
+}
+
+.cmd-list {
+  max-height: 336px;
+  padding: 6px;
+  overflow-y: auto;
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+
+.cmd-group-title {
+  padding: 8px 10px 4px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.cmd-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  outline: none;
+}
+
+.cmd-item[data-focused] {
+  background: var(--panel-2);
+}
+
+.cmd-item-ic {
+  flex: none;
+  width: 18px;
+  color: var(--mute);
+  font-size: 16px;
+}
+
+.cmd-item[data-focused] .cmd-item-ic {
+  color: var(--acc-t);
+}
+
+.cmd-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.cmd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px;
+  color: var(--mute);
+  text-align: center;
+}
+
+.cmd-empty-title {
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.cmd-foot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  color: var(--mute);
+  font-size: 11.5px;
+}
+
+.cmd-foot span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
