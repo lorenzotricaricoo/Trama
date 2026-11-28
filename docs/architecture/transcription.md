@@ -43,7 +43,7 @@ flowchart LR
     BUF --> DEC
     DEC --> CLK["TrackClock<br/>capture Timeline → recording time"]
     CLK --> MERGE["merge<br/>one timeline, me / others"]
-    MERGE --> DB["Library::add_transcription"]
+    MERGE --> DB["Library::complete_transcription"]
 ```
 
 1. **Read.** `WavSource` reads a track half a second at a time, averages its channels and
@@ -65,6 +65,9 @@ flowchart LR
 5. **Merge.** The segments of both tracks are sorted by start time (then end time, `me`
    first at the same instant) and stored as a new sealed transcription version, one
    transcript segment per stretch, labelled `me` or `others`.
+
+A track cut short by a crash (its WAV header declares more data than the file holds) is
+read up to where it ends, and what is there is transcribed; the cut is logged.
 
 ### Placing the tracks in time
 
@@ -90,15 +93,33 @@ with the same models folder the model manager uses (`TRAMA_MODELS` in developmen
 | Situation | Job | Meeting |
 |-----------|-----|---------|
 | Running | `running`, progress 0–1 | `processing` |
-| Done | `done` | `ready`, with a new transcription version |
+| Done | `done`; the summary job is queued | `ready`, with a new transcription version |
 | No model (`model_missing`, `model_corrupt`) | `failed` at once | `failed` with that code; download the model, then retry the job |
 | Audio gone (`audio_missing`), unreadable (`audio_invalid`), no tracks (`no_audio`), `language_unsupported` | `failed` at once | `failed` with that code |
 | Temporary failure (`model_load_failed`, `audio_read_failed`, `recognition_failed`, `storage`) | queued again with a growing delay, up to 5 attempts | stays `processing`; `failed` with the code after the last attempt |
 | Meeting still recording (`still_recording`) | queued again | unchanged |
 | Cancelled by the user | `cancelled` | `failed` with `transcription_cancelled` |
 | The app stops | back in the queue, attempt not counted | stays `processing`; the job runs again at the next start |
+| Meeting moved to the trash while it runs (`meeting_deleted`) | `failed` at once | nothing written (it is in the trash); restored, it comes back `failed` with `meeting_deleted` |
 
 Codes are in `transcription::error_code`; the interface translates them (principle A5).
+
+The transcript, its segments and the `ready` status are written in one transaction
+(`Library::complete_transcription`), which first checks that the meeting is not in the
+trash: a job that fails or runs again never leaves a second version or a version without
+its status. Then the job queues the meeting's [summary](providers.md)
+(`summary::enqueue_after_transcription`). If that fails, the error is logged and the job
+still succeeds: failing it would transcribe and store the meeting again, and the summary
+can be asked for again from the interface.
+
+A meeting in the trash cannot be written to, so a transcription that ends there (or
+fails there) leaves it `processing`. When it is restored with no transcription job queued
+or running, `Library::restore` marks it `failed` with `meeting_deleted`, so it never stays
+`processing` with nothing behind it.
+
+Known limits: a track that is missing or unreadable fails the whole meeting, even if the
+other track is fine; and the stop request is not checked while the model loads (2–4 s),
+only once transcription starts.
 The handler checks for a stop request between chunks of audio and between stretches, so
 a cancellation takes effect within about a second.
 
@@ -119,23 +140,33 @@ the model loads in 2–4 s. The speed of a short meeting includes the model load
 ## Native libraries
 
 `sherpa-onnx-sys` downloads a prebuilt archive of sherpa-onnx and ONNX Runtime from the
-sherpa-onnx GitHub release when it is built, and links it statically. It does not check
-what it downloads, so the core verifies it (ADR 0007):
+sherpa-onnx GitHub release when it is built, extracts it into `target/sherpa-onnx-prebuilt/`
+and links the static libraries from there. It checks nothing, and once the libraries are
+extracted it reuses them without reading the archive again. The core verifies both
+(ADR 0007); the guarantee is that **nothing unverified gets linked**, not that the archive
+is checked before it is extracted:
 
 - `sherpa-onnx` and `sherpa-onnx-sys` are pinned to `=2.0.3` in `crates/core/Cargo.toml`
   (and `Cargo.lock`).
 - `crates/core/build.rs` holds the SHA-256 of the static archive for each supported
   target (macOS arm64 and x86-64, Windows x64 and arm64, Linux x64 and arm64), taken
-  from the `digest` that GitHub publishes for each release asset.
+  from the `digest` that GitHub publishes for each release asset, and the SHA-256 of
+  each of the 13 static libraries that `sherpa-onnx-sys` links, as extracted from the
+  verified archive, for macOS arm64 (the target Trama ships and CI builds). On other
+  targets only the archive is checked, with a build warning, until their libraries are
+  pinned too.
 - The core depends on `sherpa-onnx-sys` directly, so Cargo runs its build script first
-  (it has a `links` key). The core's build script then hashes the archive in
-  `target/sherpa-onnx-prebuilt/` and **stops the build** if it doesn't match, before
-  anything is linked.
+  (it has a `links` key). The core's build script then hashes the archive and the
+  extracted libraries in `target/sherpa-onnx-prebuilt/` and **stops the build** on any
+  mismatch, before anything is linked. A modified library in a restored cache (CI caches
+  `target/`) is caught even when the archive next to it is intact.
 - Offline builds: put the archive in a folder and set `SHERPA_ONNX_ARCHIVE_DIR`; it is
   copied into the same cache and verified the same way. `SHERPA_ONNX_LIB_DIR` (libraries
-  built by hand) skips the check, with a build warning.
-- Upgrading sherpa-onnx means changing both pins and the checksums together:
-  `gh api repos/k2-fsa/sherpa-onnx/releases/tags/v<version> --jq '.assets[] | "\(.digest) \(.name)"'`.
+  built by hand) skips the check with a build warning, and is refused when `CI` is set.
+- Upgrading sherpa-onnx means changing both pins and all the checksums together:
+  `gh api repos/k2-fsa/sherpa-onnx/releases/tags/v<version> --jq '.assets[] | "\(.digest) \(.name)"'`
+  for the archives, then `shasum -a 256` on the libraries extracted from the verified
+  archive.
 
 A failed check names the archive and says to delete `target/sherpa-onnx-prebuilt/` and
 build again. CI (`macos-latest`) builds the same way, without the model.
@@ -148,8 +179,9 @@ on synthetic tones (the recognizer "reads" each tone as a word chosen by its pit
 cover: stretches and padding, splitting of long speech without decoding audio twice,
 silence (no decoding at all), stopping, progress, WAV reading and resampling, the
 placement through the recorder's timing sidecar (late start, damaged sidecar), merging two tracks, the real loader without
-a model, and the job: success, missing model, temporary failures, deleted audio,
-unsupported language, a meeting still recording, cancellation.
+a model, and the job: success (and the summary it queues), missing model, temporary
+failures, deleted audio, unsupported language, a meeting still recording, cancellation,
+a meeting moved to the trash while it runs (and restored), a track cut short by a crash.
 
 Tests with the real model are `#[ignore]`d (`crates/core/tests/transcription_model.rs`):
 

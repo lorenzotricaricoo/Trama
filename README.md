@@ -69,8 +69,8 @@ The transcription model (about 2.5 GB) is downloaded into `Models`, next to the 
 download ([downloaded models](docs/architecture/models.md)).
 
 The first Rust build downloads the prebuilt sherpa-onnx and ONNX Runtime libraries
-(about 22 MB) used for transcription, and stops if their checksum doesn't match the one
-pinned in `crates/core/build.rs` ([native libraries](docs/architecture/transcription.md#native-libraries)).
+(about 22 MB) used for transcription, and stops before linking if the archive or the
+libraries extracted from it don't match the checksums pinned in `crates/core/build.rs` ([native libraries](docs/architecture/transcription.md#native-libraries)).
 Tests that need the transcription model are ignored by default; see
 [transcription tests](docs/architecture/transcription.md#tests) to run them.
 
