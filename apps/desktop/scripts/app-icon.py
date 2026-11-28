@@ -5,6 +5,9 @@
   `tauri icon`: Finder, Launchpad, Spotlight and the Dock while Trama is closed.
 - One Dock icon per accent (`icons/dock/<accent>.png`), which the app shows while it is
   open (see `src-tauri/src/dock_icon.rs`).
+- The same icons with a "DEV" badge for debug builds: the bundle icons in `icons/debug/`
+  (used by `scripts/bundle-macos.sh --debug` through `tauri.debug.conf.json`) and the Dock
+  icons in `icons/debug/dock/`, Lime included.
 
 The accents differ only in hue (`.acc-<name>` in docs/design/tokens.css): every lime of
 the source is turned on the accent's hue, keeping its lightness, and graphite also takes
@@ -45,6 +48,25 @@ DOCK_SIZE = 512
 
 # Files of the bundle (`bundle.icon` in tauri.conf.json).
 BUNDLE_FILES = ["32x32.png", "128x128.png", "128x128@2x.png", "icon.icns", "icon.ico", "icon.png"]
+
+# Files of the debug bundle (`bundle.icon` in tauri.debug.conf.json): macOS only.
+DEBUG_FILES = ["32x32.png", "128x128.png", "128x128@2x.png", "icon.icns"]
+
+# "DEV" in a light pill across the bottom threads, outlined in the frame's graphite so it
+# reads on every accent and at 32 px. Neutral on purpose: red stays for recording, and the
+# accent tint (which only swaps the limes) leaves it alone. The letters are paths, so the
+# render does not depend on the fonts installed.
+BADGE = """
+  <g filter="url(#shadow)">
+    <rect x="292" y="736" width="440" height="160" rx="80" fill="#f4f4f6"
+          stroke="#0d0f15" stroke-width="14"/>
+    <g transform="translate(512 816) scale(1.05) translate(-118 -42)" fill="#0d0f15">
+      <path fill-rule="evenodd" d="M0 0 H32 A42 42 0 0 1 32 84 H0 Z M21 21 H32 A21 21 0 0 1 32 63 H21 Z"/>
+      <path d="M88 0 H148 V20 H109 V32 H143 V52 H109 V64 H148 V84 H88 Z"/>
+      <path d="M162 0 H184 L199 56 L214 0 H236 L210 84 H188 Z"/>
+    </g>
+  </g>
+"""
 
 
 def to_linear(c):
@@ -110,22 +132,38 @@ def render(svg_path, png_path, size):
     )
 
 
+def badged(svg):
+    return svg.replace("</svg>", BADGE + "</svg>")
+
+
+def render_set(source, scratch, dock_dir, bundle_dir, bundle_files):
+    """The Dock icon of every accent and the bundle icons, from one source."""
+    dock_dir.mkdir(parents=True, exist_ok=True)
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    for name, (hue, chroma) in ACCENTS.items():
+        svg = scratch / f"{name}.svg"
+        svg.write_text(tinted(source, hue, chroma))
+        render(svg, dock_dir / f"{name}.png", DOCK_SIZE)
+
+    svg = scratch / "icon.svg"
+    svg.write_text(source)
+    master = scratch / "icon-1024.png"
+    render(svg, master, 1024)
+    out = scratch / "bundle"
+    subprocess.run(["npx", "tauri", "icon", str(master), "-o", str(out)], check=True)
+    for name in bundle_files:
+        shutil.copyfile(out / name, bundle_dir / name)
+
+
 def main():
     source = SOURCE.read_text()
-    with tempfile.TemporaryDirectory() as scratch:
-        scratch = pathlib.Path(scratch)
-        for name, (hue, chroma) in ACCENTS.items():
-            svg = scratch / f"{name}.svg"
-            svg.write_text(tinted(source, hue, chroma))
-            render(svg, ICONS / "dock" / f"{name}.png", DOCK_SIZE)
-
-        master = scratch / "icon-1024.png"
-        render(SOURCE, master, 1024)
-        out = scratch / "bundle"
-        subprocess.run(["npx", "tauri", "icon", str(master), "-o", str(out)], check=True)
-        for name in BUNDLE_FILES:
-            shutil.copyfile(out / name, ICONS / name)
-    print("Rendered the bundle icons and", len(ACCENTS), "Dock icons.")
+    for kind, svg, dock_dir, bundle_dir, files in [
+        ("release", source, ICONS / "dock", ICONS, BUNDLE_FILES),
+        ("debug", badged(source), ICONS / "debug" / "dock", ICONS / "debug", DEBUG_FILES),
+    ]:
+        with tempfile.TemporaryDirectory() as scratch:
+            render_set(svg, pathlib.Path(scratch), dock_dir, bundle_dir, files)
+        print(f"Rendered the {kind} bundle icons and {len(ACCENTS)} Dock icons.")
 
 
 if __name__ == "__main__":

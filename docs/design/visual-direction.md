@@ -118,8 +118,14 @@ different sources woven into one base. It follows the macOS grid (824 px squircl
   is always Lime: changing it after install would break the signature.
 - While Trama is open the Dock icon follows the accent: the threads and the glow take the
   accent's hue (graphite also its low chroma), one image per accent in `icons/dock/`.
+- Debug builds carry a **DEV** badge (a light pill outlined in graphite across the bottom
+  threads, never red) so they are not mistaken for the release in Spotlight or the Dock.
+  `npm run bundle -- --debug` names the app **Trama Dev** and uses the badged bundle icon
+  in `icons/debug/` (`src-tauri/tauri.debug.conf.json`); the identifier stays the same, so
+  data and permissions are shared. While it is open the Dock shows the badged icon of the
+  accent (`icons/debug/dock/`, Lime included), chosen with `cfg(debug_assertions)`.
 - `python3 scripts/app-icon.py` (from `apps/desktop`, needs `rsvg-convert`) renders the
-  bundle sizes with `tauri icon` and the Dock icons from the source.
+  bundle sizes with `tauri icon` and the Dock icons from the source, both plain and badged.
 
 ## Motion
 
