@@ -425,7 +425,7 @@ fn write_sidecar(path: &Path, offset_ms: u64, frames: u64) {
 #[ignore = "needs the transcription model (TRAMA_MODELS) and the FLEURS test audio"]
 fn a_recorded_meeting_gets_a_two_track_transcript() {
     let models = models_dir();
-    let clips = fleurs(4);
+    let clips = fleurs(12);
     let silence = |s: f32| vec![0.0f32; (s * SAMPLE_RATE as f32) as usize];
 
     let (_dir, _clock, mut library) = common::library();
@@ -436,14 +436,26 @@ fn a_recorded_meeting_gets_a_two_track_transcript() {
 
     // "me" speaks first, from 1 s; "others" (a track that started 3 s into the
     // recording) answers 2 s after the end, then "me" again.
-    let a = read_clip(&clips[0].wav);
-    let b = read_clip(&clips[2].wav);
-    let c = read_clip(&clips[3].wav);
+    // Three different sentences (FLEURS has several readings of each).
+    let first = &clips[0];
+    let second = clips
+        .iter()
+        .find(|c| c.reference != first.reference)
+        .unwrap();
+    let third = clips
+        .iter()
+        .find(|c| c.reference != first.reference && c.reference != second.reference)
+        .unwrap();
+    let (me_clips, others_clip) = ([first, third], second);
+    let a = read_clip(&me_clips[0].wav);
+    let b = read_clip(&others_clip.wav);
+    let c = read_clip(&me_clips[1].wav);
     let rate = SAMPLE_RATE as f32;
     let a_end = 1.0 + a.len() as f32 / rate;
     let b_start = a_end + 2.0;
     let b_end = b_start + b.len() as f32 / rate;
     let c_start = b_end + 2.0;
+    let c_len = c.len() as f32 / rate;
     let me = [silence(1.0), a, silence(c_start - a_end), c, silence(2.0)].concat();
     let others = [silence(b_start - 3.0), b, silence(4.0)].concat();
     write_track(&audio.join("me.wav"), &me);
@@ -515,10 +527,19 @@ fn a_recorded_meeting_gets_a_two_track_transcript() {
     assert_eq!(roles.first(), Some(&Role::Me));
     assert!(roles.contains(&Role::Others));
     assert_eq!(roles.last(), Some(&Role::Me));
-    // Each turn starts where it was placed on the recording's time line.
-    let first_others = segments.iter().find(|s| s.role == Role::Others).unwrap();
-    assert!((first_others.start_ms as f32 - b_start * 1000.0).abs() < 500.0);
-    assert!((segments[0].start_ms as f32 - 1000.0).abs() < 500.0);
+    // Each turn lies where its clip was placed on the recording's time line (the clips
+    // have some silence of their own at both ends). Without the sidecar, the `others`
+    // turn would land 3 s early, before its window.
+    let within = |s: &Segment, from: f32, to: f32| {
+        s.start_ms as f32 >= from * 1000.0 && s.end_ms as f32 <= to * 1000.0
+    };
+    for s in &segments {
+        let ok = match s.role {
+            Role::Others => within(s, b_start, b_end),
+            Role::Me => within(s, 1.0, a_end) || within(s, c_start, c_start + c_len),
+        };
+        assert!(ok, "{s:?} is outside its clip");
+    }
     // And the text is right.
     let said = |role: Role| {
         segments
@@ -528,9 +549,9 @@ fn a_recorded_meeting_gets_a_two_track_transcript() {
             .collect::<Vec<_>>()
             .join(" ")
     };
-    let me_reference = format!("{} {}", clips[0].reference, clips[3].reference);
+    let me_reference = format!("{} {}", me_clips[0].reference, me_clips[1].reference);
     let (me_errors, _) = edits(&words(&me_reference), &words(&said(Role::Me)));
-    let (others_errors, _) = edits(&words(&clips[2].reference), &words(&said(Role::Others)));
+    let (others_errors, _) = edits(&words(&others_clip.reference), &words(&said(Role::Others)));
     assert!(me_errors <= 2, "me: {}", said(Role::Me));
     assert!(others_errors <= 2, "others: {}", said(Role::Others));
 }
