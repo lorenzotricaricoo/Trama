@@ -5266,7 +5266,7 @@ dependencies = [
 
 [[package]]
 name = "trama-core"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "block2",
  "cpal",
@@ -5305,7 +5305,7 @@ dependencies = [
 
 [[package]]
 name = "trama-desktop"
-version = "0.1.0-alpha.1"
+version = "0.1.0"
 dependencies = [
  "fluent-bundle",
  "muda",
