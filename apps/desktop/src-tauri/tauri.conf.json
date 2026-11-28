@@ -27,10 +27,7 @@
         },
         "transparent": true,
         "windowEffects": {
-          "effects": [
-            "liquidGlassRegular",
-            "sidebar"
-          ],
+          "effects": ["liquidGlassRegular", "sidebar"],
           "state": "followsWindowActiveState"
         }
       }
@@ -46,10 +43,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": [
-      "app",
-      "dmg"
-    ],
+    "targets": ["app", "dmg"],
     "category": "Productivity",
     "copyright": "© 2026 Lorenzo Tricarico. MIT License.",
     "icon": [
