@@ -2,13 +2,21 @@ import { FluentBundle, FluentResource, type FluentVariable } from '@fluent/bundl
 import { negotiateLanguages } from '@fluent/langneg';
 // Catalogs are shared with the Rust side; see locales/ at the repository root.
 import enApp from '../../../../locales/en/app.ftl?raw';
+import enProviders from '../../../../locales/en/providers.ftl?raw';
+import enSettings from '../../../../locales/en/settings.ftl?raw';
 import itApp from '../../../../locales/it/app.ftl?raw';
+import itProviders from '../../../../locales/it/providers.ftl?raw';
+import itSettings from '../../../../locales/it/settings.ftl?raw';
 
 export const SUPPORTED_LOCALES = ['en', 'it'] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 export const DEFAULT_LOCALE: Locale = 'en';
 
-const SOURCES: Record<Locale, string> = { en: enApp, it: itApp };
+/** The catalogs of each locale; the provider error codes are shared with the core. */
+const SOURCES: Record<Locale, readonly string[]> = {
+  en: [enApp, enSettings, enProviders],
+  it: [itApp, itSettings, itProviders],
+};
 
 export type MessageArgs = Record<string, FluentVariable>;
 export type Translate = (id: string, args?: MessageArgs) => string;
@@ -26,13 +34,20 @@ export function negotiateLocale(requested: readonly string[]): Locale {
   return best !== undefined && isLocale(best) ? best : DEFAULT_LOCALE;
 }
 
-/** Builds the Fluent bundle of a locale. Syntax errors in a catalog throw. */
+/** Whether `tag` is a supported locale. */
+export function isSupportedLocale(tag: string): tag is Locale {
+  return isLocale(tag);
+}
+
+/** Builds the Fluent bundle of a locale. Syntax errors and duplicate ids in a catalog throw. */
 export function createBundle(locale: Locale): FluentBundle {
   // Supported locales are all left-to-right, so no Unicode isolation marks.
   const bundle = new FluentBundle(locale, { useIsolating: false });
-  const errors = bundle.addResource(new FluentResource(SOURCES[locale]));
-  if (errors.length > 0) {
-    throw new Error(`Invalid catalog ${locale}/app.ftl: ${errors.map(String).join('; ')}`);
+  for (const source of SOURCES[locale]) {
+    const errors = bundle.addResource(new FluentResource(source));
+    if (errors.length > 0) {
+      throw new Error(`Invalid catalog for ${locale}: ${errors.map(String).join('; ')}`);
+    }
   }
   return bundle;
 }

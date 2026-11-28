@@ -130,6 +130,12 @@ impl JobContext {
         lock(&self.library)
     }
 
+    /// The shared library itself, for work that locks it briefly on its own, such as
+    /// recording the usage of each model call.
+    pub fn shared_library(&self) -> SharedLibrary {
+        Arc::clone(&self.library)
+    }
+
     /// Reports progress, from 0 to 1. Only whole-percent changes are sent on.
     pub fn progress(&self, fraction: f32) {
         let fraction = if fraction.is_nan() {

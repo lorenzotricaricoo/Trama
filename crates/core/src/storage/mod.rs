@@ -15,7 +15,9 @@ mod meetings;
 mod migrations;
 mod providers;
 mod search;
+mod settings;
 mod sources;
+mod usage;
 
 use std::fs::{File, TryLockError};
 use std::path::{Component, Path, PathBuf};
@@ -28,6 +30,8 @@ pub use jobs::*;
 pub use migrations::SCHEMA_VERSION;
 pub use model::*;
 pub use providers::*;
+pub use settings::*;
+pub use usage::*;
 
 /// Database file inside the library folder.
 pub const DATABASE_FILE: &str = "trama.db";

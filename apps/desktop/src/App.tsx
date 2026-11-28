@@ -4,6 +4,7 @@ import { useI18n } from './i18n/I18nProvider';
 import { useJobs } from './jobs/useJobs';
 import { duration, ease } from './motion';
 import { Screen } from './screens/screens';
+import { useStartupNotices } from './settings/useStartupNotices';
 import { CommandBar, useCommandBar, type Command } from './shell/CommandBar';
 import { NAV_ITEMS, navItemOf, useNavigation, type Direction } from './shell/navigation';
 import { useFlushBeforeQuit } from './notes/flush';
@@ -14,6 +15,7 @@ import { TopBar } from './shell/TopBar';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
 import { useTranslucency } from './shell/useTranslucency';
 import { ArrowBendUpLeftIcon, NotePencilIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
+import { useAppearance } from './appearance';
 import { useColorScheme } from './useColorScheme';
 
 const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings', 'newNote'];
@@ -33,11 +35,13 @@ export function App() {
   const { t } = useI18n();
   const scheme = useColorScheme();
   const translucent = useTranslucency();
+  const { reduceMotion } = useAppearance();
   const nav = useNavigation();
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
   const bar = useCommandBar();
   const jobs = useJobs();
   const notice = useNotice();
+  useStartupNotices(notice.show);
   // A note that could not be saved keeps the app open, with a way out.
   useFlushBeforeQuit(() => notice.show(t('quit-unsaved')));
 
@@ -45,9 +49,10 @@ export function App() {
   useLayoutEffect(() => {
     const root = document.documentElement;
     const classes = ['t-app', `t-${scheme}`, translucent ? 't-translucent' : 't-opaque'];
+    if (reduceMotion) classes.push('t-calm');
     root.classList.add(...classes);
     return () => root.classList.remove(...classes);
-  }, [scheme, translucent]);
+  }, [scheme, translucent, reduceMotion]);
 
   // Recording arrives with the recording window (#31); until then the button explains it.
   const record = () => notice.show(t('record-unavailable'));
@@ -123,7 +128,7 @@ export function App() {
   const title = nav.screen === 'note' ? t('note-title') : current ? t(current.label) : '';
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
       <div className="app" data-collapsed={collapsed || undefined}>
         {/* The content extends under the transparent title bar; this strip moves the window. */}
         <div className="titlebar" data-tauri-drag-region />

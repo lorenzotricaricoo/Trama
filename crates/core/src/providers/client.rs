@@ -192,6 +192,21 @@ enum Format {
 /// Pauses between retries; replaced in tests.
 type Sleeper = Arc<dyn Fn(Duration) + Send + Sync>;
 
+/// Tokens a provider reported for one reply (the `usage` object of a chat completion).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+}
+
+/// Called with the usage of every chat reply the provider sends, retried and refused
+/// replies included, since they are billed too.
+pub type UsageHook = Arc<dyn Fn(TokenUsage) + Send + Sync>;
+
+/// Called before every chat request; an error refuses the request without sending it.
+/// Used to stop at the monthly budget between the calls of one task.
+pub type RequestGuard = Arc<dyn Fn() -> Result<(), ProviderError> + Send + Sync>;
+
 /// A client for one provider.
 #[derive(Clone)]
 pub struct Client {
@@ -200,6 +215,8 @@ pub struct Client {
     agent: Agent,
     config: ClientConfig,
     sleep: Sleeper,
+    usage_hook: Option<UsageHook>,
+    request_guard: Option<RequestGuard>,
 }
 
 impl std::fmt::Debug for Client {
@@ -233,12 +250,27 @@ impl Client {
             agent,
             config,
             sleep: Arc::new(std::thread::sleep),
+            usage_hook: None,
+            request_guard: None,
         }
     }
 
     /// Replaces how the client waits between retries; tests record the delays instead.
     pub fn with_sleeper(mut self, sleep: impl Fn(Duration) + Send + Sync + 'static) -> Self {
         self.sleep = Arc::new(sleep);
+        self
+    }
+
+    /// Reports the tokens of every chat reply to `hook`, to track usage and cost.
+    pub fn with_usage_hook(mut self, hook: UsageHook) -> Self {
+        self.usage_hook = Some(hook);
+        self
+    }
+
+    /// Asks `guard` before every chat request, retries included; a request it refuses is
+    /// not sent and fails with the guard's error.
+    pub fn with_request_guard(mut self, guard: RequestGuard) -> Self {
+        self.request_guard = Some(guard);
         self
     }
 
@@ -345,7 +377,13 @@ impl Client {
             _ => {}
         }
 
+        if let Some(guard) = &self.request_guard {
+            guard()?;
+        }
         let text = self.request("chat/completions", Some(&body))?;
+        if let (Some(hook), Some(usage)) = (&self.usage_hook, parse_usage(&text)) {
+            hook(usage);
+        }
         parse_chat_reply(&text).map_err(|err| self.scrub(err))
     }
 
@@ -615,6 +653,28 @@ fn parse_chat_reply(text: &str) -> Result<ChatReply, ProviderError> {
     })
 }
 
+/// The tokens a chat completion reports in its `usage` object, under the OpenAI names
+/// (`prompt_tokens`, `completion_tokens`) or the Anthropic-style ones (`input_tokens`,
+/// `output_tokens`). `None` when the reply has no usage.
+fn parse_usage(text: &str) -> Option<TokenUsage> {
+    let value: Value = serde_json::from_str(text).ok()?;
+    let usage = value.get("usage")?;
+    let count = |names: [&str; 2]| {
+        names
+            .iter()
+            .find_map(|name| usage.get(*name).and_then(Value::as_u64))
+    };
+    let input = count(["prompt_tokens", "input_tokens"]);
+    let output = count(["completion_tokens", "output_tokens"]);
+    if input.is_none() && output.is_none() {
+        return None;
+    }
+    Some(TokenUsage {
+        input_tokens: input.unwrap_or(0),
+        output_tokens: output.unwrap_or(0),
+    })
+}
+
 /// Message content as text: a string, or the text parts of a list.
 fn content_text(content: &Value) -> String {
     match content {
@@ -630,6 +690,29 @@ fn content_text(content: &Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn usage_is_read_under_both_naming_styles() {
+        let openai = r#"{"usage":{"prompt_tokens":120,"completion_tokens":30,"total_tokens":150}}"#;
+        assert_eq!(
+            parse_usage(openai),
+            Some(TokenUsage {
+                input_tokens: 120,
+                output_tokens: 30
+            })
+        );
+        let anthropic = r#"{"usage":{"input_tokens":7,"output_tokens":2}}"#;
+        assert_eq!(
+            parse_usage(anthropic),
+            Some(TokenUsage {
+                input_tokens: 7,
+                output_tokens: 2
+            })
+        );
+        assert_eq!(parse_usage(r#"{"choices":[]}"#), None);
+        assert_eq!(parse_usage(r#"{"usage":{}}"#), None);
+        assert_eq!(parse_usage("not json"), None);
+    }
 
     fn request(max_output_tokens: Option<u32>, prompt: &str) -> ChatRequest {
         ChatRequest {

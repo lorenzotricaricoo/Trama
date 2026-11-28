@@ -139,7 +139,8 @@ fn chat(content: &str) -> Reply {
         200,
         json!({
             "model": MODEL,
-            "choices": [{"message": {"content": content}, "finish_reason": "stop"}]
+            "choices": [{"message": {"content": content}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 120, "completion_tokens": 40}
         })
         .to_string(),
     )
@@ -550,6 +551,12 @@ fn a_transcription_queues_the_summary() {
     let library = lock(&library);
     assert_eq!(library.source(id).unwrap().title, "Data di lancio di Orsa");
     assert_eq!(library.meeting(id).unwrap().status, MeetingStatus::Ready);
+    // The job's calls count towards the month's spend.
+    let usage = library.usage_since(0).unwrap();
+    assert_eq!(
+        (usage.requests, usage.input_tokens, usage.output_tokens),
+        (1, 120, 40)
+    );
 }
 
 #[test]

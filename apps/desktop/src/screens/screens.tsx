@@ -1,11 +1,12 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { useI18n } from '../i18n/I18nProvider';
 import type { Navigation, ScreenId } from '../shell/navigation';
-import { GearIcon, HouseIcon } from '../ui/icons';
+import { SettingsScreen } from '../settings/SettingsScreen';
+import { HouseIcon } from '../ui/icons';
 import { PlaceholderScreen } from './PlaceholderScreen';
 import { SourcesScreen } from './SourcesScreen';
 
-// Home and the full Sources list arrive with #35, Settings with #36.
+// Home and the full Sources list arrive with #35.
 
 // The editor (CodeMirror) loads with the first note, not with the app.
 const NoteScreen = lazy(() => import('../notes/NoteScreen'));
@@ -27,19 +28,6 @@ function HomeScreen() {
       icon={HouseIcon}
       emptyTitle={t('home-empty-title')}
       emptyBody={t('home-empty-body')}
-    />
-  );
-}
-
-function SettingsScreen() {
-  const { t } = useI18n();
-  return (
-    <PlaceholderScreen
-      title={t('nav-settings')}
-      description={t('settings-description')}
-      icon={GearIcon}
-      emptyTitle={t('settings-empty-title')}
-      emptyBody={t('settings-empty-body')}
     />
   );
 }

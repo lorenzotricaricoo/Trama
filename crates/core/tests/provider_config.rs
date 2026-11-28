@@ -373,6 +373,30 @@ fn removing_a_provider_removes_its_key_models_and_task_choices() {
 }
 
 #[test]
+fn a_key_the_keychain_keeps_keeps_its_provider() {
+    let (_dir, _clock, mut library) = library();
+    let secrets = MemorySecrets::new();
+    let provider = providers::add_provider(
+        &mut library,
+        &secrets,
+        &new_provider("https://x.example.com/v1"),
+        Some(&Secret::new(KEY)),
+    )
+    .unwrap();
+
+    let err = providers::remove_provider(&mut library, &BrokenStore, provider.id).unwrap_err();
+    assert_eq!(err.code(), "keychain");
+    assert_eq!(library.providers().unwrap().len(), 1);
+
+    // Removing again works, also when the key is already gone.
+    secrets
+        .delete(provider.key_ref.as_deref().unwrap())
+        .unwrap();
+    providers::remove_provider(&mut library, &secrets, provider.id).unwrap();
+    assert!(library.providers().unwrap().is_empty());
+}
+
+#[test]
 fn refreshing_the_catalogue_reads_the_provider_and_stores_it() {
     let server = MockServer::start();
     server.push(Reply::json(
@@ -517,4 +541,69 @@ fn provider_errors_become_job_errors() {
     let job: JobError = err.into();
     assert_eq!(job.code, "truncated");
     assert!(!job.retryable);
+}
+
+#[test]
+fn a_key_never_follows_the_provider_to_another_origin() {
+    let (_dir, _clock, mut library) = library();
+    let secrets = MemorySecrets::new();
+    let provider = providers::add_provider(
+        &mut library,
+        &secrets,
+        &new_provider("https://api.example.com/v1"),
+        Some(&Secret::new(KEY)),
+    )
+    .unwrap();
+    let service = provider.key_ref.clone().unwrap();
+    let update = |library: &mut Library, url: &str, key: Option<&Secret>| {
+        providers::update_provider(library, &secrets, provider.id, "Renamed", url, key)
+    };
+
+    // Same origin, other path: the key stays.
+    let renamed = update(&mut library, "https://API.example.com:443/v2", None).unwrap();
+    assert_eq!(renamed.name, "Renamed");
+    assert_eq!(secrets.get(&service).unwrap(), Some(Secret::new(KEY)));
+
+    // Another host, or another port, without a new key: refused, nothing changes.
+    for url in [
+        "https://attacker.example.net/v1",
+        "https://api.example.com:8443/v1",
+    ] {
+        let err = update(&mut library, url, None).unwrap_err();
+        assert_eq!(err.code(), "key_required_for_new_url");
+        assert!(!err.is_retryable());
+        assert!(!err.detail.contains(KEY));
+    }
+    assert_eq!(
+        library.provider(provider.id).unwrap().base_url,
+        "https://API.example.com:443/v2"
+    );
+
+    // With a new key the move is accepted and the new key replaces the old one.
+    let new_key = Secret::new("sk-new-key-for-other-host");
+    let moved = update(&mut library, "https://other.example.net/v1", Some(&new_key)).unwrap();
+    assert_eq!(moved.base_url, "https://other.example.net/v1");
+    assert_eq!(secrets.get(&service).unwrap(), Some(new_key));
+
+    // A provider without a key can move freely.
+    let local = providers::add_provider(
+        &mut library,
+        &secrets,
+        &NewProvider {
+            name: "Local".into(),
+            base_url: "http://127.0.0.1:1234/v1".into(),
+            needs_key: false,
+        },
+        None,
+    )
+    .unwrap();
+    providers::update_provider(
+        &mut library,
+        &secrets,
+        local.id,
+        "Local",
+        "http://localhost:11434/v1",
+        None,
+    )
+    .unwrap();
 }

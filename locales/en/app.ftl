@@ -49,9 +49,6 @@ home-empty-body = Latest meetings, open actions and active projects will appear 
 sources-description = Meetings, notes and documents, kept as you brought them.
 sources-empty-title = Everything you bring into { -brand } lands here
 sources-empty-body = Write a note to start. The full list, with filters and search, comes in a next version.
-settings-description = Providers, transcription, recording, data and privacy.
-settings-empty-title = Settings are on their way
-settings-empty-body = Each section arrives together with the feature it controls.
 
 ## Notes
 
