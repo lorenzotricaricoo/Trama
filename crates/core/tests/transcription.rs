@@ -699,6 +699,46 @@ fn the_job_stores_a_two_track_transcript_and_marks_the_meeting_ready() {
 }
 
 #[test]
+fn a_completed_transcription_queues_the_summary() {
+    let (_dir, library, runner, events) = start(FakeLoader::default());
+    let id = recorded_meeting(&mut lock(&library), "it");
+    let transcribe = runner.enqueue(JobKind::Transcribe, id).unwrap();
+    let seen = events.wait_for(|e| e.job.id == transcribe.id && finished(e));
+    assert_eq!(seen.last().unwrap().job.state, JobState::Done);
+
+    // Queued once the transcript is stored, and announced to the interface.
+    let queued = seen
+        .iter()
+        .find(|e| e.job.kind == JobKind::Summarize)
+        .expect("no event for the summary job");
+    assert_eq!(queued.job.target_id, id);
+    assert_eq!(queued.job.state, JobState::Queued);
+    let active = lock(&library).active_jobs().unwrap();
+    assert!(
+        active
+            .iter()
+            .any(|job| job.kind == JobKind::Summarize && job.target_id == id),
+        "{active:?}"
+    );
+}
+
+#[test]
+fn a_failed_transcription_queues_no_summary() {
+    let (_dir, library, runner, events) = start(FakeLoader {
+        error: Some(TranscriptionError::permanent(
+            error_code::MODEL_MISSING,
+            "/models",
+        )),
+        gate: None,
+    });
+    let id = recorded_meeting(&mut lock(&library), "it");
+    runner.enqueue(JobKind::Transcribe, id).unwrap();
+    let seen = events.wait_for(finished);
+    assert!(seen.iter().all(|e| e.job.kind == JobKind::Transcribe));
+    assert!(lock(&library).active_jobs().unwrap().is_empty());
+}
+
+#[test]
 fn without_the_model_the_job_fails_at_once_and_says_why() {
     let (_dir, library, runner, events) = start(FakeLoader {
         error: Some(TranscriptionError::permanent(

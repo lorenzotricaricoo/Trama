@@ -142,6 +142,12 @@ impl Transcribe {
         ctx.library()
             .complete_transcription(id, &engine, &segments)
             .map_err(storage)?;
+        // The transcript is stored: failing now would make a retry transcribe and store
+        // it again, so a summary that cannot be queued is logged instead (the user can
+        // still ask for it, `summary::regenerate`).
+        if let Err(err) = crate::summary::enqueue_after_transcription(ctx, id) {
+            eprintln!("trama: cannot queue the summary of meeting {id}: {err}");
+        }
         ctx.progress(1.0);
         Ok(TranscriptionReport {
             segments: segments.len(),
