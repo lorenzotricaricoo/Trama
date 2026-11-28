@@ -18,6 +18,14 @@ body,
   margin: 0;
 }
 
+/* A light frame over the Liquid Glass, so the desktop shows through. */
+.t-app.t-light.t-translucent {
+  --frame: oklch(0.97 0.006 270 / 0.12);
+}
+.t-app.t-dark.t-translucent {
+  --frame: oklch(0.2 0.012 270 / 0.2);
+}
+
 /* Transparent, so that the macOS vibrancy shows through the frame. */
 html,
 body {
@@ -62,7 +70,7 @@ button {
 }
 
 .app[data-collapsed] {
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
 }
 
 /* Height of the macOS title bar, drawn over the content (titleBarStyle: Overlay). */
@@ -102,17 +110,17 @@ button {
 .side-head {
   position: relative;
   flex: none;
-  height: 30px;
+  height: 44px;
   transition: height var(--d4) var(--e-soft);
 }
 
 .app[data-collapsed] .side-head {
-  height: 60px;
+  height: 76px;
 }
 
 .side-toggle {
   position: absolute;
-  top: -6px;
+  top: 8px;
   left: 0;
   width: 26px;
   height: 24px;
@@ -124,7 +132,7 @@ button {
   background: none;
   color: var(--fmute);
   font-size: 17px;
-  transform: translateX(66px);
+  transform: translateX(81px);
   transition:
     transform var(--d4) var(--e-soft),
     background-color var(--d2),
@@ -132,7 +140,7 @@ button {
 }
 
 .app[data-collapsed] .side-toggle {
-  transform: translate(17px, 30px);
+  transform: translate(23px, 36px);
 }
 
 .side-toggle[data-hovered] {
