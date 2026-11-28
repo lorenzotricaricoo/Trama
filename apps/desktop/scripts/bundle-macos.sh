@@ -36,6 +36,17 @@ if [[ -z "$IDENTITY" ]]; then
   security find-identity -v -p codesigning | sed -n 's/^ *[0-9]*) [0-9A-F]* //p' >&2
   exit 1
 fi
+# The same version everywhere: the app, the Rust crates and the frontend package.
+version_of() { sed -n "s/$2/\\1/p" "$1" | head -n 1; }
+APP_VERSION="$(version_of src-tauri/tauri.conf.json '^  "version": "\(.*\)",$')"
+NPM_VERSION="$(version_of package.json '^  "version": "\(.*\)",$')"
+CARGO_VERSION="$(version_of "$REPO_ROOT/Cargo.toml" '^version = "\(.*\)"$')"
+if [[ -z "$APP_VERSION" || "$APP_VERSION" != "$NPM_VERSION" || "$APP_VERSION" != "$CARGO_VERSION" ]]; then
+  echo "Versions differ: tauri.conf.json '$APP_VERSION', package.json '$NPM_VERSION'," >&2
+  echo "Cargo.toml '$CARGO_VERSION'." >&2
+  exit 1
+fi
+
 if [[ "$IDENTITY" == "-" ]]; then
   echo "Warning: ad-hoc signature; permissions will not survive the next build." >&2
 fi
@@ -48,7 +59,9 @@ DMG="$(ls -t "$BUNDLE"/dmg/*.dmg | head -n 1)"
 
 codesign --verify --strict --deep "$APP"
 echo
+echo "Version:     $APP_VERSION"
 echo "App:         $APP"
 echo "DMG:         $DMG"
 echo "Signed by:   $(codesign -dvv "$APP" 2>&1 | sed -n 's/^Authority=//p' | head -n 1)"
 echo "Designated:  $(codesign -d -r- "$APP" 2>&1 | sed -n 's/^designated => //p')"
+echo "SHA-256:     $(shasum -a 256 "$DMG" | cut -d ' ' -f 1)"
