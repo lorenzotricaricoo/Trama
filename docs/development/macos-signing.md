@@ -73,5 +73,5 @@ asks for them once more.
 A bundle built and copied locally runs without warnings. A copy downloaded from the
 internet is quarantined, and Gatekeeper rejects it because it is not notarized
 (`spctl --assess` reports `rejected`): the user has to allow it in System Settings →
-Privacy & Security. How to distribute Trama is decided in
-[#39](https://github.com/lorenzotricaricoo/Trama/issues/39).
+Privacy & Security. How Trama is distributed despite this is decided in
+[ADR 0008](../adr/0008-distribution-without-notarization.md).
