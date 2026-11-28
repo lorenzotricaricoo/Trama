@@ -7,6 +7,11 @@
 //! frontend as events, the tests collect them.
 //!
 //! Jobs run one at a time: transcription uses the whole machine, and the others are short.
+//!
+//! Some jobs are not asked for by anyone but fall due with time, like deleting the audio
+//! the retention setting no longer keeps: the runner asks each handler which sources are
+//! due ([`JobHandler::due`]) when it starts, every [`SWEEP_INTERVAL_MS`] after that, and
+//! when told to ([`Runner::request_sweep`]), and queues a job for each.
 
 mod delete_audio;
 mod transcribe;
@@ -20,7 +25,7 @@ use std::time::Duration;
 pub use delete_audio::DeleteAudio;
 pub use transcribe::Transcribe;
 
-use crate::storage::{Id, Job, JobKind, Library, Result, StorageError};
+use crate::storage::{Id, Job, JobKind, Library, Result, StorageError, Timestamp};
 
 /// The library shared by the runner and the app.
 pub type SharedLibrary = Arc<Mutex<Library>>;
@@ -41,6 +46,9 @@ pub mod error_code {
 
 /// Longest the worker sleeps without checking the queue, in case a wake-up is missed.
 const IDLE_WAIT: Duration = Duration::from_secs(30);
+
+/// How often the runner asks the handlers which sources are due, in library time.
+pub const SWEEP_INTERVAL_MS: i64 = 15 * 60 * 1000;
 
 /// Why an attempt failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,6 +100,15 @@ pub trait JobHandler: Send + Sync {
     /// Runs one attempt. Long work reports progress through `ctx` and returns
     /// [`JobError::stopped`] soon after [`JobContext::should_stop`] becomes true.
     fn run(&self, job: &Job, ctx: &JobContext) -> std::result::Result<(), JobError>;
+
+    /// Sources that need this kind of job now without anyone asking, for example the
+    /// meetings whose audio the retention setting says to delete. The runner queues a job
+    /// for each (see the module documentation). Sources with a job of this kind already
+    /// queued or running are best left out. None by default.
+    fn due(&self, library: &Library) -> Result<Vec<Id>> {
+        let _ = library;
+        Ok(Vec::new())
+    }
 }
 
 /// A change worth telling the interface about.
@@ -177,6 +194,8 @@ struct Shared {
     stop: Arc<AtomicBool>,
     wake: Mutex<bool>,
     wake_signal: Condvar,
+    /// Set by [`Runner::request_sweep`]: ask the handlers which sources are due.
+    sweep: AtomicBool,
     /// The running job and its cancellation flag.
     current: Mutex<Option<(Id, Arc<AtomicBool>)>>,
 }
@@ -240,6 +259,7 @@ impl Runner {
             stop: Arc::new(AtomicBool::new(false)),
             wake: Mutex::new(false),
             wake_signal: Condvar::new(),
+            sweep: AtomicBool::new(false),
             current: Mutex::new(None),
         });
         let worker = {
@@ -292,6 +312,13 @@ impl Runner {
         self.shared.notify();
     }
 
+    /// Asks the handlers which sources are due now instead of at the next sweep, for
+    /// example after the retention setting changed.
+    pub fn request_sweep(&self) {
+        self.shared.sweep.store(true, Ordering::SeqCst);
+        self.shared.notify();
+    }
+
     /// Asks the running job to stop, waits for the worker to exit, and leaves unfinished
     /// jobs in the queue for the next start. Called automatically on drop.
     pub fn stop(&self) {
@@ -318,20 +345,28 @@ impl Drop for Runner {
 /// The worker loop.
 fn work(shared: &Shared) {
     let kinds = shared.kinds();
+    // The first sweep happens right away.
+    let mut next_sweep: Option<Timestamp> = None;
     while !shared.stop.load(Ordering::SeqCst) {
+        let now = lock(&shared.library).now();
+        if shared.sweep.swap(false, Ordering::SeqCst) || next_sweep.is_none_or(|at| now >= at) {
+            sweep(shared);
+            next_sweep = Some(now.saturating_add(SWEEP_INTERVAL_MS));
+        }
         let claimed = lock(&shared.library).claim_job(&kinds);
         match claimed {
             Ok(Some(job)) => run(shared, job),
             Ok(None) => {
                 let wait = {
                     let library = lock(&shared.library);
-                    match library.next_job_due(&kinds) {
-                        Ok(Some(due)) => {
-                            let ms = (due - library.now()).clamp(0, IDLE_WAIT.as_millis() as i64);
-                            Duration::from_millis(ms as u64)
-                        }
-                        _ => IDLE_WAIT,
-                    }
+                    let now = library.now();
+                    let due = match library.next_job_due(&kinds) {
+                        Ok(Some(due)) => due,
+                        _ => i64::MAX,
+                    };
+                    let until = due.min(next_sweep.unwrap_or(now));
+                    let ms = (until.saturating_sub(now)).clamp(0, IDLE_WAIT.as_millis() as i64);
+                    Duration::from_millis(ms as u64)
                 };
                 shared.wait(wait);
             }
@@ -339,6 +374,32 @@ fn work(shared: &Shared) {
                 // The database is unusable; keep trying, but say so (principle A4).
                 eprintln!("trama: cannot read the job queue: {err}");
                 shared.wait(IDLE_WAIT);
+            }
+        }
+    }
+}
+
+/// Queues a job for every source a handler says is due.
+fn sweep(shared: &Shared) {
+    for handler in &shared.handlers {
+        let kind = handler.kind();
+        let name = kind.as_str();
+        let due = handler.due(&lock(&shared.library));
+        let due = match due {
+            Ok(due) => due,
+            Err(err) => {
+                eprintln!("trama: cannot tell which {name} jobs are due: {err}");
+                continue;
+            }
+        };
+        for target in due {
+            let queued = lock(&shared.library).enqueue_job(kind, target);
+            match queued {
+                Ok(job) => {
+                    eprintln!("trama: queued {name} job {} for source {target}", job.id);
+                    shared.emit(job, None);
+                }
+                Err(err) => eprintln!("trama: cannot queue {name} for source {target}: {err}"),
             }
         }
     }

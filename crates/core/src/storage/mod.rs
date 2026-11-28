@@ -14,6 +14,7 @@ mod jobs;
 mod meetings;
 mod migrations;
 mod providers;
+mod retention;
 mod search;
 mod settings;
 mod sources;
@@ -30,6 +31,7 @@ pub use jobs::*;
 pub use migrations::SCHEMA_VERSION;
 pub use model::*;
 pub use providers::*;
+pub use retention::*;
 pub use settings::*;
 pub use usage::*;
 

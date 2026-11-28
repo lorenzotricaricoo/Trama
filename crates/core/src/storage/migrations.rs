@@ -14,6 +14,7 @@ pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("migrations/0002_jobs.sql"),
     include_str!("migrations/0003_providers.sql"),
     include_str!("migrations/0004_model_usage.sql"),
+    include_str!("migrations/0005_audio_retention.sql"),
 ];
 
 /// Schema version written by this build.
@@ -107,6 +108,50 @@ mod tests {
             .query_row("PRAGMA integrity_check", [], |row| row.get(0))
             .unwrap();
         assert_eq!(integrity, "ok");
+    }
+
+    #[test]
+    fn audio_recorded_before_retention_is_put_on_hold() {
+        let mut conn = memory();
+        migrate(&mut conn, &MIGRATIONS[..4]).unwrap();
+        for (id, deleted) in [("kept", None), ("gone", Some(5_i64))] {
+            conn.execute(
+                "INSERT INTO source (id, kind, occurred_at, created_at, updated_at)
+                 VALUES (?1, 'meeting', 1, 1, 1)",
+                [id],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO meeting (source_id, status, audio_deleted_at) VALUES (?1, 'ready', ?2)",
+                rusqlite::params![id, deleted],
+            )
+            .unwrap();
+        }
+
+        migrate(&mut conn, MIGRATIONS).unwrap();
+        let hold = |id: &str| -> bool {
+            conn.query_row(
+                "SELECT audio_on_hold FROM meeting WHERE source_id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap()
+        };
+        assert!(hold("kept"));
+        assert!(!hold("gone"));
+        // Meetings recorded from now on follow the setting.
+        conn.execute(
+            "INSERT INTO source (id, kind, occurred_at, created_at, updated_at)
+             VALUES ('new', 'meeting', 1, 1, 1)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO meeting (source_id, status) VALUES ('new', 'recording')",
+            [],
+        )
+        .unwrap();
+        assert!(!hold("new"));
     }
 
     #[test]

@@ -55,7 +55,11 @@ const rise: Variants = {
 };
 
 /** Saves a change of the library settings, showing it at once and undoing it on failure. */
-export type UpdateLibrary = (change: Partial<LibrarySettings>) => Promise<string | null>;
+/** Saves a change of the library settings; resolves to an error code, or `null`. */
+export type UpdateLibrary = (
+  change: Partial<LibrarySettings>,
+  options?: { confirmAudioDeletion?: boolean },
+) => Promise<string | null>;
 
 /** Settings: providers and models, transcription, recording, data and privacy, appearance, general. */
 export function SettingsScreen() {
@@ -92,14 +96,14 @@ export function SettingsScreen() {
   }, []);
 
   const updateLibrary: UpdateLibrary = useCallback(
-    async (change) => {
+    async (change, options) => {
       if (!library) return null;
       const request = ++libraryRequest.current;
       const previous = library;
       const next = { ...library, ...change };
       setLibrary(next);
       try {
-        const saved = await api.setLibrarySettings(next);
+        const saved = await api.setLibrarySettings(next, options?.confirmAudioDeletion);
         if (request === libraryRequest.current) setLibrary(saved);
         return null;
       } catch (error) {
