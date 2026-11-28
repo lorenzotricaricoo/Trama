@@ -33,6 +33,8 @@ vi.mock('@tauri-apps/api/core', () => ({
     switch (cmd) {
       case 'active_jobs':
         return Promise.resolve([]);
+      case 'set_menu_state':
+        return Promise.resolve(null);
       case 'recording_status':
         return Promise.resolve(core.status);
       case 'start_recording': {
