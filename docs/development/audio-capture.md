@@ -1,7 +1,7 @@
 # Audio capture: manual checks
 
 The capture core ([design](../architecture/audio-capture.md)) is covered by headless tests
-with fake devices (`cargo test -p trama-core --test capture`). What needs real devices,
+with fake devices on a simulated clock (`cargo test -p trama-core --test capture`). What needs real devices,
 real permissions and a real call is checked by hand with the `capture` example, before a
 release and after changes to `crates/core/src/capture/macos/`.
 

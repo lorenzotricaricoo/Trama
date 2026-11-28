@@ -433,7 +433,8 @@ struct ActiveTrack {
     device: DeviceInfo,
     stats: Arc<SinkStats>,
     seen_callbacks: u64,
-    last_progress: Instant,
+    /// Host time (backend clock) the supervisor last saw a new buffer at.
+    last_progress_ns: u64,
 }
 
 /// Keeps one stream open for the whole recording: reopens it when the default device
@@ -479,7 +480,7 @@ impl Supervisor {
             device,
             stats,
             seen_callbacks: 0,
-            last_progress: Instant::now(),
+            last_progress_ns: self.backend.now_ns(),
         })
     }
 
@@ -530,14 +531,17 @@ impl Supervisor {
                 retry_now = true;
             }
 
+            // Measured on the backend's clock, the one the audio runs on.
+            let now_ns = self.backend.now_ns();
+            let stall_ns = self.tuning.stall_timeout.as_nanos() as u64;
             let stalled = active.as_mut().is_some_and(|track| {
                 let seen = track.stats.callbacks.load(Ordering::Relaxed);
                 if seen != track.seen_callbacks {
                     track.seen_callbacks = seen;
-                    track.last_progress = Instant::now();
+                    track.last_progress_ns = now_ns;
                     false
                 } else {
-                    seen > 0 && track.last_progress.elapsed() >= self.tuning.stall_timeout
+                    seen > 0 && now_ns.saturating_sub(track.last_progress_ns) >= stall_ns
                 }
             });
             if stalled {

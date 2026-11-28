@@ -1,13 +1,17 @@
-//! Capture tests, headless: fake devices on a virtual clock, the real recorder, writer
+//! Capture tests, headless: fake devices on a simulated clock, the real recorder, writer
 //! threads and files on disk.
+//!
+//! The clock only moves when a test advances it, and each step waits until every fake
+//! stream has delivered its audio up to the new time: the result does not depend on how
+//! fast the machine is. Wall time is only used to wait for the capture threads to react.
 //!
 //! The fake devices put a click on the host clock every whole second, so a test can
 //! check where the same instant lands in each track after realignment.
 
 use std::collections::HashMap;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -15,23 +19,57 @@ use tempfile::TempDir;
 use trama_core::capture::*;
 use trama_core::storage::{Library, Role};
 
-/// Virtual time runs this many times faster than the wall clock.
-const SPEED: f64 = 10.0;
-const PATIENCE: Duration = Duration::from_secs(10);
+const PATIENCE: Duration = Duration::from_secs(20);
 const CLICK_PERIOD_NS: u64 = 1_000_000_000;
+/// The fake devices deliver 10 ms buffers.
+const BUFFER_MS: u64 = 10;
 
-/// The virtual host clock shared by the fake devices and the recorder.
-#[derive(Clone)]
+/// The simulated host clock shared by the fake devices and the recorder.
 struct Clock {
-    base: Instant,
-    speed: f64,
+    now_ns: Mutex<u64>,
+    tick: Condvar,
 }
 
 impl Clock {
-    /// Starts at 100 s, like a host clock that has been running for a while.
-    fn now_ns(&self) -> u64 {
-        100_000_000_000 + (self.base.elapsed().as_secs_f64() * self.speed * 1e9) as u64
+    /// Starts at 100.25 s, like a host clock that has been running for a while, and
+    /// between two clicks.
+    fn new() -> Self {
+        Self {
+            now_ns: Mutex::new(100_250_000_000),
+            tick: Condvar::new(),
+        }
     }
+
+    fn now_ns(&self) -> u64 {
+        *self.now_ns.lock().unwrap()
+    }
+
+    fn advance(&self, ns: u64) {
+        *self.now_ns.lock().unwrap() += ns;
+        self.tick.notify_all();
+    }
+
+    /// Waits until the clock reaches `ns`; false if `stop` was set first.
+    fn wait_until(&self, ns: u64, stop: &AtomicBool) -> bool {
+        let mut now = self.now_ns.lock().unwrap();
+        while *now < ns {
+            if stop.load(Ordering::Acquire) {
+                return false;
+            }
+            now = self
+                .tick
+                .wait_timeout(now, Duration::from_millis(5))
+                .unwrap()
+                .0;
+        }
+        !stop.load(Ordering::Acquire)
+    }
+}
+
+/// How far a fake stream has delivered: the end of the next buffer it will push.
+/// `u64::MAX` when it will push nothing more (stalled or stopped).
+struct Progress {
+    next_end_ns: AtomicU64,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -86,17 +124,14 @@ struct FakeState {
 }
 
 struct FakeBackend {
-    clock: Clock,
+    clock: Arc<Clock>,
+    streams: Mutex<Vec<Arc<Progress>>>,
     state: Mutex<FakeState>,
     requests: AtomicU32,
 }
 
 impl FakeBackend {
     fn new() -> Arc<Self> {
-        Self::with_speed(SPEED)
-    }
-
-    fn with_speed(speed: f64) -> Arc<Self> {
         let mut devices = HashMap::new();
         let mut defaults = HashMap::new();
         for (source, device) in [
@@ -110,10 +145,8 @@ impl FakeBackend {
             devices.insert(device.info.id.clone(), device);
         }
         Arc::new(Self {
-            clock: Clock {
-                base: Instant::now(),
-                speed,
-            },
+            clock: Arc::new(Clock::new()),
+            streams: Mutex::new(Vec::new()),
             state: Mutex::new(FakeState {
                 devices,
                 defaults,
@@ -147,10 +180,34 @@ impl FakeBackend {
     fn fault(&self, source: Source, code: &'static str) {
         self.state().faults[&source].report(code, "injected");
     }
+
+    /// Advances the clock by `ms`, one buffer at a time, each time waiting until every
+    /// open stream has delivered its audio up to the new time.
+    fn advance(&self, ms: u64) {
+        for _ in 0..ms.div_ceil(BUFFER_MS) {
+            self.clock.advance(BUFFER_MS * 1_000_000);
+            let now = self.clock.now_ns();
+            let deadline = Instant::now() + PATIENCE;
+            loop {
+                let behind = self
+                    .streams
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|p| p.next_end_ns.load(Ordering::Acquire) <= now);
+                if !behind {
+                    break;
+                }
+                assert!(Instant::now() < deadline, "a fake stream is stuck");
+                std::thread::sleep(Duration::from_micros(100));
+            }
+        }
+    }
 }
 
 struct FakeStream {
     device: FakeDevice,
+    progress: Arc<Progress>,
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
@@ -173,37 +230,38 @@ impl Drop for FakeStream {
         if let Some(thread) = self.thread.take() {
             thread.join().unwrap();
         }
+        self.progress.next_end_ns.store(u64::MAX, Ordering::Release);
     }
 }
 
-/// Delivers the device's audio in 10 ms buffers, paced by the virtual clock.
-fn generate(clock: Clock, device: FakeDevice, mut sink: FrameSink, stop: Arc<AtomicBool>) {
+/// Delivers the device's audio in 10 ms buffers as the clock reaches the end of each.
+fn generate(
+    clock: Arc<Clock>,
+    device: FakeDevice,
+    mut sink: FrameSink,
+    progress: Arc<Progress>,
+    stop: Arc<AtomicBool>,
+) {
     let format = device.format;
     let channels = usize::from(format.channels);
-    let frames = (format.sample_rate / 100) as u64;
+    let frames = u64::from(format.sample_rate) * BUFFER_MS / 1000;
     let rate = f64::from(format.sample_rate) * (1.0 + device.ppm / 1e6);
     let first_ns = clock.now_ns() as f64 + device.first_sound_after.as_secs_f64() * 1e9;
     let host = |n: u64| first_ns + n as f64 * 1e9 / rate;
     let mut buffer = Vec::with_capacity(frames as usize * channels);
-    let mut k = 0u64;
-    while !stop.load(Ordering::Acquire) {
-        let start = k * frames;
-        let end_ns = host(start + frames);
-        loop {
-            if stop.load(Ordering::Acquire) {
-                return;
-            }
-            let ahead_ns = end_ns - clock.now_ns() as f64;
-            if ahead_ns <= 0.0 {
-                break;
-            }
-            // Sleep until the buffer is due, in wall time, at most 2 ms at a time.
-            let wall = (ahead_ns / clock.speed / 1e9).min(0.002);
-            std::thread::sleep(Duration::from_secs_f64(wall));
-        }
+    for k in 0.. {
         if device.stall_after.is_some_and(|n| k >= n) {
-            std::thread::sleep(Duration::from_millis(1));
-            continue;
+            progress.next_end_ns.store(u64::MAX, Ordering::Release);
+            while !stop.load(Ordering::Acquire) {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            return;
+        }
+        let start = k * frames;
+        let end_ns = host(start + frames).ceil() as u64;
+        progress.next_end_ns.store(end_ns, Ordering::Release);
+        if !clock.wait_until(end_ns, &stop) {
+            return;
         }
         buffer.clear();
         for n in start..start + frames {
@@ -222,7 +280,6 @@ fn generate(clock: Clock, device: FakeDevice, mut sink: FrameSink, stop: Arc<Ato
             buffer.extend(std::iter::repeat_n(value, channels));
         }
         sink.push(&buffer, channels, host(start) as u64);
-        k += 1;
     }
 }
 
@@ -273,12 +330,23 @@ impl CaptureBackend for FakeBackend {
         state.opened.push(id);
         drop(state);
         let stop = Arc::new(AtomicBool::new(false));
+        // Behind until the thread has looked at the clock.
+        let progress = Arc::new(Progress {
+            next_end_ns: AtomicU64::new(0),
+        });
+        self.streams.lock().unwrap().push(progress.clone());
         let thread = {
-            let (clock, device, stop) = (self.clock.clone(), device.clone(), stop.clone());
-            std::thread::spawn(move || generate(clock, device, sink, stop))
+            let (clock, device, progress, stop) = (
+                self.clock.clone(),
+                device.clone(),
+                progress.clone(),
+                stop.clone(),
+            );
+            std::thread::spawn(move || generate(clock, device, sink, progress, stop))
         };
         Ok(Box::new(FakeStream {
             device,
+            progress,
             stop,
             thread: Some(thread),
         }))
@@ -333,15 +401,6 @@ impl Collector {
     }
 }
 
-/// Problems of a track, without overflows: the virtual clock runs ten times faster than
-/// real time, so a heavily loaded machine can starve the writer long enough to overflow
-/// the ring buffer. Overflows are padded on the time line, so the other checks still hold.
-fn problems(track: &TrackSummary) -> Vec<&'static str> {
-    let mut problems = track.problems.clone();
-    problems.retain(|&p| p != error_code::FRAMES_DROPPED);
-    problems
-}
-
 fn tuning() -> Tuning {
     Tuning {
         device_poll: Duration::from_millis(10),
@@ -382,9 +441,47 @@ impl Setup {
         )
     }
 
-    /// Lets `virtual_ms` of virtual time pass.
-    fn run_for(&self, virtual_ms: u64) {
-        std::thread::sleep(Duration::from_secs_f64(virtual_ms as f64 / 1e3 / SPEED));
+    /// Lets `ms` of simulated time pass, every stream delivering its audio.
+    fn run_for(&self, ms: u64) {
+        self.backend.advance(ms);
+    }
+
+    /// Waits until `count` streams of `source` have been opened, so that a reopen has
+    /// happened before the clock moves on.
+    fn wait_for_streams(&self, source: Source, count: usize) {
+        let deadline = Instant::now() + PATIENCE;
+        loop {
+            let opened = self
+                .observer
+                .events()
+                .iter()
+                .filter(
+                    |e| matches!(e, CaptureEvent::DeviceOpened { source: s, .. } if *s == source),
+                )
+                .count();
+            if opened >= count {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "{source:?} opened {opened} times"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    /// Advances the clock until an event shows up.
+    fn run_until(&self, what: &str, test: impl Fn(&CaptureEvent) -> bool) {
+        let deadline = Instant::now() + PATIENCE;
+        while !self.observer.events().iter().any(&test) {
+            assert!(
+                Instant::now() < deadline,
+                "no {what} event: {:?}",
+                self.observer.events()
+            );
+            self.backend.advance(BUFFER_MS);
+            std::thread::sleep(Duration::from_millis(1));
+        }
     }
 
     fn path(&self, relative: &Path) -> std::path::PathBuf {
@@ -469,7 +566,7 @@ fn records_two_tracks_on_separate_clocks_and_realigns_them() {
     );
     assert!(system.padded_frames >= 44_100 * 165 / 100);
     assert!(
-        problems(mic).is_empty() && problems(system).is_empty(),
+        mic.problems.is_empty() && system.problems.is_empty(),
         "{summary:?}"
     );
 
@@ -569,6 +666,9 @@ fn follows_a_device_change_to_a_different_format() {
     s.observer.wait_for("device changed", |e| {
         matches!(e, CaptureEvent::DeviceChanged { source: Source::Microphone, device } if device.id == "headset")
     });
+    s.observer.wait_for("headset opened", |e| {
+        matches!(e, CaptureEvent::DeviceOpened { source: Source::Microphone, device, .. } if device.id == "headset")
+    });
     s.run_for(3_000);
     let (start, summary) = recording_stop(&s, recording);
 
@@ -626,6 +726,7 @@ fn reopens_a_failed_stream_and_fills_the_gap() {
             }
         )
     });
+    s.wait_for_streams(Source::System, 2);
     s.run_for(2_500);
     let (start, summary) = recording_stop(&s, recording);
     let system = &summary.tracks[1];
@@ -650,7 +751,7 @@ fn reopens_a_stalled_stream() {
     let s = setup();
     s.set_system(|d| d.stall_after = Some(100));
     let recording = s.start().unwrap();
-    s.observer.wait_for("stall", |e| {
+    s.run_until("stall", |e| {
         matches!(
             e,
             CaptureEvent::TrackInterrupted {
@@ -660,14 +761,14 @@ fn reopens_a_stalled_stream() {
             }
         )
     });
+    s.wait_for_streams(Source::System, 2);
     s.run_for(2_000);
     let (_, summary) = recording_stop(&s, recording);
     let system = &summary.tracks[1];
     assert_eq!(system.segments, 2);
-    assert!(
-        system.padded_frames > 48_000,
-        "the stall is filled with silence"
-    );
+    // Silence from the last buffer until the stall was noticed and the stream reopened.
+    let stall_frames = 48 * tuning().stall_timeout.as_millis() as u64;
+    assert!(system.padded_frames >= stall_frames, "{system:?}");
     let diff = system.duration_ms as i64 - summary.duration_ms as i64;
     assert!(diff.abs() < 80, "{system:?}");
 }
@@ -695,15 +796,7 @@ fn keeps_retrying_a_device_that_cannot_be_reopened() {
     });
     s.run_for(500);
     s.backend.state().fail_open.clear();
-    s.observer.wait_for("reopened", |e| {
-        matches!(
-            e,
-            CaptureEvent::DeviceOpened {
-                source: Source::Microphone,
-                ..
-            }
-        ) && s.backend.state().opened.len() > 2
-    });
+    s.wait_for_streams(Source::Microphone, 2);
     s.run_for(1_000);
     let (_, summary) = recording_stop(&s, recording);
     assert_eq!(summary.tracks[0].segments, 2);
@@ -735,7 +828,7 @@ fn warns_when_a_track_is_only_digital_silence() {
     let s = setup();
     s.set_system(|d| d.signal = Signal::Zeros);
     let recording = s.start().unwrap();
-    s.observer.wait_for("silence warning", |e| {
+    s.run_until("silence warning", |e| {
         matches!(
             e,
             CaptureEvent::TrackProblem {
@@ -747,15 +840,10 @@ fn warns_when_a_track_is_only_digital_silence() {
     });
     let (_, summary) = recording_stop(&s, recording);
     assert_eq!(
-        problems(&summary.tracks[1]),
+        summary.tracks[1].problems,
         [error_code::SYSTEM_AUDIO_SILENT]
     );
-    assert!(
-        s.observer
-            .problems(Source::Microphone)
-            .iter()
-            .all(|&p| p == error_code::FRAMES_DROPPED)
-    );
+    assert!(s.observer.problems(Source::Microphone).is_empty());
 }
 
 #[test]
@@ -858,7 +946,7 @@ fn reports_the_wav_size_limit_and_keeps_the_other_track() {
     // About half a second of 48 kHz mono.
     s.options.max_track_bytes = 100_000;
     let recording = s.start().unwrap();
-    s.observer.wait_for("size limit", |e| {
+    s.run_until("size limit", |e| {
         matches!(
             e,
             CaptureEvent::TrackProblem {
@@ -870,7 +958,7 @@ fn reports_the_wav_size_limit_and_keeps_the_other_track() {
     s.run_for(1_000);
     let summary = recording.stop().unwrap();
     for track in &summary.tracks {
-        assert_eq!(problems(track), [error_code::TRACK_SIZE_LIMIT]);
+        assert_eq!(track.problems, [error_code::TRACK_SIZE_LIMIT]);
         let info = wav::inspect(&s.path(&track.audio_path)).unwrap();
         assert_eq!(info.header_frames, info.file_frames, "still a valid file");
         assert!(info.file_frames <= 25_000);
@@ -902,21 +990,28 @@ fn registers_the_tracks_in_the_library() {
     }
 }
 
-/// What a crash leaves on disk: the files as they are mid-recording, without the
-/// final header patch.
+/// What a crash leaves on disk: the files as they are mid-recording, without a final
+/// header patch. The writer appends every pass (20 ms by default) with no checkpoint
+/// needed, so a crash loses at most the audio of the last pass.
 #[test]
-fn a_crash_loses_at_most_a_tenth_of_a_second() {
+fn a_crash_loses_only_the_last_writer_pass() {
+    assert!(Tuning::default().writer_pass <= Duration::from_millis(100));
     let mut s = setup();
-    // Real time, real writer timings.
-    let backend = FakeBackend::with_speed(1.0);
     s.options.tuning = Tuning::default();
-    let recording =
-        Recording::start(backend.clone(), s.options.clone(), s.observer.clone()).unwrap();
-    std::thread::sleep(Duration::from_millis(1_600));
+    s.options.system_audio = false;
+    let recording = s.start().unwrap();
+    s.run_for(1_600);
+    // Every buffer up to now was delivered: wait for one writer pass to reach the file.
+    let me = s.audio_dir().join("me.wav");
+    let delivered = 48_000 * 1_600 / 1_000;
+    let deadline = Instant::now() + PATIENCE;
+    while wav::inspect(&me).unwrap().file_frames < delivered {
+        assert!(Instant::now() < deadline, "the writer did not catch up");
+        std::thread::sleep(Duration::from_millis(5));
+    }
     // The process dies now: copy the files as they are.
     let crashed = s.dir.path().join("crashed.wav");
-    let captured_ms = (backend.now_ns() - recording.start_ns()) as f64 / 1e6;
-    std::fs::copy(s.audio_dir().join("me.wav"), &crashed).unwrap();
+    std::fs::copy(&me, &crashed).unwrap();
     std::fs::copy(
         s.audio_dir().join("me.timing.jsonl"),
         s.dir.path().join("crashed.timing.jsonl"),
@@ -924,17 +1019,16 @@ fn a_crash_loses_at_most_a_tenth_of_a_second() {
     .unwrap();
     drop(recording);
 
-    // Readable as is, up to the last checkpoint (at most a second old)...
+    // Readable as is, up to the last checkpoint...
     let before = wav::inspect(&crashed).unwrap();
     assert!(before.header_frames <= before.file_frames);
     // ...and after a repair, up to the crash.
     let after = repair_wav(&crashed).unwrap();
     assert_eq!(after.header_frames, after.file_frames);
-    let lost = captured_ms - after.duration_ms() as f64;
-    assert!(lost < 100.0, "lost {lost:.1} ms");
+    assert!(after.file_frames >= delivered, "{after:?}");
     // The sidecar survives too, a torn last line at worst.
     let timeline = Timeline::load(&s.dir.path().join("crashed.timing.jsonl")).unwrap();
-    assert!(timeline.drift_ppm().is_some());
+    assert!(timeline.first_audio_ms().is_some());
 }
 
 #[test]
