@@ -6,7 +6,7 @@ CREATE TABLE provider (
     id                 TEXT PRIMARY KEY NOT NULL,
     name               TEXT NOT NULL,
     base_url           TEXT NOT NULL,
-    -- Keychain service of the API key; empty for providers that need no key.
+    -- Keychain service of the API key; NULL for providers that need no key.
     key_ref            TEXT,
     -- Last successful read of the provider's model catalogue.
     catalog_fetched_at INTEGER,

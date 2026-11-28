@@ -14,22 +14,29 @@ use trama_core::storage::ModelLimits;
 
 const KEY: &str = "sk-test-0123456789";
 
-/// A client with fast timeouts that records its retry delays instead of sleeping.
+/// A client that records its retry delays instead of sleeping, with timeouts generous
+/// enough for a loaded CI runner.
 fn fast_client(server: &MockServer) -> (Client, Arc<Mutex<Vec<Duration>>>) {
-    client_with(
-        server,
-        ClientConfig {
-            timeout: Duration::from_millis(300),
-            connect_timeout: Duration::from_millis(300),
-            retry: RetryPolicy {
-                max_attempts: 3,
-                base_delay: Duration::from_millis(100),
-                max_delay: Duration::from_secs(1),
-                max_retry_after: Duration::from_secs(60),
-                content_attempts: 3,
-            },
+    client_with(server, config(Duration::from_secs(5)))
+}
+
+/// Like [`fast_client`], with a short timeout, for the tests that delay replies on purpose.
+fn timing_out_client(server: &MockServer) -> (Client, Arc<Mutex<Vec<Duration>>>) {
+    client_with(server, config(Duration::from_millis(300)))
+}
+
+fn config(timeout: Duration) -> ClientConfig {
+    ClientConfig {
+        timeout,
+        connect_timeout: timeout,
+        retry: RetryPolicy {
+            max_attempts: 3,
+            base_delay: Duration::from_millis(100),
+            max_delay: Duration::from_secs(1),
+            max_retry_after: Duration::from_secs(60),
+            content_attempts: 3,
         },
-    )
+    }
 }
 
 fn client_with(server: &MockServer, config: ClientConfig) -> (Client, Arc<Mutex<Vec<Duration>>>) {
@@ -145,7 +152,7 @@ fn a_timeout_is_retried_and_then_reported() {
     for _ in 0..3 {
         server.push(ok("late").delayed(Duration::from_secs(2)));
     }
-    let (client, sleeps) = fast_client(&server);
+    let (client, sleeps) = timing_out_client(&server);
     let err = client.chat(&request(), limits()).unwrap_err();
     assert_eq!(err.kind, ErrorKind::Timeout);
     assert_eq!(err.code(), "timeout");
@@ -159,7 +166,7 @@ fn a_timeout_followed_by_a_reply_succeeds() {
     let server = MockServer::start();
     server.push(ok("late").delayed(Duration::from_secs(2)));
     server.push(ok("on time"));
-    let (client, _) = fast_client(&server);
+    let (client, _) = timing_out_client(&server);
     assert_eq!(
         client.chat(&request(), limits()).unwrap().content,
         "on time"
@@ -237,6 +244,67 @@ fn a_long_retry_after_fails_at_once_for_the_job_to_retry_later() {
     assert!(err.is_retryable());
     assert_eq!(server.requests().len(), 1);
     assert!(sleeps.lock().unwrap().is_empty());
+}
+
+/// Sends one 429 with `name: value` and returns the error and the recorded delays.
+fn rate_limited_once(name: &str, value: &str) -> (Result<(), ErrorKind>, usize, Vec<Duration>) {
+    let server = MockServer::start();
+    server.push(Reply::json(429, "{}").header(name, value));
+    server.push(ok("ok"));
+    let (client, sleeps) = fast_client(&server);
+    let kind = client
+        .chat(&request(), limits())
+        .map(drop)
+        .map_err(|err| err.kind);
+    let sleeps = sleeps.lock().unwrap().clone();
+    (kind, server.requests().len(), sleeps)
+}
+
+#[test]
+fn huge_or_unreadable_waits_fail_at_once_without_panicking() {
+    for (name, value) in [
+        ("retry-after-ms", "1e30"),
+        ("Retry-After", "86400"),
+        ("Retry-After", "1e300"),
+        ("Retry-After", "soon"),
+        ("Retry-After", "-5"),
+    ] {
+        let (kind, requests, sleeps) = rate_limited_once(name, value);
+        assert!(
+            matches!(kind, Err(ErrorKind::RateLimited { retry_after: Some(wait) }) if wait >= Duration::from_secs(86_400)),
+            "{name}: {value} gave {kind:?}"
+        );
+        assert_eq!(requests, 1, "{name}: {value} was retried");
+        assert!(sleeps.is_empty());
+    }
+}
+
+#[test]
+fn retry_after_can_be_an_http_date() {
+    let tomorrow = std::time::SystemTime::now() + Duration::from_secs(86_400);
+    let (kind, requests, _) = rate_limited_once("Retry-After", &httpdate::fmt_http_date(tomorrow));
+    assert!(
+        matches!(kind, Err(ErrorKind::RateLimited { retry_after: Some(wait) }) if wait > Duration::from_secs(80_000)),
+        "{kind:?}"
+    );
+    assert_eq!(requests, 1);
+
+    let soon = std::time::SystemTime::now() + Duration::from_secs(5);
+    let (kind, requests, sleeps) = rate_limited_once("Retry-After", &httpdate::fmt_http_date(soon));
+    assert_eq!(kind, Ok(()), "retried and succeeded");
+    assert_eq!(requests, 2);
+    assert!(sleeps[0] <= Duration::from_secs(5));
+}
+
+#[test]
+fn a_key_cut_by_the_detail_limit_never_leaks_a_prefix() {
+    // The key starts a few characters before the 300-character cut.
+    let body = format!("{}{KEY}", "x".repeat(295));
+    let server = MockServer::start();
+    server.push(Reply::json(401, body));
+    let (client, _) = fast_client(&server);
+    let err = client.chat(&request(), limits()).unwrap_err();
+    assert!(!err.detail.contains(&KEY[..5]), "{}", err.detail);
 }
 
 #[test]

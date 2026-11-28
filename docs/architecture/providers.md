@@ -9,7 +9,9 @@ described in the [data model](data-model.md#provider). The code is in
 ## Providers and models
 
 - A **provider** is any OpenAI-compatible endpoint: a cloud service, a company gateway or
-  a local server. Several can be configured at once.
+  a local server. Several can be configured at once. Its URL must use `https://`; plain
+  `http://` is accepted only for local servers (loopback, private or link-local
+  addresses, `localhost`, `.local` names).
 - Its **API key** lives in the macOS Keychain (service `trama-provider-<provider id>`,
   account `api-key`). The database keeps only the service name. Keys never appear in
   logs or error details: the client removes the key from any text it reports, and its
@@ -33,7 +35,7 @@ translates (`locales/<locale>/providers.ftl`).
 |-----------|----------------------|------|-------------------|
 | No reply within the timeout (120 s per exchange, 10 s to connect) | Retries with backoff | `timeout` | yes |
 | Network, DNS or TLS failure | Retries with backoff | `network` | yes |
-| HTTP 429 | Waits for `Retry-After` (or `retry-after-ms`), else backs off; a wait over 60 s ends the call at once | `rate_limited` | yes |
+| HTTP 429 | Waits for `Retry-After` (seconds or HTTP date) or `retry-after-ms`, else backs off; a wait over 60 s, or a `Retry-After` it can't read, ends the call at once | `rate_limited` | yes |
 | HTTP 5xx | Retries with backoff | `server_error` | yes |
 | HTTP 401, 403 | Stops | `auth_failed` | no |
 | HTTP 404 | Stops | `not_found` | no |

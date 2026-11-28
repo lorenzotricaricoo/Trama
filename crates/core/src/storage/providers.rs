@@ -163,19 +163,56 @@ fn clean_name(name: &str) -> Result<String> {
     Ok(name.to_owned())
 }
 
-/// Checks a base URL and removes trailing slashes.
+/// Checks a base URL and removes trailing slashes. Plain `http://` would send the API key
+/// and the user's text in clear, so it is accepted only for local servers (Ollama, LM
+/// Studio, a gateway on the local network): loopback, private and link-local addresses,
+/// `localhost` and `.local` names. Every other host needs `https://`.
 fn clean_base_url(url: &str) -> Result<String> {
     let url = url.trim().trim_end_matches('/');
-    let rest = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .ok_or(StorageError::Invalid(
+    let (secure, rest) = if let Some(rest) = url.strip_prefix("https://") {
+        (true, rest)
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        (false, rest)
+    } else {
+        return Err(StorageError::Invalid(
             "a provider URL must start with http:// or https://",
-        ))?;
-    if rest.is_empty() || rest.chars().any(char::is_whitespace) {
+        ));
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    if authority.is_empty() || authority.contains('@') || rest.chars().any(char::is_whitespace) {
         return Err(StorageError::Invalid("invalid provider URL"));
     }
+    if !secure && !is_local_host(host_of(authority)) {
+        return Err(StorageError::Invalid(
+            "plain http:// is allowed only for local servers; use https://",
+        ));
+    }
     Ok(url.to_owned())
+}
+
+/// The host of an authority (`host:port`, `[v6]:port`), without brackets or port.
+fn host_of(authority: &str) -> &str {
+    if let Some(v6) = authority.strip_prefix('[') {
+        return v6.split(']').next().unwrap_or_default();
+    }
+    authority
+        .rsplit_once(':')
+        .map_or(authority, |(host, _)| host)
+}
+
+/// Whether a host is this machine or the local network.
+fn is_local_host(host: &str) -> bool {
+    let host = host.to_ascii_lowercase();
+    if host == "localhost" || host.ends_with(".localhost") || host.ends_with(".local") {
+        return true;
+    }
+    match host.parse::<std::net::IpAddr>() {
+        Ok(std::net::IpAddr::V4(ip)) => ip.is_loopback() || ip.is_private() || ip.is_link_local(),
+        Ok(std::net::IpAddr::V6(ip)) => {
+            ip.is_loopback() || ip.is_unique_local() || ip.is_unicast_link_local()
+        }
+        Err(_) => false,
+    }
 }
 
 /// Refuses a limit of zero, which would make every call fail.
@@ -456,6 +493,38 @@ mod tests {
         assert!(clean_base_url("https://").is_err());
         assert!(clean_base_url("https://exa mple.com").is_err());
         assert!(clean_base_url("example.com").is_err());
+        assert!(clean_base_url("https://user@example.com").is_err());
+    }
+
+    #[test]
+    fn plain_http_is_only_for_local_servers() {
+        for url in [
+            "http://localhost:11434/v1",
+            "http://LOCALHOST/v1",
+            "http://127.0.0.1:1234/v1",
+            "http://[::1]:8080/v1",
+            "http://192.168.1.20:8000/v1",
+            "http://10.0.0.5/v1",
+            "http://172.16.3.4/v1",
+            "http://169.254.1.1/v1",
+            "http://[fd00::1]/v1",
+            "http://studio.local:1234/v1",
+        ] {
+            assert!(clean_base_url(url).is_ok(), "{url}");
+        }
+        for url in [
+            "http://api.example.com/v1",
+            "http://8.8.8.8/v1",
+            "http://172.32.0.1/v1",
+            "http://[2001:db8::1]/v1",
+            "http://localhost.example.com/v1",
+        ] {
+            assert!(
+                matches!(clean_base_url(url), Err(StorageError::Invalid(_))),
+                "{url}"
+            );
+        }
+        assert!(clean_base_url("https://api.example.com/v1").is_ok());
     }
 
     #[test]

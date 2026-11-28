@@ -451,11 +451,13 @@ impl Client {
     }
 
     fn snippet(&self, text: &str) -> String {
+        // Redact first: a key straddling the cut would otherwise leak its start.
+        let text = self.redact(text);
         let mut snippet: String = text.chars().take(DETAIL_CHARS).collect();
         if text.chars().nth(DETAIL_CHARS).is_some() {
             snippet.push('…');
         }
-        self.redact(&snippet)
+        snippet
     }
 
     /// Removes the key from text that may echo it (an error page, a URL).
@@ -499,7 +501,10 @@ fn output_budget(
     Ok(wanted.map(|w| w.min(room)))
 }
 
-/// `Retry-After` (seconds) or `retry-after-ms`, when present and sensible.
+/// How long the provider asked to wait: `retry-after-ms`, or `Retry-After` in seconds or
+/// as an HTTP date. Huge values saturate instead of overflowing, so a long wait fails the
+/// call at once (`max_retry_after`); a `Retry-After` that can't be read counts as a long
+/// wait too, rather than as permission to retry at once.
 fn retry_after<B>(response: &Response<B>) -> Option<Duration> {
     let header = |name: &str| {
         response
@@ -512,13 +517,28 @@ fn retry_after<B>(response: &Response<B>) -> Option<Duration> {
         && ms.is_finite()
         && ms >= 0.0
     {
-        return Some(Duration::from_secs_f64(ms / 1000.0));
+        return Some(seconds(ms / 1000.0));
     }
-    // An HTTP date is not parsed: the client falls back to its own backoff.
-    header("retry-after")
-        .and_then(|v| v.parse::<f64>().ok())
-        .filter(|s| s.is_finite() && *s >= 0.0 && *s < 86_400.0)
-        .map(Duration::from_secs_f64)
+    let value = header("retry-after")?;
+    if let Ok(secs) = value.parse::<f64>() {
+        return Some(if secs.is_finite() && secs >= 0.0 {
+            seconds(secs)
+        } else {
+            Duration::MAX
+        });
+    }
+    match httpdate::parse_http_date(value) {
+        Ok(at) => Some(
+            at.duration_since(SystemTime::now())
+                .unwrap_or(Duration::ZERO),
+        ),
+        Err(_) => Some(Duration::MAX),
+    }
+}
+
+/// A non-negative number of seconds as a duration, saturating at [`Duration::MAX`].
+fn seconds(secs: f64) -> Duration {
+    Duration::try_from_secs_f64(secs).unwrap_or(Duration::MAX)
 }
 
 /// Reads a chat completion and checks it.

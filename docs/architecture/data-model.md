@@ -224,8 +224,8 @@ An OpenAI-compatible endpoint for language models
 |-------|---------|
 | `id` | UUIDv7 |
 | `name` | Chosen by the user |
-| `base_url` | Base URL of the API without a trailing slash, for example `https://api.example.com/v1` |
-| `key_ref` | Name of the Keychain item that holds the API key; empty for a provider that needs no key (a local server) |
+| `base_url` | Base URL of the API without a trailing slash, for example `https://api.example.com/v1`. Plain `http://` is accepted only for local servers (loopback, private or link-local addresses, `localhost`, `.local` names), so keys and text never travel in clear |
+| `key_ref` | Name of the Keychain item that holds the API key; `NULL` for a provider that needs no key (a local server) |
 | `catalog_fetched_at` | Last successful read of the model catalogue |
 | `created_at`, `updated_at` | Bookkeeping |
 
