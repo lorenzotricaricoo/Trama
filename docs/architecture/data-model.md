@@ -82,7 +82,7 @@ A meeting or a note (documents arrive in phase 3 as a new kind).
 | `kind` | `meeting` or `note` |
 | `title` | Shown everywhere; empty until a summary or the user gives one |
 | `title_origin` | `auto` (from the summary) or `user`. A user title is never overwritten |
-| `language` | Language of a meeting (BCP 47, for example `it`), chosen in onboarding; it also decides the language of the summary. Empty for notes |
+| `language` | Language of a meeting (BCP 47, for example `it`), from the `meeting.language` setting when the meeting is created; it also decides the language of the summary. Empty for notes |
 | `occurred_at` | When the meeting started, or when the note was created |
 | `created_at`, `updated_at` | Bookkeeping |
 | `deleted_at` | Set while the source is in the trash |
@@ -126,7 +126,7 @@ The recording side of a meeting source.
 | `status` | `recording`, `processing` (transcription and summary), `ready` or `failed` |
 | `duration_ms` | Length of the recording |
 | `audio_deleted_at` | When the audio was removed by the retention rule; empty while it exists |
-| `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording |
+| `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording, or `model_missing` when it could not be transcribed ([transcription](transcription.md#the-background-job)) |
 
 ### Track
 
@@ -178,10 +178,13 @@ model, a better prompt) adds a summary; the newest one is shown.
 |-------|---------|
 | `id` | UUIDv7 |
 | `version_id` | The version that was summarized |
-| `title`, `body`, `key_points` | Generated content; key points are a JSON array of strings |
+| `title`, `body`, `key_points` | Generated content. Key points are a JSON array of objects `{"text": …, "at_ms": …}`, where `at_ms` is the start of the segment where the point is discussed, or `null` when unknown. Plain strings (the first shape of the column) are still read, as points without a time |
 | `language` | Language it was written in (the meeting language) |
-| `model`, `prompt_version` | What produced it, to compare and regenerate |
+| `model`, `prompt_version` | The model id as the provider names it, and the version of the prompts and schemas (for example `summary-v1`), to compare and regenerate |
 | `created_at` | When it was generated |
+
+How summaries are written (long transcripts, prompt versions, errors) is described in
+[AI providers](providers.md#meeting-summaries).
 
 ### Settings
 
@@ -202,6 +205,10 @@ Keychain and the database keeps only a reference.
 Preferences of the app on one Mac (interface language, theme, microphone, global
 shortcut, library location) are not library settings: they live in the
 [app configuration](#app-configuration).
+
+| Key | Meaning |
+|-----|---------|
+| `meeting.language` | Language of new meetings and of their summaries (BCP 47, for example `it`): one language, never detected. `en` until the user chooses one in [Settings](https://github.com/lorenzotricaricoo/Trama/issues/36). A meeting keeps the language it was recorded in (`source.language`); the setting is used only for meetings without one |
 
 ### Job
 
