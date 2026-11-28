@@ -253,16 +253,6 @@ describe('App shell', () => {
     expect(screen.getByText('No results')).toBeInTheDocument();
   });
 
-  it('explains that recording is not available yet', async () => {
-    const { user } = renderApp();
-    await user.click(screen.getByRole('button', { name: 'Record meeting' }));
-    expect(screen.getByRole('status')).toHaveTextContent('Recording is not available yet');
-    await user.click(screen.getByRole('button', { name: 'Close' }));
-    await waitFor(() => expect(screen.getByRole('status')).toBeEmptyDOMElement());
-    await user.keyboard('{Meta>}{Alt>}r{/Alt}{/Meta}');
-    expect(screen.getByRole('status')).toHaveTextContent('Recording is not available yet');
-  });
-
   it('speaks Italian', async () => {
     renderApp('it');
     expect(await title('Benvenuto in Trama')).toBeInTheDocument();

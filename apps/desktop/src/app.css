@@ -1239,3 +1239,500 @@ button {
   align-items: center;
   gap: 5px;
 }
+
+/* ---------- Recording: sidebar button, top bar pill */
+
+.side-rec[data-recording] {
+  background: var(--danger);
+  color: oklch(0.99 0 0);
+}
+
+.side-rec[data-recording] .side-recdot {
+  background: oklch(0.99 0 0);
+  --pulse: oklch(1 0 0 / 0.55);
+  animation: pulse 1.6s var(--e-out) infinite;
+}
+
+.side-rec[data-recording] .kbd {
+  background: oklch(1 0 0 / 0.22);
+}
+
+.side-rec[data-recording] .side-label {
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-live {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--danger);
+  --pulse: oklch(0.66 0.2 25 / 0.6);
+  animation: pulse 1.4s var(--e-out) infinite;
+}
+
+.recpill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 26px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--danger);
+  color: oklch(0.99 0 0);
+  font: 500 12px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  transition: transform var(--d1) var(--e-out);
+}
+
+.recpill .rec-live {
+  width: 8px;
+  height: 8px;
+  background: oklch(0.99 0 0);
+  --pulse: oklch(1 0 0 / 0.6);
+}
+
+.recpill[data-pressed] {
+  transform: scale(0.96);
+}
+
+/* ---------- Recording panel (its own transparent window over the macOS vibrancy) */
+
+.rec-window,
+.rec-window body {
+  background: transparent;
+}
+
+.rec,
+.rec-pill {
+  position: fixed;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--edge);
+  /* Nearly opaque: the panel floats over call windows and must stay readable. */
+  background: var(--pop);
+  color: var(--fink);
+}
+
+.rec {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 16px 18px;
+  border-radius: 16px;
+}
+
+.rec-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.rec-stophint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--fmute);
+  font-size: 11.5px;
+  font-weight: 400;
+}
+
+.rec-clock {
+  font-family: var(--font-mono);
+  font-size: 40px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.rec-lv {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: var(--fmute);
+  font-size: 12px;
+}
+
+/* Segmented meters: the empty segments, then the level clipped over them. */
+.rec-track {
+  height: 8px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 6px, transparent 6px 9px);
+  overflow: hidden;
+}
+
+.rec-level {
+  --fill: 0;
+  height: 100%;
+  background: repeating-linear-gradient(90deg, var(--acc) 0 6px, transparent 6px 9px);
+  clip-path: inset(0 calc((1 - var(--fill)) * 100%) 0 0);
+  transition: clip-path 90ms linear;
+}
+
+.rec-warn {
+  margin: 0;
+  overflow: hidden;
+  color: var(--fink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.rec-warn::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 7px 1px 0;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.rec-input {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 10px 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--fhover);
+  transition:
+    border-color var(--d2),
+    box-shadow var(--d2);
+}
+
+.rec-input:focus-within {
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px var(--acc-soft);
+}
+
+.rec-input[data-failed] {
+  border-color: var(--danger);
+}
+
+.rec-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  background: none;
+  color: var(--fink);
+  font: inherit;
+  user-select: text;
+}
+
+.rec-input input::placeholder {
+  color: var(--fmute);
+}
+
+.rec-notes {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  font-size: 12.5px;
+  scrollbar-width: thin;
+}
+
+.rec-note {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.rec-note-at {
+  color: var(--fmute);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-note-text {
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.rec-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.rec .btn {
+  padding: 0 12px;
+}
+
+.rec-stop {
+  border-color: transparent;
+  background: var(--danger);
+  color: oklch(0.99 0 0);
+  font-weight: 600;
+}
+
+.rec-stop[data-hovered] {
+  background: var(--danger);
+  filter: brightness(1.07);
+}
+
+.rec-stop[data-disabled],
+.rec-pill-stop[data-disabled] {
+  opacity: 0.6;
+}
+
+.rec-stopsq {
+  width: 9px;
+  height: 9px;
+  flex: none;
+  border-radius: 2px;
+  background: oklch(0.99 0 0);
+}
+
+/* Reduced: a pill with the timer, to keep out of the way during screen sharing. */
+.rec-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px 0 14px;
+  border-radius: 999px;
+}
+
+.rec-pill-clock {
+  flex: 1;
+  font: 500 15px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.rec-pill-warn {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: oklch(0.99 0 0);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rec-pill-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--fhover);
+  color: var(--fink);
+  font-size: 15px;
+  transition: transform var(--d1) var(--e-out);
+}
+
+.rec-pill-btn[data-pressed] {
+  transform: scale(0.94);
+}
+
+.rec-pill-stop {
+  background: var(--danger);
+}
+
+/* ---------- Meeting page (minimal until #33) */
+
+.mt-title[data-untitled] {
+  color: var(--mute);
+}
+
+.mt-metas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.mt-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.mt-meta {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.mt-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 28px 24px;
+}
+
+.mt-tile {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.mt-th {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mt-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 30px;
+}
+
+.mt-status-text {
+  font-weight: 500;
+}
+
+.mt-status[data-failed] .mt-status-text {
+  flex: 1;
+}
+
+.mt-bar {
+  position: relative;
+  flex: 1;
+  max-width: 260px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.mt-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--acc);
+  transition: width var(--d4) var(--e-out);
+}
+
+.mt-bar[data-indeterminate] .mt-fill {
+  animation: shimmer 1.6s var(--e-io) infinite;
+}
+
+.mt-pct {
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mt-sum {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+  user-select: text;
+}
+
+.mt-kp {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  user-select: text;
+}
+
+.mt-empty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--mute);
+}
+
+.mt-none {
+  margin: 0;
+  color: var(--mute);
+}
+
+.mt-lines {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mt-line {
+  display: grid;
+  grid-template-columns: 50px 56px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+  margin: 0 -8px;
+  padding: 7px 8px;
+  border-radius: 7px;
+  line-height: 1.5;
+}
+
+.mt-line[data-note] {
+  background: var(--acc-soft);
+}
+
+.mt-ts {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mt-me {
+  color: var(--acc-t);
+  font-weight: 600;
+}
+
+.mt-oth {
+  color: var(--mute);
+  font-weight: 600;
+}
+
+.mt-notew {
+  justify-self: start;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.mt-text {
+  user-select: text;
+}
+
+.mt-live {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--danger);
+  --pulse: oklch(0.66 0.2 25 / 0.6);
+  animation: pulse 1.4s var(--e-out) infinite;
+}

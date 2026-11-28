@@ -26,4 +26,6 @@ export { LinkIcon } from '@phosphor-icons/react/dist/csr/Link';
 export { PencilSimpleLineIcon } from '@phosphor-icons/react/dist/csr/PencilSimpleLine';
 export { ColumnsIcon } from '@phosphor-icons/react/dist/csr/Columns';
 export { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
+export { ArrowsOutSimpleIcon } from '@phosphor-icons/react/dist/csr/ArrowsOutSimple';
+export { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 export type { Icon } from '@phosphor-icons/react/dist/lib/types';

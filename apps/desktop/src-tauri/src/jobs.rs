@@ -54,6 +54,7 @@ pub fn event_sink<R: Runtime>(app: AppHandle<R>) -> Arc<dyn trama_core::jobs::Ev
         if let Err(err) = app.emit(JOB_EVENT, JobPayload::new(&event.job, event.progress)) {
             eprintln!("trama: cannot send a job event to the frontend: {err}");
         }
+        crate::recording::on_job(&app, &event.job);
     })
 }
 

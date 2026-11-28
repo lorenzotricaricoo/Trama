@@ -6,10 +6,11 @@ import { useI18n } from '../i18n/I18nProvider';
 import { duration, ease } from '../motion';
 import { listSources, type SourceRow } from '../notes/api';
 import { SHORTCUTS } from '../shell/shortcuts';
-import { NoteIcon, NotePencilIcon, StackIcon } from '../ui/icons';
+import { NoteIcon, NotePencilIcon, StackIcon, WaveformIcon } from '../ui/icons';
 
 interface SourcesScreenProps {
   onOpenNote: (noteId: string) => void;
+  onOpenMeeting: (meetingId: string) => void;
   onNewNote: () => void;
 }
 
@@ -20,11 +21,10 @@ const rise: Variants = {
 };
 
 /**
- * Sources, kept minimal until the full list with filters and search (#35): the notes,
- * newest first, each opening in the editor, and a way to write a new one. Meetings join the
- * list when recording ships.
+ * Sources, kept minimal until the full list with filters and search (#35): meetings and
+ * notes, newest first, each opening its page, and a way to write a new note.
  */
-export function SourcesScreen({ onOpenNote, onNewNote }: SourcesScreenProps) {
+export function SourcesScreen({ onOpenNote, onOpenMeeting, onNewNote }: SourcesScreenProps) {
   const { t, locale } = useI18n();
   // Outside the app (a plain browser) there is no core to ask.
   const [rows, setRows] = useState<SourceRow[] | null>(() => (isTauri() ? null : []));
@@ -37,7 +37,7 @@ export function SourcesScreen({ onOpenNote, onNewNote }: SourcesScreenProps) {
     if (!isTauri()) return;
     let active = true;
     // The first page is enough until the full list (#35) pages through the rest.
-    listSources({ kind: 'note' })
+    listSources()
       .then((page) => {
         if (active) setRows(page.sources);
       })
@@ -84,17 +84,30 @@ export function SourcesScreen({ onOpenNote, onNewNote }: SourcesScreenProps) {
             className="src-list"
             aria-label={t('sources-list-label')}
             items={rows}
-            onAction={(key) => onOpenNote(String(key))}
+            onAction={(key) => {
+              const row = rows.find((candidate) => candidate.id === key);
+              if (row?.kind === 'meeting') onOpenMeeting(row.id);
+              else if (row) onOpenNote(row.id);
+            }}
           >
             {(row) => {
-              const name = row.title || row.preview || t('note-untitled');
+              const meeting = row.kind === 'meeting';
+              const name =
+                row.title ||
+                row.preview ||
+                (meeting
+                  ? t('meeting-untitled', { date: date.format(row.occurredAt) })
+                  : t('note-untitled'));
+              const Icon = meeting ? WaveformIcon : NoteIcon;
               return (
                 <GridListItem id={row.id} className="src-row" textValue={name}>
-                  <NoteIcon className="src-ic" aria-hidden />
+                  <Icon className="src-ic" aria-hidden />
                   <span className="src-name" data-untitled={!row.title && !row.preview}>
                     {name}
                   </span>
-                  <span className="src-kind">{t('source-kind-note')}</span>
+                  <span className="src-kind">
+                    {meeting ? t('source-kind-meeting') : t('source-kind-note')}
+                  </span>
                   <time className="src-date" dateTime={new Date(row.occurredAt).toISOString()}>
                     {date.format(row.occurredAt)}
                   </time>

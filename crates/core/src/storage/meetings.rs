@@ -122,6 +122,30 @@ impl Library {
         self.meeting(id)
     }
 
+    /// Removes a meeting whose recording never started: still `recording`, with no tracks
+    /// and no transcript. Used when the capture fails to start, so no empty meeting is left
+    /// behind; any other meeting is refused (it goes to the trash instead).
+    pub fn discard_meeting(&mut self, id: Id) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        live_source(&tx, id, SourceKind::Meeting)?;
+        let (status, tracks, versions): (String, i64, i64) = tx.query_row(
+            "SELECT m.status,
+                    (SELECT COUNT(*) FROM track t WHERE t.meeting_id = m.source_id),
+                    (SELECT COUNT(*) FROM source_version v WHERE v.source_id = m.source_id)
+             FROM meeting m WHERE m.source_id = ?1",
+            [id.to_string()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        if status != MeetingStatus::Recording.as_str() || tracks > 0 || versions > 0 {
+            return Err(StorageError::Invalid(
+                "a meeting that started recording can't be discarded",
+            ));
+        }
+        tx.execute("DELETE FROM source WHERE id = ?1", [id.to_string()])?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Records that the audio of a meeting was removed from disk.
     pub fn mark_audio_deleted(&mut self, id: Id) -> Result<Meeting> {
         let now = self.now();

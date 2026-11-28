@@ -79,6 +79,7 @@ vi.mock('@tauri-apps/api/core', () => ({
       }
       case 'quit_ready':
       case 'quit_cancelled':
+      case 'recording_status':
         return Promise.resolve(null);
       default:
         return Promise.reject(new Error(`unexpected command ${cmd}`));
@@ -220,7 +221,9 @@ describe('Notes (flow F3)', () => {
     await type('Last words');
     await quit();
     await waitFor(() => expect(commands('quit_ready')).toHaveLength(1), { timeout: 150 });
-    const order = core.calls.map((call) => call.cmd).filter((cmd) => cmd !== 'active_jobs');
+    const order = core.calls
+      .map((call) => call.cmd)
+      .filter((cmd) => cmd !== 'active_jobs' && cmd !== 'recording_status');
     expect(order).toEqual(['create_note', 'quit_ready']);
   });
 

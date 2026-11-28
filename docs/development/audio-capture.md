@@ -26,8 +26,9 @@ afterwards: recordings never go into the repository or an issue.
 **Permissions belong to the process.** Run from a terminal, the example uses the
 terminal's microphone and System Audio Recording permissions (System Settings → Privacy &
 Security). The checks marked **app** need the signed `Trama.app`
-([macOS signing](macos-signing.md)) and wait for the recording window
-([#31](https://github.com/lorenzotricaricoo/Trama/issues/31)).
+([macOS signing](macos-signing.md)): record with the sidebar button or ⌥⌘R, and find the
+tracks in the app's library (`~/Library/Application Support/io.github.lorenzotricaricoo.trama/Library/audio/<meeting id>`,
+or the folder in `TRAMA_LIBRARY`).
 
 ## Checklist
 
