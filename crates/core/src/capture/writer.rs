@@ -98,6 +98,9 @@ struct TrackWriter {
     /// stream's first buffer overlaps the end of the previous one.
     last_anchor_ns: f64,
     out: Vec<f32>,
+    /// One buffer made contiguous: the ring's wrap point is not frame-aligned for every
+    /// channel count, so its two halves cannot be converted separately.
+    contiguous: Vec<f32>,
     // Levels.
     level_peak: f32,
     level_sum: f64,
@@ -124,6 +127,7 @@ pub(crate) fn run(cfg: WriterConfig, rx: Receiver<WriterMsg>) -> WriterOutcome {
         next_anchor: 0,
         last_anchor_ns: 0.0,
         out: Vec::with_capacity(1 << 15),
+        contiguous: Vec::with_capacity(1 << 15),
         level_peak: 0.0,
         level_sum: 0.0,
         level_frames: 0,
@@ -329,10 +333,12 @@ impl TrackWriter {
                 .read_chunk(wanted)
                 .expect("checked by drain");
             let (a, b) = chunk.as_slices();
-            self.out.clear();
-            seg.converter.process(a, &mut self.out);
-            seg.converter.process(b, &mut self.out);
+            self.contiguous.clear();
+            self.contiguous.extend_from_slice(a);
+            self.contiguous.extend_from_slice(b);
             chunk.commit_all();
+            self.out.clear();
+            seg.converter.process(&self.contiguous, &mut self.out);
             let out = std::mem::take(&mut self.out);
             self.audio(&out);
             self.out = out;

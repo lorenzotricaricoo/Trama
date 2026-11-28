@@ -60,6 +60,8 @@ pub mod error_code {
     pub const NO_INPUT_DEVICE: &str = "no_input_device";
     /// There is no output device to tap.
     pub const NO_OUTPUT_DEVICE: &str = "no_output_device";
+    /// The default device cannot be read, so device changes are not followed for now.
+    pub const DEVICE_WATCH_FAILED: &str = "device_watch_failed";
     /// The chosen device is gone.
     pub const DEVICE_UNAVAILABLE: &str = "device_unavailable";
     /// The device exists but the stream could not be opened.

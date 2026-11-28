@@ -122,6 +122,7 @@ with a 4 s offset: realigned within 0.1 ms over an hour, against 252 ms played n
 | **Device with another format** (Bluetooth HFP at 16 kHz) | The track keeps its format; the writer converts channels and resamples linearly |
 | **Device removed, stream error** | The stream is closed (`TrackInterrupted`), reopened at once and then every second until it works; the gap is padded |
 | **Stream stops delivering** (the aggregate device lost its clock) | After 3 s without buffers, once it has started, the stream is reopened (`stream_stalled`) |
+| **Default device cannot be read** | After three failed checks in a row, `device_watch_failed` is reported once per streak; the current stream keeps recording and changes are followed again when the check works |
 | **Disk too slow** | The ring holds about 20 s; beyond that the audio is lost, padded on the time line and reported as `frames_dropped` |
 | **Disk full, write error** | The track stops writing, keeps what was written readable and reports `write_failed`; the other track goes on |
 
@@ -151,5 +152,6 @@ While recording, a `CaptureObserver` receives:
 - **events**: `DeviceOpened`, `TrackStarted`, `DeviceChanged`, `TrackInterrupted`,
   `TrackProblem` (silence since the start, dropped frames, write errors, size limit).
 
-No problem is silent (principle A4): each is an event during the recording and a code in
+No problem is silent (principle A4): each is an event during the recording, and the
+problems of the files (silence, dropped frames, write errors, size limit) are also codes in
 the `RecordingSummary` at the end.

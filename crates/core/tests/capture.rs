@@ -78,6 +78,8 @@ enum Signal {
     Clicks,
     /// Digital silence, as delivered when access is denied.
     Zeros,
+    /// A different constant on each channel: channel `c` is `(c + 1) / 10`.
+    Channels,
 }
 
 #[derive(Clone)]
@@ -121,6 +123,8 @@ struct FakeState {
     fail_open: HashMap<Source, &'static str>,
     faults: HashMap<Source, FaultReporter>,
     opened: Vec<String>,
+    /// The default device cannot be read.
+    default_fails: bool,
 }
 
 struct FakeBackend {
@@ -155,6 +159,7 @@ impl FakeBackend {
                 fail_open: HashMap::new(),
                 faults: HashMap::new(),
                 opened: Vec::new(),
+                default_fails: false,
             }),
             requests: AtomicU32::new(0),
         })
@@ -265,8 +270,12 @@ fn generate(
         }
         buffer.clear();
         for n in start..start + frames {
+            if device.signal == Signal::Channels {
+                buffer.extend((1..=channels).map(|c| c as f32 / 10.0));
+                continue;
+            }
             let value = match device.signal {
-                Signal::Zeros => 0.0,
+                Signal::Zeros | Signal::Channels => 0.0,
                 Signal::Clicks => {
                     let before = if n == 0 { 0.0 } else { host(n - 1) };
                     let period = CLICK_PERIOD_NS as f64;
@@ -301,6 +310,9 @@ impl CaptureBackend for FakeBackend {
 
     fn default_device(&self, source: Source) -> Result<Option<DeviceInfo>> {
         let state = self.state();
+        if state.default_fails {
+            return Err(CaptureError::new(error_code::DEVICE_UNAVAILABLE, "fake"));
+        }
         Ok(state
             .defaults
             .get(&source)
@@ -466,6 +478,16 @@ impl Setup {
                 Instant::now() < deadline,
                 "{source:?} opened {opened} times"
             );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    /// Waits until the writer has put `frames` frames in the WAV at `path`. The file is
+    /// created when the stream opens, just after `start` returns.
+    fn wait_for_file(&self, path: &Path, frames: u64) {
+        let deadline = Instant::now() + PATIENCE;
+        while wav::inspect(path).map_or(0, |info| info.file_frames) < frames {
+            assert!(Instant::now() < deadline, "the writer did not catch up");
             std::thread::sleep(Duration::from_millis(2));
         }
     }
@@ -1004,11 +1026,7 @@ fn a_crash_loses_only_the_last_writer_pass() {
     // Every buffer up to now was delivered: wait for one writer pass to reach the file.
     let me = s.audio_dir().join("me.wav");
     let delivered = 48_000 * 1_600 / 1_000;
-    let deadline = Instant::now() + PATIENCE;
-    while wav::inspect(&me).unwrap().file_frames < delivered {
-        assert!(Instant::now() < deadline, "the writer did not catch up");
-        std::thread::sleep(Duration::from_millis(5));
-    }
+    s.wait_for_file(&me, delivered);
     // The process dies now: copy the files as they are.
     let crashed = s.dir.path().join("crashed.wav");
     std::fs::copy(&me, &crashed).unwrap();
@@ -1047,4 +1065,72 @@ fn repairs_the_audio_of_an_interrupted_meeting() {
     assert_eq!(repaired.len(), 2);
     assert_eq!(repaired[0].0.file_name().unwrap(), "me.wav");
     assert_eq!(repaired[0].1.header_frames, before.file_frames);
+}
+
+/// The ring buffer holds 2^21 samples, which is not a whole number of 6-channel frames:
+/// a frame read across the wrap must come out whole and in channel order.
+#[test]
+fn keeps_frames_whole_across_the_ring_buffer_wrap() {
+    let mut s = setup();
+    s.options.microphone = false;
+    s.options.channels = 6;
+    s.set_system(|d| {
+        d.format = StreamFormat {
+            sample_rate: 48_000,
+            channels: 6,
+        };
+        d.signal = Signal::Channels;
+    });
+    let recording = s.start().unwrap();
+    // 2^21 / 6 frames is 7.28 s at 48 kHz: more than the ring holds, so let the writer
+    // catch up every second instead of overflowing it on a slow machine.
+    let others = s.audio_dir().join("others.wav");
+    for second in 1..=8u64 {
+        s.run_for(1_000);
+        s.wait_for_file(&others, 48_000 * second);
+    }
+    let (_, summary) = recording_stop(&s, recording);
+    let track = &summary.tracks[0];
+    assert_eq!(track.format.unwrap().channels, 6);
+    assert!(track.frames > (1 << 21) / 6, "{track:?}");
+    let (_, samples) = wav::read(&s.path(&track.audio_path)).unwrap();
+    let expected: Vec<f32> = (1..=6).map(|c| c as f32 / 10.0).collect();
+    let mut audio_frames = 0;
+    for (i, frame) in samples.chunks_exact(6).enumerate() {
+        if frame.iter().all(|&x| x == 0.0) {
+            continue; // padding
+        }
+        assert_eq!(frame, expected.as_slice(), "frame {i}");
+        audio_frames += 1;
+    }
+    assert!(audio_frames > (1 << 21) / 6);
+}
+
+#[test]
+fn warns_when_the_default_device_cannot_be_watched() {
+    let s = setup();
+    let recording = s.start().unwrap();
+    s.backend.state().default_fails = true;
+    s.observer.wait_for("device watch warning", |e| {
+        matches!(
+            e,
+            CaptureEvent::TrackProblem {
+                source: Source::Microphone,
+                code: error_code::DEVICE_WATCH_FAILED,
+                ..
+            }
+        )
+    });
+    s.backend.state().default_fails = false;
+    s.run_for(500);
+    let (_, summary) = recording_stop(&s, recording);
+    // Recording went on; the warning is reported once per track.
+    assert_eq!(summary.tracks[0].segments, 1);
+    let warnings = s
+        .observer
+        .problems(Source::Microphone)
+        .into_iter()
+        .filter(|&p| p == error_code::DEVICE_WATCH_FAILED)
+        .count();
+    assert_eq!(warnings, 1);
 }

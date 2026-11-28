@@ -428,6 +428,9 @@ pub fn repair_meeting_audio(
     Ok(repaired)
 }
 
+/// Consecutive failures to read the default device before warning.
+const WATCH_FAILURES_BEFORE_WARNING: u32 = 3;
+
 struct ActiveTrack {
     _stream: Box<dyn ActiveStream>,
     device: DeviceInfo,
@@ -517,6 +520,7 @@ impl Supervisor {
         let mut last_attempt = Instant::now();
         let mut retry_now = false;
         let mut failure_reported = false;
+        let mut watch_failures = 0u32;
         loop {
             // Disconnected cannot happen: `self.faults_tx` keeps the channel open.
             let fault = self.faults_rx.recv_timeout(step).ok();
@@ -552,16 +556,31 @@ impl Supervisor {
 
             if self.pinned.is_none() && last_poll.elapsed() >= self.tuning.device_poll {
                 last_poll = Instant::now();
-                if let Some(track) = &active
-                    && let Ok(Some(default)) = self.backend.default_device(self.source)
-                    && default.id != track.device.id
-                {
-                    active = None;
-                    self.observer.event(CaptureEvent::DeviceChanged {
-                        source: self.source,
-                        device: default,
-                    });
-                    retry_now = true;
+                match self.backend.default_device(self.source) {
+                    Ok(default) => {
+                        watch_failures = 0;
+                        if let (Some(track), Some(default)) = (&active, default)
+                            && default.id != track.device.id
+                        {
+                            active = None;
+                            self.observer.event(CaptureEvent::DeviceChanged {
+                                source: self.source,
+                                device: default,
+                            });
+                            retry_now = true;
+                        }
+                    }
+                    Err(err) => {
+                        // Once per streak: device changes are not followed meanwhile.
+                        watch_failures += 1;
+                        if watch_failures == WATCH_FAILURES_BEFORE_WARNING {
+                            self.observer.event(CaptureEvent::TrackProblem {
+                                source: self.source,
+                                code: error_code::DEVICE_WATCH_FAILED,
+                                detail: err.to_string(),
+                            });
+                        }
+                    }
                 }
             }
 
