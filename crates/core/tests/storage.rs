@@ -355,6 +355,33 @@ fn summaries_title_the_source_unless_the_user_did() {
 }
 
 #[test]
+fn an_edited_summary_keeps_the_generated_one() {
+    let (_dir, clock, mut library) = library();
+    let (meeting, version) = recorded_meeting(&mut library, &[segment(Role::Me, 0, "ok")]);
+    assert!(matches!(
+        library.edit_summary(meeting.id, "Nothing yet", &[]),
+        Err(StorageError::NotFound { .. })
+    ));
+    let generated = library.add_summary(version.id, &summary("Titolo")).unwrap();
+    clock.advance(MINUTE);
+    let edited = library
+        .edit_summary(meeting.id, "Corretto", &[KeyPoint::at("Uno", 1_500)])
+        .unwrap();
+    assert_eq!(edited.version_id, generated.version_id);
+    assert_eq!(
+        (
+            edited.title.as_str(),
+            edited.body.as_str(),
+            edited.model.as_str()
+        ),
+        ("Titolo", "Corretto", USER_SUMMARY_MODEL)
+    );
+    assert_eq!(edited.language, generated.language);
+    assert_eq!(library.latest_summary(meeting.id).unwrap().unwrap(), edited);
+    assert_eq!(library.source(meeting.id).unwrap().title, "Titolo");
+}
+
+#[test]
 fn key_points_stored_as_plain_text_are_still_read() {
     let (dir, _clock, mut library) = library();
     let (meeting, version) = recorded_meeting(&mut library, &[segment(Role::Me, 0, "ok")]);

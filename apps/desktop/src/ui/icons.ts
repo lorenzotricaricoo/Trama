@@ -50,3 +50,5 @@ export { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
 export { ArrowsOutSimpleIcon } from '@phosphor-icons/react/dist/csr/ArrowsOutSimple';
 export { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 export type { Icon } from '@phosphor-icons/react/dist/lib/types';
+export { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
+export { PauseIcon } from '@phosphor-icons/react/dist/csr/Pause';

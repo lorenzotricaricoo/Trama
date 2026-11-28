@@ -215,6 +215,9 @@ fn start_core<R: Runtime>(
     library_dir: &Path,
 ) -> Result<jobs::Core, Box<dyn std::error::Error>> {
     let library = Library::open(library_dir)?;
+    // The meeting page plays the tracks through the asset protocol, from this library only.
+    app.asset_protocol_scope()
+        .allow_directory(library.root().join(trama_core::storage::AUDIO_DIR), true)?;
     let recovery = library.recovery();
     if !recovery.is_empty() {
         eprintln!("trama: recovered after an unclean stop: {recovery:?}");
@@ -361,6 +364,8 @@ pub fn run() {
             summary::source_summary,
             summary::regenerate_summary,
             summary::set_source_title,
+            summary::edit_summary,
+            meetings::retranscribe,
             notes::create_note,
             notes::save_note,
             notes::get_note,
