@@ -1,5 +1,5 @@
 //! The native menu bar: the standard app, Edit and Window menus, plus the shell commands
-//! (File › New Note, Record Meeting; View › Toggle Sidebar; Go › Home, Sources, Back,
+//! (File › New Note, Import Notes, Record Meeting; View › Toggle Sidebar; Go › Home, Sources, Back,
 //! Command Bar; Trama › Settings).
 //!
 //! The menu does not run the shell commands itself: choosing one sends
@@ -27,6 +27,7 @@ const MAIN_WINDOW: &str = "main";
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ShellCommand {
     NewNote,
+    ImportNotes,
     Record,
     ToggleSidebar,
     Home,
@@ -37,8 +38,9 @@ pub enum ShellCommand {
 }
 
 impl ShellCommand {
-    pub const ALL: [ShellCommand; 8] = [
+    pub const ALL: [ShellCommand; 9] = [
         ShellCommand::NewNote,
+        ShellCommand::ImportNotes,
         ShellCommand::Record,
         ShellCommand::ToggleSidebar,
         ShellCommand::Home,
@@ -52,6 +54,7 @@ impl ShellCommand {
     pub fn id(self) -> &'static str {
         match self {
             ShellCommand::NewNote => "newNote",
+            ShellCommand::ImportNotes => "importNotes",
             ShellCommand::Record => "record",
             ShellCommand::ToggleSidebar => "toggleSidebar",
             ShellCommand::Home => "home",
@@ -70,6 +73,7 @@ impl ShellCommand {
     fn accelerator(self) -> Option<&'static str> {
         match self {
             ShellCommand::NewNote => Some("CmdOrCtrl+N"),
+            ShellCommand::ImportNotes => Some("CmdOrCtrl+O"),
             ShellCommand::Record => Some("Alt+CmdOrCtrl+R"),
             ShellCommand::ToggleSidebar => Some("CmdOrCtrl+\\"),
             ShellCommand::Back => Some("CmdOrCtrl+["),
@@ -83,6 +87,7 @@ impl ShellCommand {
     fn label(self, state: &MenuState) -> &'static str {
         match self {
             ShellCommand::NewNote => "menu-new-note",
+            ShellCommand::ImportNotes => "menu-import-notes",
             ShellCommand::Record if state.recording => "menu-stop-recording",
             ShellCommand::Record => "menu-record-meeting",
             ShellCommand::ToggleSidebar if state.sidebar_collapsed => "menu-show-sidebar",
@@ -270,7 +275,12 @@ fn build<R: Runtime>(
         app,
         l10n.message("menu-file", None),
         true,
-        &[item(ShellCommand::NewNote), item(ShellCommand::Record)],
+        &[
+            item(ShellCommand::NewNote),
+            item(ShellCommand::ImportNotes),
+            &separator()?,
+            item(ShellCommand::Record),
+        ],
     )?;
     let edit_submenu = Submenu::with_items(
         app,
@@ -418,6 +428,7 @@ mod tests {
         assert_eq!(shortcut(ShellCommand::CommandBar), Some("CmdOrCtrl+K"));
         assert_eq!(shortcut(ShellCommand::Record), Some("Alt+CmdOrCtrl+R"));
         assert_eq!(shortcut(ShellCommand::NewNote), Some("CmdOrCtrl+N"));
+        assert_eq!(shortcut(ShellCommand::ImportNotes), Some("CmdOrCtrl+O"));
         assert_eq!(shortcut(ShellCommand::Home), None);
         assert_eq!(shortcut(ShellCommand::Sources), None);
     }

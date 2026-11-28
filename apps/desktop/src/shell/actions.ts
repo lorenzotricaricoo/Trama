@@ -11,6 +11,7 @@ export type ActionId = ShortcutId | 'home' | 'sources';
 
 export const ACTION_IDS: readonly ActionId[] = [
   'newNote',
+  'importNotes',
   'record',
   'toggleSidebar',
   'home',
@@ -25,6 +26,7 @@ export const COMMAND_BAR_ACTIONS: readonly ActionId[] = [
   'commandBar',
   'settings',
   'newNote',
+  'importNotes',
   'home',
   'sources',
 ];

@@ -103,7 +103,7 @@ describe('enabledActions', () => {
 
   it('keeps only the command bar actions while it is open', () => {
     expect(enabledActions({ commandBarOpen: true, canGoBack: true }).sort()).toEqual(
-      ['commandBar', 'home', 'newNote', 'settings', 'sources'].sort(),
+      ['commandBar', 'home', 'importNotes', 'newNote', 'settings', 'sources'].sort(),
     );
   });
 });

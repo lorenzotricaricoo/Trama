@@ -83,7 +83,7 @@ A meeting or a note (documents arrive in phase 3 as a new kind).
 | `title` | Shown everywhere; empty until a summary or the user gives one |
 | `title_origin` | `auto` (from the summary) or `user`. A user title is never overwritten |
 | `language` | Language of a meeting (BCP 47, for example `it`), from the `meeting.language` setting when the meeting is created; it also decides the language of the summary. Empty for notes |
-| `occurred_at` | When the meeting started, or when the note was created |
+| `occurred_at` | When the meeting started, or when the note was created; for a note imported from a file, when the file was last modified |
 | `created_at`, `updated_at` | Bookkeeping |
 | `deleted_at` | Set while the source is in the trash |
 
@@ -115,6 +115,13 @@ place, which is **sealed** when either:
 - the curator (phase 2) reads the note, so what it cites can no longer change.
 
 The database refuses changes to a sealed version.
+
+**Imported notes** come from Markdown files (dropped on the window or chosen with ⌘O):
+the title is the file name without the extension, the text is the file as it is, and
+the first version is sealed at once, so the imported text stays in the history once the
+note is edited. A file is skipped, with the reason shown to the user, when it is not
+Markdown, not UTF-8 text, larger than 2 MB, or matches a note with the same title and
+current text (the same file imported again).
 
 ### Meeting
 

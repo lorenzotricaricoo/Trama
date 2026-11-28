@@ -6,6 +6,21 @@ import { afterEach, vi } from 'vitest';
 const MAC_PLATFORM = 'MacIntel';
 Object.defineProperty(navigator, 'platform', { configurable: true, value: MAC_PLATFORM });
 
+// The window's drag and drop: tests drive it through `webview.drag`.
+vi.mock('@tauri-apps/api/webview', async () => {
+  const { webview } = await import('./webview');
+  return {
+    getCurrentWebview: () => ({
+      onDragDropEvent: (handler: NonNullable<typeof webview.handler>) => {
+        webview.handler = handler;
+        return Promise.resolve(() => {
+          if (webview.handler === handler) webview.handler = undefined;
+        });
+      },
+    }),
+  };
+});
+
 afterEach(() => {
   cleanup();
   document.documentElement.className = '';

@@ -11,6 +11,15 @@ interface NoticeValue {
 }
 
 const VISIBLE_MS = 4200;
+/** Longer messages (an import listing skipped files) stay longer, up to this. */
+const MAX_VISIBLE_MS = 12_000;
+/** Extra time per character beyond the first 80, about a reading pace. */
+const MS_PER_CHAR = 45;
+
+/** How long a message stays on screen. */
+export function visibleMs(text: string): number {
+  return Math.min(MAX_VISIBLE_MS, VISIBLE_MS + Math.max(0, text.length - 80) * MS_PER_CHAR);
+}
 
 /** A short message at the bottom of the sheet that goes away by itself. */
 export function useNotice() {
@@ -22,7 +31,7 @@ export function useNotice() {
 
   useEffect(() => {
     if (!notice) return;
-    const timer = setTimeout(() => setNotice(null), VISIBLE_MS);
+    const timer = setTimeout(() => setNotice(null), visibleMs(notice.text));
     return () => clearTimeout(timer);
   }, [notice]);
 

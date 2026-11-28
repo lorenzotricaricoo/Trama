@@ -12,6 +12,8 @@ import { useSourceFormat } from './sources';
 
 interface HomeScreenProps {
   jobs: readonly Job[];
+  /** Changes when sources arrive from outside the screen (an import): read them again. */
+  revision?: number;
   onOpenNote: (noteId: string) => void;
   onOpenMeeting: (meetingId: string) => void;
   onSources: () => void;
@@ -38,6 +40,7 @@ function activeJob(jobs: readonly Job[]): Job | undefined {
  */
 export function HomeScreen({
   jobs,
+  revision = 0,
   onOpenNote,
   onOpenMeeting,
   onSources,
@@ -80,7 +83,7 @@ export function HomeScreen({
     return () => {
       active = false;
     };
-  }, [jobsKey]);
+  }, [jobsKey, revision]);
 
   const job = activeJob(jobs);
   const jobTarget = job && meetings?.find((row) => row.id === job.targetId);

@@ -25,6 +25,7 @@ menu-view = View
 menu-go = Go
 menu-settings = Settings…
 menu-new-note = New Note
+menu-import-notes = Import Notes…
 menu-record-meeting = Record Meeting
 menu-stop-recording = Stop Recording
 menu-show-sidebar = Show Sidebar

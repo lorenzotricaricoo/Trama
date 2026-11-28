@@ -14,17 +14,21 @@ export function Screen({
   nav,
   jobs,
   onNotice,
+  revision = 0,
 }: {
   id: ScreenId;
   nav: Navigation;
   jobs: readonly Job[];
   onNotice: (message: string) => void;
+  /** Changes when sources arrive from outside the screen (an import): lists read again. */
+  revision?: number;
 }) {
   switch (id) {
     case 'home':
       return (
         <HomeScreen
           jobs={jobs}
+          revision={revision}
           onOpenNote={(noteId) => nav.navigate('note', noteId)}
           onOpenMeeting={(meetingId) => nav.navigate('meeting', meetingId)}
           onSources={() => nav.navigate('sources')}
@@ -35,6 +39,7 @@ export function Screen({
       return (
         <SourcesScreen
           jobs={jobs}
+          revision={revision}
           onOpenNote={(noteId) => nav.navigate('note', noteId)}
           onOpenMeeting={(meetingId, atMs) => nav.navigate('meeting', meetingId, atMs)}
           onNewNote={() => nav.navigate('note')}

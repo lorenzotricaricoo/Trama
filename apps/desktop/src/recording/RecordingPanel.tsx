@@ -143,6 +143,7 @@ export function RecordingPanel() {
       settings: noop,
       back: noop,
       newNote: noop,
+      importNotes: noop,
     },
     ['record'],
   );

@@ -37,6 +37,8 @@ import { Highlighted, plainExcerpt, useSourceFormat } from './sources';
 
 interface SourcesScreenProps {
   jobs: readonly Job[];
+  /** Changes when sources arrive from outside the screen (an import): read them again. */
+  revision?: number;
   onOpenNote: (noteId: string) => void;
   /** Opens a meeting, at a moment when a search hit points to one. */
   onOpenMeeting: (meetingId: string, atMs?: number) => void;
@@ -81,7 +83,13 @@ function StatusChip({ row }: { row: SourceRow }) {
  * Sources (flow F4): meetings and notes, newest first, with a filter by kind and a full-text
  * search. A search hit in a meeting opens it at the minute the words were said.
  */
-export function SourcesScreen({ jobs, onOpenNote, onOpenMeeting, onNewNote }: SourcesScreenProps) {
+export function SourcesScreen({
+  jobs,
+  revision = 0,
+  onOpenNote,
+  onOpenMeeting,
+  onNewNote,
+}: SourcesScreenProps) {
   const { t } = useI18n();
   const format = useSourceFormat();
   const [filter, setFilter] = useState<Filter>('all');
@@ -119,7 +127,7 @@ export function SourcesScreen({ jobs, onOpenNote, onOpenMeeting, onNewNote }: So
     return () => {
       active = false;
     };
-  }, [kind, jobsKey]);
+  }, [kind, jobsKey, revision]);
 
   // The search reads every kind: the filter and its counts work on the results.
   useEffect(() => {
@@ -139,7 +147,7 @@ export function SourcesScreen({ jobs, onOpenNote, onOpenMeeting, onNewNote }: So
       active = false;
       window.clearTimeout(timer);
     };
-  }, [words, jobsKey]);
+  }, [words, jobsKey, revision]);
 
   const loadMore = () => {
     if (!next || loadingMore) return;

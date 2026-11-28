@@ -341,6 +341,55 @@ impl Library {
         load_source(&self.conn, id)
     }
 
+    /// Imports a note written elsewhere: `title` from the file name, `body` exactly as in
+    /// the file, `occurred_at` the file's modification date. The first version is sealed
+    /// at once, so the imported text stays in the history once the note is edited.
+    ///
+    /// A live note with the same title and the same current text is the same file
+    /// imported again: nothing is stored and `None` is returned.
+    pub fn import_note(
+        &mut self,
+        title: &str,
+        body: &str,
+        occurred_at: Timestamp,
+    ) -> Result<Option<Source>> {
+        let now = self.now();
+        let tx = self.conn.transaction()?;
+        let existing: Option<String> = tx
+            .query_row(
+                "SELECT s.id FROM source s
+                 JOIN source_version v ON v.source_id = s.id
+                     AND v.number = (SELECT MAX(number) FROM source_version WHERE source_id = s.id)
+                 WHERE s.kind = 'note' AND s.deleted_at IS NULL AND s.title = ?1 AND v.body = ?2
+                 LIMIT 1",
+                params![title, body],
+                |row| row.get(0),
+            )
+            .optional()?;
+        if existing.is_some() {
+            return Ok(None);
+        }
+        let id = new_id();
+        let origin = if title.is_empty() {
+            TitleOrigin::Auto
+        } else {
+            TitleOrigin::User
+        };
+        tx.execute(
+            "INSERT INTO source (id, kind, title, title_origin, occurred_at, created_at, updated_at)
+             VALUES (?1, 'note', ?2, ?3, ?4, ?5, ?5)",
+            params![id.to_string(), title, origin.as_str(), occurred_at, now],
+        )?;
+        tx.execute(
+            "INSERT INTO source_version
+                 (id, source_id, number, origin, body, created_at, edited_at, sealed_at)
+             VALUES (?1, ?2, 1, 'editor', ?3, ?4, ?4, ?4)",
+            params![new_id().to_string(), id.to_string(), body, now],
+        )?;
+        tx.commit()?;
+        load_source(&self.conn, id).map(Some)
+    }
+
     /// Saves the text of a note (autosave). Edits within [`NOTE_VERSION_PAUSE_MS`] of the
     /// previous one update the open version; after a longer pause, or once the version is
     /// sealed, the text starts a new version. Returns the version holding the text.
