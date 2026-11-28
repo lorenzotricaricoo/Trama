@@ -51,6 +51,9 @@ pub mod error_code {
     pub const STORAGE: &str = "storage";
     /// The month's spend reached the budget and the user chose to refuse calls past it.
     pub const BUDGET_EXCEEDED: &str = "budget_exceeded";
+    /// The provider's URL moved to another origin: its stored key is never sent there, so
+    /// a new key must come with the new URL.
+    pub const KEY_REQUIRED_FOR_NEW_URL: &str = "key_required_for_new_url";
 
     /// Every code, for the translation tests.
     pub const ALL: &[&str] = &[
@@ -75,6 +78,7 @@ pub mod error_code {
         KEYCHAIN,
         STORAGE,
         BUDGET_EXCEEDED,
+        KEY_REQUIRED_FOR_NEW_URL,
     ];
 }
 
@@ -110,6 +114,7 @@ pub enum ErrorKind {
     Keychain,
     Storage,
     BudgetExceeded,
+    KeyRequiredForNewUrl,
 }
 
 /// A failed provider call (principle A4: surfaced with a code, never silent).
@@ -154,6 +159,7 @@ impl ProviderError {
             ErrorKind::Keychain => KEYCHAIN,
             ErrorKind::Storage => STORAGE,
             ErrorKind::BudgetExceeded => BUDGET_EXCEEDED,
+            ErrorKind::KeyRequiredForNewUrl => KEY_REQUIRED_FOR_NEW_URL,
         }
     }
 

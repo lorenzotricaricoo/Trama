@@ -15,7 +15,9 @@ described in the [data model](data-model.md#provider). The code is in
 - Its **API key** lives in the macOS Keychain (service `trama-provider-<provider id>`,
   account `api-key`). The database keeps only the service name. Keys never appear in
   logs or error details: the client removes the key from any text it reports, and its
-  debug output hides it.
+  debug output hides it. A key belongs to the origin (scheme, host and port) it was
+  entered for: changing the URL to another origin needs a new key in the same change
+  (`key_required_for_new_url`), so a stored key is never sent to another server.
 - The **model catalogue** is read with `GET /models`. Limits (context window, longest
   reply) come from the catalogue when the provider exposes them; otherwise the user sets
   them by hand. A model whose context window is unknown can't be used for a task.

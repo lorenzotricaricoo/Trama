@@ -32,7 +32,7 @@ use crate::i18n::Catalog;
 use crate::jobs::{SharedLibrary, lock};
 use crate::storage::{
     Id, Library, ModelLimits, ModelTask, NewProvider, Provider, ProviderModel, StorageError,
-    UsageRecord,
+    UsageRecord, url_origin,
 };
 
 /// Messages for the provider error codes, one catalog per supported locale.
@@ -68,6 +68,41 @@ pub fn add_provider(
     {
         // Don't leave a provider whose key could not be stored.
         library.remove_provider(provider.id)?;
+        return Err(err);
+    }
+    Ok(provider)
+}
+
+/// Renames a provider, changes its URL and, if `key` is given, replaces its API key.
+///
+/// A key belongs to the origin (scheme, host and port) it was entered for: when the new URL
+/// has another origin, a provider that needs a key must get a new one in the same call,
+/// otherwise the change is refused with `key_required_for_new_url` and nothing changes.
+/// The stored key is never sent to a different server.
+pub fn update_provider(
+    library: &mut Library,
+    secrets: &dyn SecretStore,
+    id: Id,
+    name: &str,
+    base_url: &str,
+    key: Option<&Secret>,
+) -> Result<Provider, ProviderError> {
+    let old = library.provider(id)?;
+    let moved = url_origin(&old.base_url) != url_origin(base_url);
+    if moved && old.key_ref.is_some() && key.is_none() {
+        return Err(ProviderError::new(
+            ErrorKind::KeyRequiredForNewUrl,
+            format!("provider {id} moved to another origin without a new key"),
+        ));
+    }
+    let provider = library.update_provider(id, name, base_url)?;
+    if let Some(key) = key
+        && let Err(err) = set_api_key(secrets, &provider, key)
+    {
+        if moved {
+            // The old key must not follow the provider to the new origin.
+            library.update_provider(id, &old.name, &old.base_url)?;
+        }
         return Err(err);
     }
     Ok(provider)

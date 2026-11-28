@@ -266,6 +266,24 @@ fn base_url_error(url: &str) -> std::result::Result<String, &'static str> {
     Ok(url.to_owned())
 }
 
+/// The origin of a provider URL: scheme, host (lowercase) and port, with the default port
+/// written out, for example `https://api.example.com:443`. `None` for a URL a provider
+/// can't have. An API key belongs to one origin and is never sent to another.
+pub fn url_origin(url: &str) -> Option<String> {
+    let url = base_url_error(url).ok()?;
+    let (scheme, rest) = url.split_once("://")?;
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host = host_of(authority).to_ascii_lowercase();
+    let port = match authority.strip_prefix('[') {
+        Some(v6) => v6.split_once("]:").map(|(_, port)| port),
+        None => authority.rsplit_once(':').map(|(_, port)| port),
+    }
+    .filter(|port| !port.is_empty())
+    .map(str::to_owned)
+    .unwrap_or_else(|| if scheme == "https" { "443" } else { "80" }.to_owned());
+    Some(format!("{scheme}://{host}:{port}"))
+}
+
 /// The host of an authority (`host:port`, `[v6]:port`), without brackets or port.
 fn host_of(authority: &str) -> &str {
     if let Some(v6) = authority.strip_prefix('[') {
@@ -376,7 +394,9 @@ impl Library {
     }
 
     /// Renames a provider or changes its URL. The model catalogue is kept: read it again
-    /// if the URL now points elsewhere.
+    /// if the URL now points elsewhere. The Keychain key is not touched: clients use
+    /// [`crate::providers::update_provider`], which refuses to keep a key when the URL moves
+    /// to another origin.
     pub fn update_provider(&mut self, id: Id, name: &str, base_url: &str) -> Result<Provider> {
         let name = clean_name(name)?;
         let base_url = clean_base_url(base_url)?;
@@ -686,6 +706,30 @@ mod tests {
                 max_output_tokens: Some(20),
             }
         );
+    }
+
+    #[test]
+    fn origins_ignore_the_path_and_spell_the_port() {
+        let origin = |url| url_origin(url).unwrap();
+        assert_eq!(
+            origin("https://API.example.com/v1"),
+            "https://api.example.com:443"
+        );
+        assert_eq!(
+            origin("https://api.example.com/v1"),
+            origin("https://api.example.com:443/v2/")
+        );
+        assert_ne!(
+            origin("https://api.example.com/v1"),
+            origin("https://api.example.com:8443/v1")
+        );
+        assert_ne!(
+            origin("https://api.example.com"),
+            origin("https://evil.example.com")
+        );
+        assert_eq!(origin("http://[::1]:8080/v1"), "http://::1:8080");
+        assert_eq!(origin("http://localhost/v1"), "http://localhost:80");
+        assert_eq!(url_origin("ftp://example.com"), None);
     }
 
     #[test]

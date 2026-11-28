@@ -194,7 +194,9 @@ pub async fn add_provider(app: AppHandle, input: ProviderInput) -> Result<Provid
     .await
 }
 
-/// Renames a provider, changes its URL and, if one is typed, replaces its key.
+/// Renames a provider, changes its URL and, if one is typed, replaces its key. A URL on
+/// another origin needs a new key (`key_required_for_new_url`): the stored key is never
+/// sent to a server it wasn't entered for.
 #[tauri::command]
 pub async fn update_provider(
     app: AppHandle,
@@ -209,13 +211,16 @@ pub async fn update_provider(
         let provider = {
             let core = app.state::<Core>();
             let mut library = lock(&core.library);
-            library
-                .update_provider(id, &input.name, &input.base_url)
-                .map_err(storage_code)?
+            providers::update_provider(
+                &mut library,
+                &Keychain,
+                id,
+                &input.name,
+                &input.base_url,
+                input.secret().as_ref(),
+            )
+            .map_err(provider_code)?
         };
-        if let Some(key) = input.secret() {
-            providers::set_api_key(&Keychain, &provider, &key).map_err(provider_code)?;
-        }
         provider_payload(app, &provider)
     })
     .await
