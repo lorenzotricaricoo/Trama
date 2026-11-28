@@ -136,7 +136,7 @@ One audio track of a meeting: the user's microphone and the other participants
 | `meeting_id` | The meeting |
 | `role` | `me` or `others`; one track per role |
 | `audio_path` | Relative to the library, for example `audio/<meeting id>/me.wav` |
-| `timing_path` | Optional file that aligns the two tracks |
+| `timing_path` | Optional file that aligns the two tracks ([timing sidecar](audio-capture.md#timing-sidecar)) |
 | `device` | Name of the input device, for diagnostics |
 
 ### Transcript segment

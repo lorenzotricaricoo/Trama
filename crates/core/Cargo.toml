@@ -13,6 +13,7 @@ fluent-langneg = "0.13"
 fs4 = "1.1"
 httpdate = "1"
 rusqlite = { version = "0.43", features = ["bundled"] }
+rtrb = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -23,7 +24,21 @@ ureq = { version = "3.5", default-features = false, features = ["rustls", "platf
 uuid = { version = "1.29", features = ["v7"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6"
+cpal = "0.18"
+objc2 = "0.6"
+objc2-av-foundation = { version = "0.3", default-features = false, features = ["std", "block2", "AVCaptureDevice", "AVMediaFormat"] }
+objc2-core-audio = "0.3"
+objc2-core-audio-types = "0.3"
+objc2-core-foundation = "0.3"
+objc2-foundation = "0.3"
+screencapturekit = { version = "12", optional = true }
 security-framework = "3.7"
+
+[features]
+# ScreenCaptureKit fallback for system audio, used only when the Core Audio process tap
+# cannot be created. Off by default: it links a Swift bridge (see build.rs).
+screencapturekit = ["dep:screencapturekit"]
 
 [lints]
 workspace = true
