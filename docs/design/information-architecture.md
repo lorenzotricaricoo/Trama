@@ -68,7 +68,7 @@ Always available:
 | **Note** | Markdown editor with automatic saving | 1 |
 | **Recording window** | Small floating window: timer, levels of the two tracks, a field for notes pinned to the current minute, stop | 1 |
 | **Menu bar** | See *Navigation* | 1 |
-| **First launch** | Microphone and system audio permissions, provider, transcription model download | 1 |
+| **First launch** | Meeting language, microphone and system audio permissions, provider, transcription model download, menu bar and shortcut. See *First launch* below | 1 |
 | **Settings** | Providers and models, transcription, recording, data and privacy, Claude (MCP), general | 1 |
 | **Project page** | Goal, decisions, actions, requirements and open questions, each with citations; people, sources, timeline; history; "copy brief" | 2 |
 | **Person page** | Role, projects, actions, where the person is mentioned | 2 |
@@ -79,7 +79,7 @@ Always available:
 
 | # | Flow | Phase | Steps |
 |---|------|-------|-------|
-| F1 | **First launch** | 1 | Microphone and system audio permissions → provider setup → transcription model download → ready. Every step can be postponed |
+| F1 | **First launch** | 1 | Welcome and accent → meeting language → microphone and system audio permissions → provider setup → transcription model download → menu bar, shortcut and opening at login → ready. Every step can be postponed |
 | F2 | **Record a meeting** | 1 | "Record" from the sidebar, the menu bar or the global shortcut → recording window (timer, levels, notes) → stop → local transcription (progress in the menu bar) → automatic summary and title → audio handled according to the retention setting → "Meeting ready" notification → meeting page |
 | F3 | **Write a note** | 1 | ⌘N → editor → automatic saving |
 | F4 | **Review a meeting** | 1 | Home or Sources → meeting → summary and transcript |
@@ -89,6 +89,26 @@ Always available:
 | F8 | **Ask a question** | 3 | Chat → answer with citations → click → the source |
 | F9 | **Import a document** | 3 | Drag the file onto the window or the Dock icon → processing → the document appears in Sources |
 | F10 | **Connect Claude** | 3 | Settings → "Connect to Claude" → MCP configuration to copy, or installed automatically |
+
+## First launch
+
+The onboarding (flow F1) fills the window: the steps sit on the glass frame like the
+sidebar, the current step on the sheet. Every step has *Not now*, and *Skip setup* leaves at
+any time.
+
+- **Who sees it.** Only a new install: at the first start, when `settings.json` does not
+  exist and the library has no database, the app stores `"onboarding": "welcome"` in
+  `settings.json`. An install made before the onboarding has no such key and never sees
+  it, so an existing library is not greeted as new.
+- **Resuming.** Each step reached is stored, and the next start resumes there until the
+  onboarding is finished or skipped (`"done"`). ⌘K › *Set up Trama* opens it again.
+- **Permissions.** Nothing is asked until the user clicks: *Allow microphone* shows the
+  macOS prompt, *Allow system audio* runs the inaudible probe, which makes macOS ask the
+  first time. A refusal links to the right pane of System Settings.
+- **What is left for later** is explained where it matters: the last step lists it with a
+  way back, Home shows a reminder (until it is set up or hidden), and starting a recording
+  without the transcription model says that the meeting will be transcribed once the
+  model is downloaded.
 
 ## Audio retention
 

@@ -39,7 +39,6 @@ type Saved = Pick<AppSettings, 'theme' | 'accent' | 'reduceTransparency' | 'redu
 export function AppearanceSection({ app, onApp }: Props) {
   const { t } = useI18n();
   const [themeError, setThemeError] = useState<string | null>(null);
-  const [accentError, setAccentError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
   const systemTransparency = useSystemReducedTransparency();
   const systemMotion = useSystemReducedMotion();
@@ -66,8 +65,6 @@ export function AppearanceSection({ app, onApp }: Props) {
 
   const chooseTheme = (theme: Theme) =>
     void change({ theme }, () => api.setAppearance(theme, app.accent), setThemeError);
-  const chooseAccent = (accent: Accent) =>
-    void change({ accent }, () => api.setAppearance(app.theme, accent), setAccentError);
 
   return (
     <>
@@ -93,35 +90,7 @@ export function AppearanceSection({ app, onApp }: Props) {
       </Group>
 
       <Group title={t('settings-accent')} description={t('settings-accent-desc')}>
-        <RadioGroup
-          className="set-accents"
-          orientation="horizontal"
-          aria-label={t('settings-accent')}
-          value={app.accent}
-          onChange={(value) => chooseAccent(value as Accent)}
-        >
-          {ACCENTS.map((accent) => (
-            <Radio key={accent} value={accent} className={`set-accent acc-${accent}`}>
-              {({ isSelected }) => (
-                <>
-                  <span className="set-swatch" aria-hidden>
-                    {isSelected && <CheckIcon weight="bold" />}
-                  </span>
-                  <span className="set-accent-name">{t(`settings-accent-${accent}`)}</span>
-                </>
-              )}
-            </Radio>
-          ))}
-        </RadioGroup>
-        <div className="set-preview" aria-hidden>
-          <span className="set-preview-btn">{t('record-meeting')}</span>
-          <span className="set-preview-badge">5</span>
-          <span className="set-preview-bar">
-            <span />
-          </span>
-          <span className="set-preview-label">{t('settings-accent-preview')}</span>
-        </div>
-        <ErrorText code={accentError} />
+        <AccentPicker app={app} onApp={onApp} />
       </Group>
 
       <Group title={t('settings-group-accessibility')}>
@@ -155,6 +124,66 @@ export function AppearanceSection({ app, onApp }: Props) {
         />
         <ErrorText code={accessError} />
       </Group>
+    </>
+  );
+}
+
+/**
+ * The accent colours with a preview of the accent on a button, a badge and a bar. The change
+ * shows at once and is put back if it can't be saved.
+ */
+export function AccentPicker({ app, onApp, preview = true }: Props & { preview?: boolean }) {
+  const { t } = useI18n();
+  const [error, setError] = useState<string | null>(null);
+
+  const chooseAccent = async (accent: Accent) => {
+    const before: Appearance = currentAppearance();
+    const previous = { ...app };
+    setError(null);
+    setAppearance({ accent });
+    onApp({ ...app, accent });
+    try {
+      await api.setAppearance(app.theme, accent);
+    } catch (err) {
+      setAppearance(before);
+      onApp(previous);
+      setError(errorCode(err));
+    }
+  };
+
+  return (
+    <>
+      <RadioGroup
+        className="set-accents"
+        orientation="horizontal"
+        aria-label={t('settings-accent')}
+        value={app.accent}
+        onChange={(value) => void chooseAccent(value as Accent)}
+      >
+        {ACCENTS.map((accent) => (
+          <Radio key={accent} value={accent} className={`set-accent acc-${accent}`}>
+            {({ isSelected }) => (
+              <>
+                <span className="set-swatch" aria-hidden>
+                  {isSelected && <CheckIcon weight="bold" />}
+                </span>
+                <span className="set-accent-name">{t(`settings-accent-${accent}`)}</span>
+              </>
+            )}
+          </Radio>
+        ))}
+      </RadioGroup>
+      {preview && (
+        <div className="set-preview" aria-hidden>
+          <span className="set-preview-btn">{t('record-meeting')}</span>
+          <span className="set-preview-badge">5</span>
+          <span className="set-preview-bar">
+            <span />
+          </span>
+          <span className="set-preview-label">{t('settings-accent-preview')}</span>
+        </div>
+      )}
+      <ErrorText code={error} />
     </>
   );
 }

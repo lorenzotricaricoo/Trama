@@ -42,6 +42,9 @@ pub const ACCENTS: &[&str] = &[
 /// same keys as inside the app.
 pub const DEFAULT_GLOBAL_SHORTCUT: &str = "Alt+Super+KeyR";
 
+/// The onboarding was finished, or skipped: it is not shown again at start.
+pub const ONBOARDING_DONE: &str = "done";
+
 /// Modifiers of a shortcut, in the order they are written.
 const MODIFIERS: &[&str] = &["Control", "Alt", "Shift", "Super"];
 
@@ -66,6 +69,8 @@ pub mod config_error {
     pub const LIBRARY_NOT_WRITABLE: &str = "library_not_writable";
     /// The configuration file could not be written.
     pub const CONFIG_WRITE: &str = "config_write";
+    /// Not an onboarding step name.
+    pub const INVALID_ONBOARDING_STEP: &str = "invalid_onboarding_step";
 
     /// Every code, for the translation tests.
     pub const ALL: &[&str] = &[
@@ -78,6 +83,7 @@ pub mod config_error {
         LIBRARY_SYNCED,
         LIBRARY_NOT_WRITABLE,
         CONFIG_WRITE,
+        INVALID_ONBOARDING_STEP,
     ];
 }
 
@@ -152,6 +158,10 @@ pub struct AppConfig {
     /// Global shortcut to start and stop recording, as `Modifier+…+Code` with
     /// `KeyboardEvent.code` names (for example `Alt+Super+KeyR`).
     pub global_shortcut: String,
+    /// Where the onboarding stands: the step to resume at, or [`ONBOARDING_DONE`]. `None`
+    /// when this file never recorded it, which is the case of every install made before
+    /// the onboarding existed.
+    pub onboarding: Option<String>,
     /// Keys written by another version of Trama, kept as they are.
     other: Map<String, Value>,
 }
@@ -167,6 +177,7 @@ impl Default for AppConfig {
             reduce_motion: false,
             microphone: None,
             global_shortcut: DEFAULT_GLOBAL_SHORTCUT.to_owned(),
+            onboarding: None,
             other: Map::new(),
         }
     }
@@ -180,6 +191,7 @@ const KEY_REDUCE_TRANSPARENCY: &str = "reduceTransparency";
 const KEY_REDUCE_MOTION: &str = "reduceMotion";
 const KEY_MICROPHONE: &str = "microphone";
 const KEY_GLOBAL_SHORTCUT: &str = "globalShortcut";
+const KEY_ONBOARDING: &str = "onboarding";
 const KNOWN_KEYS: &[&str] = &[
     KEY_LIBRARY_DIR,
     KEY_INTERFACE_LANGUAGE,
@@ -189,6 +201,7 @@ const KNOWN_KEYS: &[&str] = &[
     KEY_REDUCE_MOTION,
     KEY_MICROPHONE,
     KEY_GLOBAL_SHORTCUT,
+    KEY_ONBOARDING,
 ];
 
 impl AppConfig {
@@ -278,6 +291,7 @@ impl AppConfig {
             global_shortcut: string(&map, KEY_GLOBAL_SHORTCUT)
                 .filter(|shortcut| is_valid_shortcut(shortcut))
                 .unwrap_or(defaults.global_shortcut),
+            onboarding: string(&map, KEY_ONBOARDING).filter(|step| is_onboarding_step(step)),
             other: Map::new(),
         };
         map.retain(|key, _| !KNOWN_KEYS.contains(&key.as_str()));
@@ -306,6 +320,7 @@ impl AppConfig {
         put(KEY_ACCENT, Some(self.accent.clone()));
         put(KEY_MICROPHONE, self.microphone.clone());
         put(KEY_GLOBAL_SHORTCUT, Some(self.global_shortcut.clone()));
+        put(KEY_ONBOARDING, self.onboarding.clone());
         map.insert(
             KEY_REDUCE_TRANSPARENCY.to_owned(),
             Value::Bool(self.reduce_transparency),
@@ -365,6 +380,22 @@ impl AppConfig {
         self.global_shortcut = shortcut.to_owned();
         Ok(())
     }
+
+    /// Records where the onboarding stands: a step name, or [`ONBOARDING_DONE`].
+    pub fn set_onboarding(&mut self, step: &str) -> Result<(), &'static str> {
+        if !is_onboarding_step(step) {
+            return Err(config_error::INVALID_ONBOARDING_STEP);
+        }
+        self.onboarding = Some(step.to_owned());
+        Ok(())
+    }
+}
+
+/// Whether `step` can name an onboarding step: 1 to 32 lowercase letters or `_`. The
+/// frontend owns the list of steps, so a name an older or newer version wrote is kept
+/// and an unknown one simply starts from the beginning.
+pub fn is_onboarding_step(step: &str) -> bool {
+    (1..=32).contains(&step.len()) && step.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
 }
 
 /// Whether `tag` is one of the interface languages.
@@ -570,9 +601,35 @@ mod tests {
         config.reduce_transparency = true;
         config.reduce_motion = true;
         config.library_dir = Some(PathBuf::from("/Volumes/Data/Trama"));
+        config.set_onboarding("permissions").unwrap();
         config.save(&path).unwrap();
         assert_eq!(AppConfig::load(&path).config, config);
         assert!(!path.with_extension("json.tmp").exists());
+    }
+
+    #[test]
+    fn the_onboarding_step_is_a_short_name() {
+        let mut config = AppConfig::default();
+        assert_eq!(config.onboarding, None);
+        config.set_onboarding(ONBOARDING_DONE).unwrap();
+        config.set_onboarding("system_audio").unwrap();
+        assert_eq!(config.onboarding.as_deref(), Some("system_audio"));
+        for bad in ["", "Done", "step-1", "../x", &"a".repeat(33)] {
+            assert_eq!(
+                config.set_onboarding(bad),
+                Err(config_error::INVALID_ONBOARDING_STEP),
+                "{bad}"
+            );
+        }
+        assert_eq!(config.onboarding.as_deref(), Some("system_audio"));
+        // A stored value that is not a step name counts as never recorded.
+        assert_eq!(AppConfig::parse(r#"{"onboarding":"<b>"}"#).onboarding, None);
+        assert_eq!(
+            AppConfig::parse(r#"{"onboarding":"done"}"#)
+                .onboarding
+                .as_deref(),
+            Some(ONBOARDING_DONE)
+        );
     }
 
     #[test]

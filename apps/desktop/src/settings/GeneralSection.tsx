@@ -21,34 +21,6 @@ interface Props {
 export function GeneralSection({ app, onApp }: Props) {
   const { t, setLocale } = useI18n();
   const [languageError, setLanguageError] = useState<string | null>(null);
-  // Unknown until the login item has been read.
-  const [openAtLogin, setOpenAtLogin] = useState<boolean | null>(null);
-  const [loginError, setLoginError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    api
-      .openAtLogin()
-      .then((enabled) => {
-        if (active) setOpenAtLogin(enabled);
-      })
-      .catch((error: unknown) => {
-        if (active) setLoginError(errorCode(error));
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const changeOpenAtLogin = async (enabled: boolean) => {
-    setLoginError(null);
-    try {
-      await api.setOpenAtLogin(enabled);
-      setOpenAtLogin(enabled);
-    } catch (error) {
-      setLoginError(errorCode(error));
-    }
-  };
 
   // Each interface language is written in itself, so it can be found in any language.
   const options = [
@@ -84,15 +56,54 @@ export function GeneralSection({ app, onApp }: Props) {
         <ErrorText code={languageError} />
       </Group>
       <Group title={t('settings-group-startup')}>
-        <ToggleRow
-          label={t('settings-open-at-login')}
-          description={t('settings-open-at-login-desc')}
-          isSelected={openAtLogin ?? false}
-          isDisabled={openAtLogin === null}
-          onChange={(enabled) => void changeOpenAtLogin(enabled)}
-        />
-        <ErrorText code={loginError} />
+        <OpenAtLoginToggle />
       </Group>
+    </>
+  );
+}
+
+/** Opening at login, straight into the menu bar: the login item as macOS has it now. */
+export function OpenAtLoginToggle() {
+  const { t } = useI18n();
+  // Unknown until the login item has been read.
+  const [openAtLogin, setOpenAtLogin] = useState<boolean | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    api
+      .openAtLogin()
+      .then((enabled) => {
+        if (active) setOpenAtLogin(enabled);
+      })
+      .catch((error: unknown) => {
+        if (active) setLoginError(errorCode(error));
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const changeOpenAtLogin = async (enabled: boolean) => {
+    setLoginError(null);
+    try {
+      await api.setOpenAtLogin(enabled);
+      setOpenAtLogin(enabled);
+    } catch (error) {
+      setLoginError(errorCode(error));
+    }
+  };
+
+  return (
+    <>
+      <ToggleRow
+        label={t('settings-open-at-login')}
+        description={t('settings-open-at-login-desc')}
+        isSelected={openAtLogin ?? false}
+        isDisabled={openAtLogin === null}
+        onChange={(enabled) => void changeOpenAtLogin(enabled)}
+      />
+      <ErrorText code={loginError} />
     </>
   );
 }

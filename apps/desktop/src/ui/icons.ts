@@ -52,3 +52,15 @@ export { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 export type { Icon } from '@phosphor-icons/react/dist/lib/types';
 export { PlayIcon } from '@phosphor-icons/react/dist/csr/Play';
 export { PauseIcon } from '@phosphor-icons/react/dist/csr/Pause';
+// Onboarding
+export { AppWindowIcon } from '@phosphor-icons/react/dist/csr/AppWindow';
+export { ArrowLeftIcon } from '@phosphor-icons/react/dist/csr/ArrowLeft';
+export { ArrowRightIcon } from '@phosphor-icons/react/dist/csr/ArrowRight';
+export { CheckCircleIcon } from '@phosphor-icons/react/dist/csr/CheckCircle';
+export { ClockIcon } from '@phosphor-icons/react/dist/csr/Clock';
+export { HandWavingIcon } from '@phosphor-icons/react/dist/csr/HandWaving';
+export { KeyboardIcon } from '@phosphor-icons/react/dist/csr/Keyboard';
+export { PowerIcon } from '@phosphor-icons/react/dist/csr/Power';
+export { SpeakerHighIcon } from '@phosphor-icons/react/dist/csr/SpeakerHigh';
+export { TranslateIcon } from '@phosphor-icons/react/dist/csr/Translate';
+export { WrenchIcon } from '@phosphor-icons/react/dist/csr/Wrench';

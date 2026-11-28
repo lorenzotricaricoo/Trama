@@ -67,8 +67,6 @@ export function RecordingSection({ app, onApp }: Props) {
   const [devices, setDevices] = useState<InputDevices | null>(null);
   const [devicesError, setDevicesError] = useState<string | null>(null);
   const [micError, setMicError] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [shortcutError, setShortcutError] = useState<string | null>(null);
 
   const loadDevices = useCallback(async () => {
     setDevicesError(null);
@@ -84,43 +82,6 @@ export function RecordingSection({ app, onApp }: Props) {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadDevices();
   }, [loadDevices]);
-
-  const saveShortcut = useCallback(
-    async (shortcut: string) => {
-      setShortcutError(null);
-      try {
-        await api.setGlobalShortcut(shortcut);
-        onApp({ ...app, globalShortcut: shortcut, globalShortcutError: null });
-      } catch (err) {
-        setShortcutError(errorCode(err));
-      }
-    },
-    [app, onApp],
-  );
-
-  // While recording, the next key press with a modifier becomes the shortcut; Escape cancels.
-  // Tab still moves the focus, so the keyboard is never trapped.
-  useEffect(() => {
-    if (!recording) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Tab') {
-        setRecording(false);
-        return;
-      }
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.key === 'Escape') {
-        setRecording(false);
-        return;
-      }
-      const shortcut = shortcutFromEvent(event);
-      if (shortcut === null) return;
-      setRecording(false);
-      void saveShortcut(shortcut);
-    };
-    window.addEventListener('keydown', onKeyDown, true);
-    return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [recording, saveShortcut]);
 
   const defaultName = devices?.devices.find((d) => d.id === devices.defaultId)?.name;
   const options = [
@@ -187,36 +148,86 @@ export function RecordingSection({ app, onApp }: Props) {
       </Group>
 
       <Group title={t('settings-group-shortcut')}>
-        <Row label={t('settings-shortcut')} description={t('settings-shortcut-desc')}>
-          <div className="set-shortcut">
-            <Button
-              className="set-keycap"
-              data-recording={recording || undefined}
-              aria-label={
-                recording
-                  ? t('settings-shortcut-stop')
-                  : `${t('settings-shortcut-change')}: ${formatShortcut(app.globalShortcut, t)}`
-              }
-              onPress={() => setRecording((on) => !on)}
-            >
-              {recording ? t('settings-shortcut-press') : formatShortcut(app.globalShortcut, t)}
-            </Button>
-            {app.globalShortcut !== app.defaultGlobalShortcut && (
-              <Button
-                className="set-link"
-                onPress={() => void saveShortcut(app.defaultGlobalShortcut)}
-              >
-                {t('settings-shortcut-reset')}
-              </Button>
-            )}
-          </div>
-        </Row>
-        <div role="status" className="set-recording-hint">
-          {recording && <p className="set-row-desc">{t('settings-shortcut-recording')}</p>}
-        </div>
-        {/* A change that failed, or else the stored shortcut that is not listening. */}
-        <ErrorText code={shortcutError ?? app.globalShortcutError} />
+        <ShortcutField app={app} onApp={onApp} />
       </Group>
+    </>
+  );
+}
+
+/** The global shortcut: press to record a new one, reset to the default, and its errors. */
+export function ShortcutField({ app, onApp }: Props) {
+  const { t } = useI18n();
+  const [recording, setRecording] = useState(false);
+  const [shortcutError, setShortcutError] = useState<string | null>(null);
+
+  const saveShortcut = useCallback(
+    async (shortcut: string) => {
+      setShortcutError(null);
+      try {
+        await api.setGlobalShortcut(shortcut);
+        onApp({ ...app, globalShortcut: shortcut, globalShortcutError: null });
+      } catch (err) {
+        setShortcutError(errorCode(err));
+      }
+    },
+    [app, onApp],
+  );
+
+  // While recording, the next key press with a modifier becomes the shortcut; Escape cancels.
+  // Tab still moves the focus, so the keyboard is never trapped.
+  useEffect(() => {
+    if (!recording) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        setRecording(false);
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.key === 'Escape') {
+        setRecording(false);
+        return;
+      }
+      const shortcut = shortcutFromEvent(event);
+      if (shortcut === null) return;
+      setRecording(false);
+      void saveShortcut(shortcut);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [recording, saveShortcut]);
+
+  return (
+    <>
+      <Row label={t('settings-shortcut')} description={t('settings-shortcut-desc')}>
+        <div className="set-shortcut">
+          <Button
+            className="set-keycap"
+            data-recording={recording || undefined}
+            aria-label={
+              recording
+                ? t('settings-shortcut-stop')
+                : `${t('settings-shortcut-change')}: ${formatShortcut(app.globalShortcut, t)}`
+            }
+            onPress={() => setRecording((on) => !on)}
+          >
+            {recording ? t('settings-shortcut-press') : formatShortcut(app.globalShortcut, t)}
+          </Button>
+          {app.globalShortcut !== app.defaultGlobalShortcut && (
+            <Button
+              className="set-link"
+              onPress={() => void saveShortcut(app.defaultGlobalShortcut)}
+            >
+              {t('settings-shortcut-reset')}
+            </Button>
+          )}
+        </div>
+      </Row>
+      <div role="status" className="set-recording-hint">
+        {recording && <p className="set-row-desc">{t('settings-shortcut-recording')}</p>}
+      </div>
+      {/* A change that failed, or else the stored shortcut that is not listening. */}
+      <ErrorText code={shortcutError ?? app.globalShortcutError} />
     </>
   );
 }

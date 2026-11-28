@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react';
 import type { Job } from '../jobs/useJobs';
+import type { Step } from '../onboarding/steps';
 import type { Navigation, ScreenId } from '../shell/navigation';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { HomeScreen } from './HomeScreen';
@@ -15,6 +16,7 @@ export function Screen({
   jobs,
   onNotice,
   revision = 0,
+  onSetup,
 }: {
   id: ScreenId;
   nav: Navigation;
@@ -22,6 +24,7 @@ export function Screen({
   onNotice: (message: string) => void;
   /** Changes when sources arrive from outside the screen (an import): lists read again. */
   revision?: number;
+  onSetup?: (step: Step) => void;
 }) {
   switch (id) {
     case 'home':
@@ -33,6 +36,7 @@ export function Screen({
           onOpenMeeting={(meetingId) => nav.navigate('meeting', meetingId)}
           onSources={() => nav.navigate('sources')}
           onNewNote={() => nav.navigate('note')}
+          onSetup={onSetup}
         />
       );
     case 'sources':
