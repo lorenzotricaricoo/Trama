@@ -2,10 +2,12 @@
 //! the storage API. Notes are saved automatically by the editor; the core decides when an
 //! edit updates the open version and when it starts a new one.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 use trama_core::jobs::lock;
-use trama_core::storage::{Id, Library, Source, SourceKind, Timestamp, Version};
+use trama_core::storage::{
+    Id, Source, SourceCursor, SourceKind, SourceListItem, Timestamp, Version,
+};
 
 use crate::jobs::Core;
 
@@ -64,6 +66,23 @@ pub struct SourcePayload {
     pub preview: Option<String>,
 }
 
+/// Where a page of sources ends; passed back as `before` to get the next page.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CursorPayload {
+    pub occurred_at: Timestamp,
+    pub id: String,
+}
+
+/// A page of the Sources list.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SourcePagePayload {
+    pub sources: Vec<SourcePayload>,
+    /// The cursor of the next page; `None` on the last one.
+    pub next: Option<CursorPayload>,
+}
+
 /// The first line with text, without the Markdown marks that open it (`#`, `>`, `-`, …),
 /// shortened to [`PREVIEW_CHARS`]. `None` for an empty text.
 pub fn preview(body: &str) -> Option<String> {
@@ -81,23 +100,16 @@ pub fn preview(body: &str) -> Option<String> {
     Some(text)
 }
 
-fn source_payload(library: &Library, source: &Source) -> Result<SourcePayload, String> {
-    let preview = match source.kind {
-        SourceKind::Note => library
-            .current_version(source.id)
-            .map_err(|err| err.to_string())?
-            .and_then(|v| v.body)
-            .and_then(|body| preview(&body)),
-        SourceKind::Meeting => None,
-    };
-    Ok(SourcePayload {
+fn source_payload(item: &SourceListItem) -> SourcePayload {
+    let source = &item.source;
+    SourcePayload {
         id: source.id.to_string(),
         kind: source.kind.as_str(),
         title: source.title.clone(),
         occurred_at: source.occurred_at,
         updated_at: source.updated_at,
-        preview,
-    })
+        preview: item.text_start.as_deref().and_then(preview),
+    }
 }
 
 fn parse_id(id: &str) -> Result<Id, String> {
@@ -143,31 +155,50 @@ pub fn get_note(core: State<'_, Core>, id: String) -> Result<NotePayload, String
 }
 
 /// Sources not in the trash, newest first: all of them, or one `kind` (`meeting` or
-/// `note`). `before` pages through older ones. Used by the Sources screen.
+/// `note`), a page of at most `limit`. `before` is the `next` cursor of the previous page.
+/// Used by the Sources screen.
 #[tauri::command]
 pub fn list_sources(
     core: State<'_, Core>,
     kind: Option<String>,
-    before: Option<Timestamp>,
+    before: Option<CursorPayload>,
     limit: Option<u32>,
-) -> Result<Vec<SourcePayload>, String> {
+) -> Result<SourcePagePayload, String> {
     let kind = kind
         .map(|kind| kind.parse::<SourceKind>())
         .transpose()
         .map_err(|err| err.to_string())?;
-    let limit = limit.unwrap_or(MAX_SOURCES).min(MAX_SOURCES);
-    let library = lock(&core.library);
-    library
-        .list_sources(kind, before, limit)
-        .map_err(|err| err.to_string())?
-        .iter()
-        .map(|source| source_payload(&library, source))
-        .collect()
+    let before = before
+        .map(|cursor| {
+            Ok::<_, String>(SourceCursor {
+                occurred_at: cursor.occurred_at,
+                id: parse_id(&cursor.id)?,
+            })
+        })
+        .transpose()?;
+    let limit = limit.unwrap_or(MAX_SOURCES).clamp(1, MAX_SOURCES);
+    // One query under the lock; the payloads are built after releasing it.
+    let items = lock(&core.library)
+        .list_source_items(kind, before, limit)
+        .map_err(|err| err.to_string())?;
+    Ok(page(&items, limit))
+}
+
+fn page(items: &[SourceListItem], limit: u32) -> SourcePagePayload {
+    let full = u32::try_from(items.len()).is_ok_and(|len| len >= limit);
+    SourcePagePayload {
+        sources: items.iter().map(source_payload).collect(),
+        next: items.last().filter(|_| full).map(|item| CursorPayload {
+            occurred_at: item.source.occurred_at,
+            id: item.source.id.to_string(),
+        }),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use trama_core::storage::Library;
 
     #[test]
     fn preview_is_the_first_line_with_text() {
@@ -210,6 +241,29 @@ mod tests {
     }
 
     #[test]
+    fn pages_end_with_a_cursor_until_the_last() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut library = Library::open(dir.path()).unwrap();
+        for i in 0..3 {
+            library.create_note("", &format!("note {i}")).unwrap();
+        }
+        let first = page(&library.list_source_items(None, None, 2).unwrap(), 2);
+        let next = first.next.clone().expect("a full page has a next cursor");
+        let json = serde_json::to_value(&first).unwrap();
+        assert_eq!(json["next"]["occurredAt"], next.occurred_at);
+        let before = SourceCursor {
+            occurred_at: next.occurred_at,
+            id: Id::parse_str(&next.id).unwrap(),
+        };
+        let last = page(
+            &library.list_source_items(None, Some(before), 2).unwrap(),
+            2,
+        );
+        assert_eq!(last.sources.len(), 1);
+        assert_eq!(last.next, None);
+    }
+
+    #[test]
     fn notes_round_trip_through_the_payloads() {
         let dir = tempfile::TempDir::new().unwrap();
         let mut library = Library::open(dir.path()).unwrap();
@@ -219,7 +273,8 @@ mod tests {
         let payload = NotePayload::new(&library.source(note.id).unwrap(), version.as_ref());
         assert_eq!(payload.body, "# First\n\nmore");
         assert_eq!(payload.version_number, 1);
-        let row = source_payload(&library, &library.source(note.id).unwrap()).unwrap();
+        let items = library.list_source_items(None, None, 10).unwrap();
+        let row = source_payload(&items[0]);
         assert_eq!(row.kind, "note");
         assert_eq!(row.preview.as_deref(), Some("First"));
     }

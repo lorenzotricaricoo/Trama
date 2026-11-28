@@ -55,7 +55,7 @@ vi.mock('@tauri-apps/api/core', () => ({
           updatedAt: 0,
           preview: note.body.replace(/^[#\s]+/, '').split('\n')[0] || null,
         }));
-        return Promise.resolve(rows);
+        return Promise.resolve({ sources: rows, next: null });
       }
       case 'quit_ready':
         return Promise.resolve(null);

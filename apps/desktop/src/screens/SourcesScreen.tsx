@@ -36,9 +36,10 @@ export function SourcesScreen({ onOpenNote, onNewNote }: SourcesScreenProps) {
   useEffect(() => {
     if (!isTauri()) return;
     let active = true;
-    listSources('note')
-      .then((sources) => {
-        if (active) setRows(sources);
+    // The first page is enough until the full list (#35) pages through the rest.
+    listSources({ kind: 'note' })
+      .then((page) => {
+        if (active) setRows(page.sources);
       })
       .catch((error: unknown) => {
         console.error('Cannot list the sources', error);

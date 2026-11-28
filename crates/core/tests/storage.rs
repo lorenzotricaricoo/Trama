@@ -430,9 +430,67 @@ fn lists_sources_newest_first_with_paging() {
         [ids[2], ids[1]]
     );
     let older = library
-        .list_sources(Some(SourceKind::Note), Some(notes[1].occurred_at), 2)
+        .list_sources(
+            Some(SourceKind::Note),
+            Some(SourceCursor::after(&notes[1])),
+            2,
+        )
         .unwrap();
     assert_eq!(older.iter().map(|s| s.id).collect::<Vec<_>>(), [ids[0]]);
+}
+
+#[test]
+fn paging_keeps_sources_with_the_same_date() {
+    let (_dir, _clock, mut library) = library();
+    // Five notes created in the same millisecond: the clock does not move.
+    let mut ids: Vec<Id> = (0..5)
+        .map(|i| library.create_note(&format!("n{i}"), "").unwrap().id)
+        .collect();
+    ids.sort();
+    ids.reverse();
+
+    let mut seen = Vec::new();
+    let mut cursor = None;
+    loop {
+        let page = library.list_sources(None, cursor, 2).unwrap();
+        let Some(last) = page.last() else { break };
+        cursor = Some(SourceCursor::after(last));
+        seen.extend(page.iter().map(|s| s.id));
+    }
+    assert_eq!(
+        seen, ids,
+        "every source once, in order, across page boundaries"
+    );
+}
+
+#[test]
+fn list_items_carry_the_start_of_the_current_text() {
+    let (_dir, clock, mut library) = library();
+    let note = library.create_note("", "# First").unwrap();
+    clock.advance(MINUTE);
+    library.save_note(note.id, "# Second").unwrap();
+    let long = library
+        .create_note("", &"è".repeat(LIST_TEXT_CHARS as usize + 50))
+        .unwrap();
+    let empty = library.create_note("", "").unwrap();
+    let (meeting, _) = recorded_meeting(&mut library, &[segment(Role::Me, 0, "ciao")]);
+
+    let items = library.list_source_items(None, None, 10).unwrap();
+    let text = |id: Id| {
+        items
+            .iter()
+            .find(|item| item.source.id == id)
+            .unwrap()
+            .text_start
+            .clone()
+    };
+    assert_eq!(text(note.id).as_deref(), Some("# Second"));
+    assert_eq!(
+        text(long.id).unwrap().chars().count(),
+        LIST_TEXT_CHARS as usize
+    );
+    assert_eq!(text(empty.id), None);
+    assert_eq!(text(meeting.id), None);
 }
 
 #[test]

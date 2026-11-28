@@ -243,6 +243,33 @@ pub enum HitTarget {
     RecordingNote { note_id: Id },
 }
 
+/// Position in the list of sources, newest first: the last source of a page. The next
+/// page starts after it, so sources with the same date are never skipped or repeated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SourceCursor {
+    pub occurred_at: Timestamp,
+    pub id: Id,
+}
+
+impl SourceCursor {
+    /// The cursor right after `source`.
+    pub fn after(source: &Source) -> Self {
+        Self {
+            occurred_at: source.occurred_at,
+            id: source.id,
+        }
+    }
+}
+
+/// A source in a list, with the start of its current text for a preview.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SourceListItem {
+    pub source: Source,
+    /// The first [`crate::storage::LIST_TEXT_CHARS`] characters of a note's current
+    /// version; `None` for meetings and notes without text.
+    pub text_start: Option<String>,
+}
+
 /// One search result.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchHit {

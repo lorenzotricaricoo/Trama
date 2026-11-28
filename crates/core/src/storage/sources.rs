@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{
-    Id, Library, NOTE_VERSION_PAUSE_MS, NewSummary, Purged, Result, Source, SourceKind,
-    StorageError, Summary, Timestamp, TitleOrigin, Version, VersionOrigin, enum_column, id_column,
-    new_id, parse_id,
+    Id, LIST_TEXT_CHARS, Library, NOTE_VERSION_PAUSE_MS, NewSummary, Purged, Result, Source,
+    SourceCursor, SourceKind, SourceListItem, StorageError, Summary, Timestamp, TitleOrigin,
+    Version, VersionOrigin, enum_column, id_column, new_id, parse_id,
 };
 
 const SOURCE_COLUMNS: &str =
@@ -143,24 +143,58 @@ impl Library {
     }
 
     /// Sources not in the trash, newest first. `kind` filters by kind; `before` pages
-    /// through older sources (by `occurred_at`).
+    /// through older sources, after the last one of the previous page.
     pub fn list_sources(
         &self,
         kind: Option<SourceKind>,
-        before: Option<Timestamp>,
+        before: Option<SourceCursor>,
         limit: u32,
     ) -> Result<Vec<Source>> {
+        Ok(self
+            .list_source_items(kind, before, limit)?
+            .into_iter()
+            .map(|item| item.source)
+            .collect())
+    }
+
+    /// Like [`Library::list_sources`], with the start of each note's current text (up to
+    /// [`LIST_TEXT_CHARS`] characters), read in the same query.
+    pub fn list_source_items(
+        &self,
+        kind: Option<SourceKind>,
+        before: Option<SourceCursor>,
+        limit: u32,
+    ) -> Result<Vec<SourceListItem>> {
+        let columns = SOURCE_COLUMNS
+            .split(", ")
+            .map(|column| format!("s.{column}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         let mut stmt = self.conn.prepare_cached(&format!(
-            "SELECT {SOURCE_COLUMNS} FROM source
-             WHERE deleted_at IS NULL
-               AND (?1 IS NULL OR kind = ?1)
-               AND (?2 IS NULL OR occurred_at < ?2)
-             ORDER BY occurred_at DESC, id DESC
-             LIMIT ?3"
+            "SELECT {columns}, substr(v.body, 1, ?5) FROM source s
+             LEFT JOIN source_version v ON v.source_id = s.id
+                 AND v.number = (SELECT MAX(number) FROM source_version WHERE source_id = s.id)
+             WHERE s.deleted_at IS NULL
+               AND (?1 IS NULL OR s.kind = ?1)
+               AND (?2 IS NULL OR (s.occurred_at, s.id) < (?2, ?3))
+             ORDER BY s.occurred_at DESC, s.id DESC
+             LIMIT ?4"
         ))?;
         let rows = stmt.query_map(
-            params![kind.map(SourceKind::as_str), before, limit],
-            source_row,
+            params![
+                kind.map(SourceKind::as_str),
+                before.map(|cursor| cursor.occurred_at),
+                before.map(|cursor| cursor.id.to_string()),
+                limit,
+                LIST_TEXT_CHARS
+            ],
+            |row| {
+                let text_start: Option<String> = row.get(9)?;
+                Ok(SourceListItem {
+                    source: source_row(row)?,
+                    text_start: text_start.filter(|text| !text.is_empty()),
+                })
+            },
         )?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
     }

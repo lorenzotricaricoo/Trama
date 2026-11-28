@@ -29,6 +29,19 @@ export interface SourceRow {
   preview: string | null;
 }
 
+/** Where a page of sources ends: pass it as `before` to get the next page. */
+export interface SourceCursor {
+  occurredAt: number;
+  id: string;
+}
+
+/** A page of the Sources list. */
+export interface SourcePage {
+  sources: SourceRow[];
+  /** The next page's cursor; null on the last page. */
+  next: SourceCursor | null;
+}
+
 /** Creates a note with the text typed so far. */
 export const createNote = (body: string) => invoke<Note>('create_note', { body });
 
@@ -38,6 +51,12 @@ export const saveNote = (id: string, body: string) => invoke<Saved>('save_note',
 /** A note with the text of its current version. */
 export const getNote = (id: string) => invoke<Note>('get_note', { id });
 
-/** Sources not in the trash, newest first, optionally of one kind. */
-export const listSources = (kind?: SourceRow['kind']) =>
-  invoke<SourceRow[]>('list_sources', { kind: kind ?? null });
+/** A page of sources not in the trash, newest first, optionally of one kind. */
+export const listSources = (
+  options: { kind?: SourceRow['kind']; before?: SourceCursor; limit?: number } = {},
+) =>
+  invoke<SourcePage>('list_sources', {
+    kind: options.kind ?? null,
+    before: options.before ?? null,
+    limit: options.limit ?? null,
+  });

@@ -39,6 +39,9 @@ pub const AUDIO_DIR: &str = "audio";
 /// Days a source stays in the trash before it is removed for good.
 pub const TRASH_RETENTION_DAYS: i64 = 30;
 
+/// Characters of a note's text returned with each source by [`Library::list_source_items`].
+pub const LIST_TEXT_CHARS: u32 = 400;
+
 /// Pause after which a new edit to a note starts a new version.
 pub const NOTE_VERSION_PAUSE_MS: i64 = 10 * 60 * 1000;
 
