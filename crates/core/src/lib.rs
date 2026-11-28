@@ -7,6 +7,7 @@
 pub mod i18n;
 pub mod jobs;
 pub mod models;
+pub mod providers;
 pub mod storage;
 
 /// Version of the core library.

@@ -12,6 +12,7 @@ use super::error::{Result, StorageError};
 pub(crate) const MIGRATIONS: &[&str] = &[
     include_str!("migrations/0001_initial.sql"),
     include_str!("migrations/0002_jobs.sql"),
+    include_str!("migrations/0003_providers.sql"),
 ];
 
 /// Schema version written by this build.
@@ -92,6 +93,9 @@ mod tests {
             "summary",
             "setting",
             "job",
+            "provider",
+            "provider_model",
+            "task_model",
             "segment_search",
             "text_search",
         ] {

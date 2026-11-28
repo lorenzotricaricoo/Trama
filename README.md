@@ -75,6 +75,7 @@ download ([downloaded models](docs/architecture/models.md)).
 - [Visual direction](docs/design/visual-direction.md) — look, colours, type, motion and design tokens
 - [Data model](docs/architecture/data-model.md) — how sources, meetings and notes are stored, versioned and searched
 - [Downloaded models](docs/architecture/models.md) — the pinned transcription model, where it lives and how it is downloaded
+- [AI providers](docs/architecture/providers.md) — providers, models per task and how calls stay robust
 - [Principles](docs/principles.md) — rules for process and architecture
 - [Architecture Decision Records](docs/adr/) — decisions and their reasons
 

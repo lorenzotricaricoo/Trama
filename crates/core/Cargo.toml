@@ -11,14 +11,19 @@ repository.workspace = true
 fluent-bundle = "0.16"
 fluent-langneg = "0.13"
 fs4 = "1.1"
+httpdate = "1"
 rusqlite = { version = "0.43", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
 sys-locale = "0.3"
 thiserror = "2"
 unic-langid = { version = "0.9", features = ["macros"] }
-ureq = { version = "3.5", default-features = false, features = ["rustls"] }
+ureq = { version = "3.5", default-features = false, features = ["rustls", "platform-verifier"] }
 uuid = { version = "1.29", features = ["v7"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3.7"
 
 [lints]
 workspace = true
