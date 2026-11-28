@@ -47,6 +47,8 @@ vi.mock('@tauri-apps/api/core', () => ({
     switch (cmd) {
       case 'active_jobs':
         return Promise.resolve([]);
+      case 'set_menu_state':
+        return Promise.resolve(null);
       case 'create_note':
         return (core.createGate ?? Promise.resolve()).then(write).then(() => {
           const id = `note-${core.notes.size + 1}`;

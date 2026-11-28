@@ -13,15 +13,19 @@ import { errorCode, recordingErrorMessage } from './recording/errors';
 import { formatClock } from './recording/format';
 import { useElapsed, useRecordingState } from './recording/useRecordingState';
 import { Notice, useNotice } from './shell/Notice';
-import { SHORTCUTS, useShortcuts, type ShortcutId } from './shell/shortcuts';
+import {
+  COMMAND_BAR_ACTIONS,
+  enabledActions,
+  useMenuState,
+  useShellActions,
+} from './shell/actions';
+import { SHORTCUTS } from './shell/shortcuts';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
 import { ArrowBendUpLeftIcon, NotePencilIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
 import { useAppearance } from './appearance';
 import { useThemeClasses } from './useThemeClasses';
-
-const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings', 'newNote'];
 
 // Screens leave quickly towards where they came from and enter from the direction of travel.
 const stage: Variants = {
@@ -77,21 +81,30 @@ export function App() {
     nav.navigate('note');
   };
 
-  useShortcuts(
+  // Shortcuts and the native menu run the same actions, once.
+  const goTo = (screen: 'home' | 'sources' | 'settings') => () => {
+    bar.close();
+    nav.navigate(screen);
+  };
+  useShellActions(
     {
       commandBar: bar.toggle,
       toggleSidebar,
-      settings: () => {
-        bar.close();
-        nav.navigate('settings');
-      },
+      settings: goTo('settings'),
+      home: goTo('home'),
+      sources: goTo('sources'),
       back: nav.back,
       record,
       newNote,
     },
-    // Behind the command bar only its own toggle and Settings act.
-    bar.state === 'closed' ? undefined : COMMAND_BAR_SHORTCUTS,
+    // Behind the command bar only its own toggle and navigation act.
+    bar.state === 'closed' ? undefined : COMMAND_BAR_ACTIONS,
   );
+  useMenuState({
+    enabled: enabledActions({ commandBarOpen: bar.state !== 'closed', canGoBack: nav.canGoBack }),
+    recording: recording.status !== null,
+    sidebarCollapsed: collapsed,
+  });
 
   const commands: Command[] = [
     ...NAV_ITEMS.map((item): Command => ({

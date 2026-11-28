@@ -5,6 +5,7 @@
 
 mod jobs;
 mod meetings;
+mod menu;
 mod models;
 mod notes;
 mod providers;
@@ -16,7 +17,6 @@ mod summary;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State, WindowEvent};
 use trama_core::config::{AppConfig, CONFIG_FILE, config_notice};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
@@ -192,7 +192,7 @@ fn apply_locale<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<String> {
     let l10n = Localizer::new(&requested_locales(&config), CATALOGS)
         .expect("the embedded menu catalogs are valid (checked by tests)");
     let locale = l10n.locale().to_string();
-    app.set_menu(app_menu(app, &l10n)?)?;
+    menu::install(app, &l10n)?;
     if let Some(recorder) = app.try_state::<recording::Recorder>() {
         recorder.set_texts(recording_texts(&l10n));
     }
@@ -260,67 +260,6 @@ fn recording_texts(l10n: &Localizer) -> recording::Texts {
     }
 }
 
-/// The native menu, with every label taken from the catalogs.
-fn app_menu<R: Runtime>(app: &AppHandle<R>, l10n: &Localizer) -> tauri::Result<Menu<R>> {
-    let t = |id: &str| Some(l10n.message(id, None));
-    let separator = || PredefinedMenuItem::separator(app);
-
-    let about = AboutMetadata {
-        version: Some(app.package_info().version.to_string()),
-        ..Default::default()
-    };
-    let app_submenu = Submenu::with_items(
-        app,
-        app.package_info().name.clone(),
-        true,
-        &[
-            &PredefinedMenuItem::about(app, t("menu-about").as_deref(), Some(about))?,
-            &separator()?,
-            &PredefinedMenuItem::services(app, t("menu-services").as_deref())?,
-            &separator()?,
-            &PredefinedMenuItem::hide(app, t("menu-hide").as_deref())?,
-            &PredefinedMenuItem::hide_others(app, t("menu-hide-others").as_deref())?,
-            &PredefinedMenuItem::show_all(app, t("menu-show-all").as_deref())?,
-            &separator()?,
-            // Not the predefined item: quitting first lets the editor save (see `quit`).
-            &MenuItem::with_id(
-                app,
-                quit::QUIT_MENU_ID,
-                l10n.message("menu-quit", None),
-                true,
-                Some("CmdOrCtrl+Q"),
-            )?,
-        ],
-    )?;
-    let edit_submenu = Submenu::with_items(
-        app,
-        l10n.message("menu-edit", None),
-        true,
-        &[
-            &PredefinedMenuItem::undo(app, t("menu-undo").as_deref())?,
-            &PredefinedMenuItem::redo(app, t("menu-redo").as_deref())?,
-            &separator()?,
-            &PredefinedMenuItem::cut(app, t("menu-cut").as_deref())?,
-            &PredefinedMenuItem::copy(app, t("menu-copy").as_deref())?,
-            &PredefinedMenuItem::paste(app, t("menu-paste").as_deref())?,
-            &PredefinedMenuItem::select_all(app, t("menu-select-all").as_deref())?,
-        ],
-    )?;
-    let window_submenu = Submenu::with_items(
-        app,
-        l10n.message("menu-window", None),
-        true,
-        &[
-            &PredefinedMenuItem::minimize(app, t("menu-minimize").as_deref())?,
-            &PredefinedMenuItem::maximize(app, t("menu-zoom").as_deref())?,
-            &PredefinedMenuItem::fullscreen(app, t("menu-fullscreen").as_deref())?,
-            &separator()?,
-            &PredefinedMenuItem::close_window(app, t("menu-close-window").as_deref())?,
-        ],
-    )?;
-    Menu::with_items(app, &[&app_submenu, &edit_submenu, &window_submenu])
-}
-
 /// Starts the desktop app.
 pub fn run() {
     tauri::Builder::default()
@@ -328,6 +267,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(quit::Quit::default())
         .manage(recording::Recorder::default())
+        .manage(menu::ShellMenu::<tauri::Wry>::default())
         .invoke_handler(tauri::generate_handler![
             app_locale,
             jobs::active_jobs,
@@ -387,12 +327,15 @@ pub fn run() {
             recording::update_recording_note,
             recording::delete_recording_note,
             recording::recording_notes,
+            menu::set_menu_state,
             quit::quit_ready,
             quit::quit_cancelled
         ])
         .on_menu_event(|app, event| {
             if event.id() == quit::QUIT_MENU_ID {
                 quit::request(app);
+            } else {
+                menu::handle_event(app, event.id().as_ref());
             }
         })
         .on_window_event(|window, event| {
@@ -460,7 +403,7 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    /// Message ids used by [`app_menu`].
+    /// Message ids of the standard items of the menu (see `menu::build`).
     const MENU_IDS: &[&str] = &[
         "menu-about",
         "menu-services",
@@ -468,7 +411,10 @@ mod tests {
         "menu-hide-others",
         "menu-show-all",
         "menu-quit",
+        "menu-file",
         "menu-edit",
+        "menu-view",
+        "menu-go",
         "menu-undo",
         "menu-redo",
         "menu-cut",
