@@ -1,6 +1,6 @@
 # 0007. Tech stack
 
-- **Status:** Accepted
+- **Status:** Accepted; the *Packaging* row is replaced by [ADR 0008](0008-distribution-without-notarization.md)
 - **Date:** 2026-11-27
 
 ## Context

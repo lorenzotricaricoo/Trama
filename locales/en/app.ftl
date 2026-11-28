@@ -48,4 +48,47 @@ home-empty-title = Your overview starts here
 home-empty-body = Latest meetings, open actions and active projects will appear here.
 sources-description = Meetings, notes and documents, kept as you brought them.
 sources-empty-title = Everything you bring into { -brand } lands here
-sources-empty-body = The list of sources, with filters and search, comes in a next version.
+sources-empty-body = Write a note to start. The full list, with filters and search, comes in a next version.
+
+## Notes
+
+note-new = New note
+note-title = Note
+note-editor-label = Note text
+note-placeholder = Start writing. Markdown works: # for a heading, - for a list.
+# Shown next to the editor; notes save on their own.
+note-status-idle = Saved automatically
+note-status-saving = Saving…
+note-status-saved = Saved
+note-status-error = Not saved yet: trying again.
+note-untitled = Untitled note
+note-title-label = Note title
+note-title-placeholder = Untitled
+note-status-saved-at = Saved at { $time }
+note-mode-label = View
+note-mode-write = Write
+note-mode-split = Side by side
+note-mode-read = Preview
+note-format-label = Formatting
+note-format-heading = Heading
+note-format-bold = Bold
+note-format-italic = Italic
+note-format-bullets = Bulleted list
+note-format-numbers = Numbered list
+note-format-todo = To-do
+note-format-quote = Quote
+note-format-code = Code
+note-format-link = Link
+note-preview-empty = Nothing to preview yet. Switch to Write to start.
+note-stats = { $count ->
+    [one] 1 word
+   *[other] { $count } words
+} · { $minutes } min read
+note-stats-empty = No words yet
+note-link-failed = This link can't be opened.
+note-load-failed-title = This note can't be opened
+note-load-failed-body = It may have been moved to the trash.
+sources-list-label = Sources
+source-kind-note = Note
+# Shown when quitting is cancelled because a note could not be saved.
+quit-unsaved = A note is not saved yet, so { -brand } stayed open. Quit again within 30 seconds to quit anyway.

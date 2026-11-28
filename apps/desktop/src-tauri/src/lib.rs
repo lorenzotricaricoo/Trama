@@ -5,15 +5,17 @@
 
 mod jobs;
 mod models;
+mod notes;
 mod providers;
+mod quit;
 mod settings;
 mod summary;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
-use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Manager, RunEvent, Runtime, State, WindowEvent};
 use trama_core::config::{AppConfig, CONFIG_FILE, config_notice};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
 use trama_core::jobs::{DeleteAudio, JobHandler, Runner, Transcribe};
@@ -249,7 +251,14 @@ fn app_menu<R: Runtime>(app: &AppHandle<R>, l10n: &Localizer) -> tauri::Result<M
             &PredefinedMenuItem::hide_others(app, t("menu-hide-others").as_deref())?,
             &PredefinedMenuItem::show_all(app, t("menu-show-all").as_deref())?,
             &separator()?,
-            &PredefinedMenuItem::quit(app, t("menu-quit").as_deref())?,
+            // Not the predefined item: quitting first lets the editor save (see `quit`).
+            &MenuItem::with_id(
+                app,
+                quit::QUIT_MENU_ID,
+                l10n.message("menu-quit", None),
+                true,
+                Some("CmdOrCtrl+Q"),
+            )?,
         ],
     )?;
     let edit_submenu = Submenu::with_items(
@@ -285,6 +294,7 @@ fn app_menu<R: Runtime>(app: &AppHandle<R>, l10n: &Localizer) -> tauri::Result<M
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(quit::Quit::default())
         .invoke_handler(tauri::generate_handler![
             app_locale,
             jobs::active_jobs,
@@ -320,8 +330,30 @@ pub fn run() {
             settings::startup_notices,
             summary::source_summary,
             summary::regenerate_summary,
-            summary::set_source_title
+            summary::set_source_title,
+            notes::create_note,
+            notes::save_note,
+            notes::get_note,
+            notes::set_note_title,
+            notes::open_link,
+            notes::list_sources,
+            quit::quit_ready,
+            quit::quit_cancelled
         ])
+        .on_menu_event(|app, event| {
+            if event.id() == quit::QUIT_MENU_ID {
+                quit::request(app);
+            }
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                // Closing the window quits the app: let the editor save first.
+                if !window.state::<quit::Quit>().may_close() {
+                    api.prevent_close();
+                    quit::request(window.app_handle());
+                }
+            }
+        })
         .setup(move |app| {
             let mut settings = load_settings(app.handle())?;
             // A library chosen with TRAMA_LIBRARY is never swapped for the real one.

@@ -6,18 +6,19 @@ import { duration, ease } from './motion';
 import { Screen } from './screens/screens';
 import { useStartupNotices } from './settings/useStartupNotices';
 import { CommandBar, useCommandBar, type Command } from './shell/CommandBar';
-import { NAV_ITEMS, useNavigation, type Direction } from './shell/navigation';
+import { NAV_ITEMS, navItemOf, useNavigation, type Direction } from './shell/navigation';
+import { useFlushBeforeQuit } from './notes/flush';
 import { Notice, useNotice } from './shell/Notice';
 import { SHORTCUTS, useShortcuts, type ShortcutId } from './shell/shortcuts';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
 import { useTranslucency } from './shell/useTranslucency';
-import { ArrowBendUpLeftIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
+import { ArrowBendUpLeftIcon, NotePencilIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
 import { useAppearance } from './appearance';
 import { useColorScheme } from './useColorScheme';
 
-const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings'];
+const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings', 'newNote'];
 
 // Screens leave quickly towards where they came from and enter from the direction of travel.
 const stage: Variants = {
@@ -41,6 +42,8 @@ export function App() {
   const jobs = useJobs();
   const notice = useNotice();
   useStartupNotices(notice.show);
+  // A note that could not be saved keeps the app open, with a way out.
+  useFlushBeforeQuit(() => notice.show(t('quit-unsaved')));
 
   // The theme classes go on <html>, so that overlays rendered in portals get the tokens too.
   useLayoutEffect(() => {
@@ -54,6 +57,11 @@ export function App() {
   // Recording arrives with the recording window (#31); until then the button explains it.
   const record = () => notice.show(t('record-unavailable'));
   const sidebarLabel = collapsed ? t('sidebar-expand') : t('sidebar-collapse');
+  // Flow F3: ⌘N opens an empty editor; the note exists once its first text is saved.
+  const newNote = () => {
+    bar.close();
+    nav.navigate('note');
+  };
 
   useShortcuts(
     {
@@ -65,6 +73,7 @@ export function App() {
       },
       back: nav.back,
       record,
+      newNote,
     },
     // Behind the command bar only its own toggle and Settings act.
     bar.state === 'closed' ? undefined : COMMAND_BAR_SHORTCUTS,
@@ -79,6 +88,14 @@ export function App() {
       shortcut: item.id === 'settings' ? SHORTCUTS.settings.label : undefined,
       run: () => nav.navigate(item.id),
     })),
+    {
+      id: 'new-note',
+      group: 'actions',
+      label: t('note-new'),
+      icon: NotePencilIcon,
+      shortcut: SHORTCUTS.newNote.label,
+      run: newNote,
+    },
     {
       id: 'record',
       group: 'actions',
@@ -108,6 +125,7 @@ export function App() {
   }
 
   const current = NAV_ITEMS.find((item) => item.id === nav.screen);
+  const title = nav.screen === 'note' ? t('note-title') : current ? t(current.label) : '';
 
   return (
     <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
@@ -115,7 +133,7 @@ export function App() {
         {/* The content extends under the transparent title bar; this strip moves the window. */}
         <div className="titlebar" data-tauri-drag-region />
         <Sidebar
-          active={nav.screen}
+          active={navItemOf(nav.screen)}
           collapsed={collapsed}
           onNavigate={nav.navigate}
           onToggle={toggleSidebar}
@@ -123,16 +141,12 @@ export function App() {
           onCommandBar={bar.open}
         />
         <main className="sheet">
-          <TopBar
-            title={current ? t(current.label) : ''}
-            canGoBack={nav.canGoBack}
-            onBack={nav.back}
-            jobs={jobs}
-          />
+          <TopBar title={title} canGoBack={nav.canGoBack} onBack={nav.back} jobs={jobs} />
           <div className="stage">
             <AnimatePresence mode="wait" initial={false} custom={nav.direction}>
               <motion.div
-                key={nav.screen}
+                // Every note gets its own transition, and its own editor.
+                key={nav.screen === 'note' ? `note-${nav.entry}` : nav.screen}
                 className="stage-screen"
                 custom={nav.direction}
                 variants={stage}
@@ -140,7 +154,7 @@ export function App() {
                 animate="center"
                 exit="exit"
               >
-                <Screen id={nav.screen} />
+                <Screen id={nav.screen} nav={nav} onNotice={notice.show} />
               </motion.div>
             </AnimatePresence>
           </div>

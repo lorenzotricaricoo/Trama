@@ -1,11 +1,15 @@
-import { useMemo } from 'react';
+import { lazy, Suspense, useMemo } from 'react';
 import { useI18n } from '../i18n/I18nProvider';
-import type { ScreenId } from '../shell/navigation';
+import type { Navigation, ScreenId } from '../shell/navigation';
 import { SettingsScreen } from '../settings/SettingsScreen';
-import { HouseIcon, StackIcon } from '../ui/icons';
+import { HouseIcon } from '../ui/icons';
 import { PlaceholderScreen } from './PlaceholderScreen';
+import { SourcesScreen } from './SourcesScreen';
 
-// Home and Sources arrive with #35.
+// Home and the full Sources list arrive with #35.
+
+// The editor (CodeMirror) loads with the first note, not with the app.
+const NoteScreen = lazy(() => import('../notes/NoteScreen'));
 
 function HomeScreen() {
   const { t, locale } = useI18n();
@@ -28,26 +32,37 @@ function HomeScreen() {
   );
 }
 
-function SourcesScreen() {
-  const { t } = useI18n();
-  return (
-    <PlaceholderScreen
-      title={t('nav-sources')}
-      description={t('sources-description')}
-      icon={StackIcon}
-      emptyTitle={t('sources-empty-title')}
-      emptyBody={t('sources-empty-body')}
-    />
-  );
-}
-
-export function Screen({ id }: { id: ScreenId }) {
+export function Screen({
+  id,
+  nav,
+  onNotice,
+}: {
+  id: ScreenId;
+  nav: Navigation;
+  onNotice: (message: string) => void;
+}) {
   switch (id) {
     case 'home':
       return <HomeScreen />;
     case 'sources':
-      return <SourcesScreen />;
+      return (
+        <SourcesScreen
+          onOpenNote={(noteId) => nav.navigate('note', noteId)}
+          onNewNote={() => nav.navigate('note')}
+        />
+      );
     case 'settings':
       return <SettingsScreen />;
+    case 'note':
+      return (
+        <Suspense fallback={null}>
+          <NoteScreen
+            noteId={nav.noteId}
+            entry={nav.entry}
+            onCreated={nav.setNoteId}
+            onNotice={onNotice}
+          />
+        </Suspense>
+      );
   }
 }
