@@ -44,3 +44,5 @@ pub fn library() -> (TempDir, ManualClock, Library) {
     let library = Library::open_with_clock(dir.path(), Box::new(clock.clone())).unwrap();
     (dir, clock, library)
 }
+
+pub mod http;
