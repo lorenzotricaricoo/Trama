@@ -90,7 +90,7 @@ const PROMPT_ALLOWANCE_TOKENS: u32 = 160;
 pub const INPUT_RESERVE_PERCENT: u32 = 20;
 
 /// Queues the summary of a meeting whose transcription was just stored. The transcription
-/// job calls this once it has added the new version (`Library::add_transcription`).
+/// job calls this once it has stored the new version (`Library::complete_transcription`).
 pub fn enqueue_after_transcription(ctx: &JobContext, meeting_id: Id) -> Result<Job, StorageError> {
     ctx.enqueue(JobKind::Summarize, meeting_id)
 }

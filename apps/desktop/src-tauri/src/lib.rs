@@ -13,10 +13,11 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
-use trama_core::jobs::{DeleteAudio, JobHandler, Runner};
+use trama_core::jobs::{DeleteAudio, JobHandler, Runner, Transcribe};
 use trama_core::providers::{ClientConfig, Keychain};
 use trama_core::storage::Library;
 use trama_core::summary::Summarize;
+use trama_core::transcription::SherpaLoader;
 
 /// Catalogs used by the shell itself (native menus). The frontend loads its own.
 const CATALOGS: &[Catalog] = &[
@@ -72,8 +73,11 @@ fn start_core<R: Runtime>(app: &AppHandle<R>) -> Result<jobs::Core, Box<dyn std:
         eprintln!("trama: recovered after an unclean stop: {recovery:?}");
     }
     let library = Arc::new(Mutex::new(library));
+    // The transcription model is loaded from the folder the model manager downloads into.
+    let transcribe = Transcribe::new(SherpaLoader::new(models::models_dir(app)?));
     let handlers: Vec<Arc<dyn JobHandler>> = vec![
         Arc::new(DeleteAudio),
+        Arc::new(transcribe),
         Arc::new(Summarize::new(Arc::new(Keychain), ClientConfig::default())),
     ];
     let runner = Runner::start(

@@ -11,6 +11,7 @@ pub mod models;
 pub mod providers;
 pub mod storage;
 pub mod summary;
+pub mod transcription;
 
 /// Version of the core library.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

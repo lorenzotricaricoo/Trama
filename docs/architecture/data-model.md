@@ -123,7 +123,7 @@ The recording side of a meeting source.
 | `status` | `recording`, `processing` (transcription and summary), `ready` or `failed` |
 | `duration_ms` | Length of the recording |
 | `audio_deleted_at` | When the audio was removed by the retention rule; empty while it exists |
-| `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording |
+| `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording, or `model_missing` when it could not be transcribed ([transcription](transcription.md#the-background-job)) |
 
 ### Track
 

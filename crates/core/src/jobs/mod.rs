@@ -9,6 +9,7 @@
 //! Jobs run one at a time: transcription uses the whole machine, and the others are short.
 
 mod delete_audio;
+mod transcribe;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -17,6 +18,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 pub use delete_audio::DeleteAudio;
+pub use transcribe::Transcribe;
 
 use crate::storage::{Id, Job, JobKind, Library, Result, StorageError};
 
