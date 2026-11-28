@@ -4,6 +4,8 @@
 //! belongs to the core library (principle A1).
 
 mod jobs;
+mod models;
+mod summary;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -11,8 +13,11 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
-use trama_core::jobs::{DeleteAudio, JobHandler, Runner};
+use trama_core::jobs::{DeleteAudio, JobHandler, Runner, Transcribe};
+use trama_core::providers::{ClientConfig, Keychain};
 use trama_core::storage::Library;
+use trama_core::summary::Summarize;
+use trama_core::transcription::SherpaLoader;
 
 /// Catalogs used by the shell itself (native menus). The frontend loads its own.
 const CATALOGS: &[Catalog] = &[
@@ -68,7 +73,13 @@ fn start_core<R: Runtime>(app: &AppHandle<R>) -> Result<jobs::Core, Box<dyn std:
         eprintln!("trama: recovered after an unclean stop: {recovery:?}");
     }
     let library = Arc::new(Mutex::new(library));
-    let handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(DeleteAudio)];
+    // The transcription model is loaded from the folder the model manager downloads into.
+    let transcribe = Transcribe::new(SherpaLoader::new(models::models_dir(app)?));
+    let handlers: Vec<Arc<dyn JobHandler>> = vec![
+        Arc::new(DeleteAudio),
+        Arc::new(transcribe),
+        Arc::new(Summarize::new(Arc::new(Keychain), ClientConfig::default())),
+    ];
     let runner = Runner::start(
         Arc::clone(&library),
         handlers,
@@ -149,10 +160,19 @@ pub fn run() {
             app_locale,
             jobs::active_jobs,
             jobs::retry_job,
-            jobs::cancel_job
+            jobs::cancel_job,
+            models::model_status,
+            models::download_model,
+            models::cancel_model_download,
+            models::verify_model,
+            models::remove_model,
+            summary::source_summary,
+            summary::regenerate_summary,
+            summary::set_source_title
         ])
         .setup(move |app| {
             app.manage(start_core(app.handle())?);
+            app.manage(models::start(app.handle())?);
             let menu = app_menu(app.handle(), &l10n)?;
             app.set_menu(menu)?;
             if let Some(window) = app.get_webview_window("main") {
@@ -163,11 +183,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the Trama desktop app")
         .run(|app, event| {
-            if let RunEvent::Exit = event
-                && let Some(core) = app.try_state::<jobs::Core>()
-            {
-                // Unfinished jobs stay queued and resume at the next start.
-                core.runner.stop();
+            if let RunEvent::Exit = event {
+                if let Some(core) = app.try_state::<jobs::Core>() {
+                    // Unfinished jobs stay queued and resume at the next start.
+                    core.runner.stop();
+                }
+                if let Some(models) = app.try_state::<models::Models>() {
+                    // A partial download stays on disk and resumes when asked again.
+                    models.transcription.shutdown();
+                }
             }
         });
 }

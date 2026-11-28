@@ -65,6 +65,8 @@ erDiagram
     MEETING ||--o{ RECORDING_NOTE : "has"
     SOURCE_VERSION ||--o{ TRANSCRIPT_SEGMENT : "contains"
     SOURCE_VERSION ||--o{ SUMMARY : "is summarized by"
+    PROVIDER ||--o{ PROVIDER_MODEL : "offers"
+    PROVIDER_MODEL ||--o{ TASK_MODEL : "is chosen for"
 ```
 
 ### Source
@@ -77,7 +79,7 @@ A meeting or a note (documents arrive in phase 3 as a new kind).
 | `kind` | `meeting` or `note` |
 | `title` | Shown everywhere; empty until a summary or the user gives one |
 | `title_origin` | `auto` (from the summary) or `user`. A user title is never overwritten |
-| `language` | Language of a meeting (BCP 47, for example `it`), chosen in onboarding; it also decides the language of the summary. Empty for notes |
+| `language` | Language of a meeting (BCP 47, for example `it`), from the `meeting.language` setting when the meeting is created; it also decides the language of the summary. Empty for notes |
 | `occurred_at` | When the meeting started, or when the note was created |
 | `created_at`, `updated_at` | Bookkeeping |
 | `deleted_at` | Set while the source is in the trash |
@@ -121,7 +123,7 @@ The recording side of a meeting source.
 | `status` | `recording`, `processing` (transcription and summary), `ready` or `failed` |
 | `duration_ms` | Length of the recording |
 | `audio_deleted_at` | When the audio was removed by the retention rule; empty while it exists |
-| `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording |
+| `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording, or `model_missing` when it could not be transcribed ([transcription](transcription.md#the-background-job)) |
 
 ### Track
 
@@ -134,7 +136,7 @@ One audio track of a meeting: the user's microphone and the other participants
 | `meeting_id` | The meeting |
 | `role` | `me` or `others`; one track per role |
 | `audio_path` | Relative to the library, for example `audio/<meeting id>/me.wav` |
-| `timing_path` | Optional file that aligns the two tracks |
+| `timing_path` | Optional file that aligns the two tracks ([timing sidecar](audio-capture.md#timing-sidecar)) |
 | `device` | Name of the input device, for diagnostics |
 
 ### Transcript segment
@@ -173,16 +175,23 @@ model, a better prompt) adds a summary; the newest one is shown.
 |-------|---------|
 | `id` | UUIDv7 |
 | `version_id` | The version that was summarized |
-| `title`, `body`, `key_points` | Generated content; key points are a JSON array of strings |
+| `title`, `body`, `key_points` | Generated content. Key points are a JSON array of objects `{"text": …, "at_ms": …}`, where `at_ms` is the start of the segment where the point is discussed, or `null` when unknown. Plain strings (the first shape of the column) are still read, as points without a time |
 | `language` | Language it was written in (the meeting language) |
-| `model`, `prompt_version` | What produced it, to compare and regenerate |
+| `model`, `prompt_version` | The model id as the provider names it, and the version of the prompts and schemas (for example `summary-v1`), to compare and regenerate |
 | `created_at` | When it was generated |
+
+How summaries are written (long transcripts, prompt versions, errors) is described in
+[AI providers](providers.md#meeting-summaries).
 
 ### Settings
 
 A key/value table for preferences that belong to the library: meeting language, audio
 retention, and so on. Each key is documented where it is used. Secrets are never stored
 here: provider keys live in the macOS Keychain and the database keeps only a reference.
+
+| Key | Meaning |
+|-----|---------|
+| `meeting.language` | Language of new meetings and of their summaries (BCP 47, for example `it`): one language, never detected. `en` until the user chooses one in [Settings](https://github.com/lorenzotricaricoo/Trama/issues/36). A meeting keeps the language it was recorded in (`source.language`); the setting is used only for meetings without one |
 
 ### Job
 
@@ -213,11 +222,55 @@ so they survive a restart, and run one at a time.
 - Progress (for example "transcribing 62%") is not stored: the core sends it to the
   interface as an event, together with every state change.
 
-### Coming with later phase 1 issues
+### Provider
 
-| Table | What it holds | Issue |
-|-------|---------------|-------|
-| `provider`, `provider_model`, `task_model` | AI providers (with a Keychain reference, never the key), their model catalogue with limits ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)), and which model each task uses | [#28](https://github.com/lorenzotricaricoo/Trama/issues/28) |
+An OpenAI-compatible endpoint for language models
+([ADR 0003](../adr/0003-hybrid-ai-providers.md)). Several can be configured at once.
+
+| Field | Meaning |
+|-------|---------|
+| `id` | UUIDv7 |
+| `name` | Chosen by the user |
+| `base_url` | Base URL of the API without a trailing slash, for example `https://api.example.com/v1`. Plain `http://` is accepted only for local servers (loopback, private or link-local addresses, `localhost`, `.local` names), so keys and text never travel in clear |
+| `key_ref` | Name of the Keychain item that holds the API key; `NULL` for a provider that needs no key (a local server) |
+| `catalog_fetched_at` | Last successful read of the model catalogue |
+| `created_at`, `updated_at` | Bookkeeping |
+
+**The API key is never in the database** (nor in logs or error details). It is a generic
+password in the user's macOS Keychain with service `trama-provider-<provider id>` and
+account `api-key`; `key_ref` holds the service name. Removing a provider removes its
+Keychain item.
+
+### Provider model
+
+A model offered by a provider, read from its catalogue (`GET /models`) or added by hand.
+
+| Field | Meaning |
+|-------|---------|
+| `provider_id`, `model_id` | The provider, and the model id as the provider names it |
+| `listed` | Listed at the last catalogue read. A model that disappears is kept, with its overrides, so a task that uses it fails with a clear error |
+| `context_tokens`, `max_output_tokens` | Limits read from the catalogue, when the provider exposes them |
+| `context_tokens_override`, `max_output_tokens_override` | Limits set by the user; they win over the catalogue |
+| `updated_at` | Bookkeeping |
+
+Limits are never hard-coded ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)):
+the core reads them from the catalogue under the field names providers use
+(`context_length`, `context_window`, `max_context_length`, `max_output_tokens`,
+`max_completion_tokens`, …). When the provider doesn't expose them, the user sets them;
+a model whose context size is unknown is refused for tasks (`limits_unknown`). Reading
+the catalogue again updates the catalogue limits and never touches the overrides.
+
+### Task model
+
+The model chosen for each task.
+
+| Field | Meaning |
+|-------|---------|
+| `task` | The task: `summary` in phase 1; the curator's tasks (extraction, page writing, chat) are added in phase 2 without a migration, because the core checks the names |
+| `provider_id`, `model_id` | The model; removing it (or its provider) leaves the task without a model |
+| `updated_at` | Bookkeeping |
+
+A task without a model fails with `no_model_for_task`, which the interface translates.
 
 ## Search
 
