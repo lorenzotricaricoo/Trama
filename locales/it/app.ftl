@@ -48,7 +48,24 @@ home-empty-title = La tua panoramica parte da qui
 home-empty-body = Qui compariranno gli ultimi meeting, le azioni aperte e i progetti attivi.
 sources-description = Meeting, note e documenti, tenuti così come li hai portati.
 sources-empty-title = Qui arriva tutto quello che porti in { -brand }
-sources-empty-body = L'elenco delle fonti, con filtri e ricerca, arriva in una prossima versione.
+sources-empty-body = Inizia scrivendo una nota. L'elenco completo, con filtri e ricerca, arriva in una prossima versione.
 settings-description = Provider, trascrizione, registrazione, dati e privacy.
 settings-empty-title = Le impostazioni stanno arrivando
 settings-empty-body = Ogni sezione arriva insieme alla funzione che regola.
+
+## Notes
+
+note-new = Nuova nota
+note-title = Nota
+note-editor-label = Testo della nota
+note-placeholder = Inizia a scrivere. Il Markdown funziona: # per un titolo, - per un elenco.
+# Shown next to the editor; notes save on their own.
+note-status-idle = Salvataggio automatico
+note-status-saving = Salvataggio…
+note-status-saved = Salvata
+note-status-error = Non ancora salvata: nuovo tentativo in corso.
+note-untitled = Nota senza titolo
+note-load-failed-title = Impossibile aprire questa nota
+note-load-failed-body = Potrebbe essere stata spostata nel cestino.
+sources-list-label = Fonti
+source-kind-note = Nota

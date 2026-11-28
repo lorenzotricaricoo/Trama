@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 
 /** Keyboard shortcuts of the shell. Labels use the macOS symbols, which are not translated. */
-export type ShortcutId = 'commandBar' | 'toggleSidebar' | 'settings' | 'back' | 'record';
+export type ShortcutId =
+  'commandBar' | 'toggleSidebar' | 'settings' | 'back' | 'record' | 'newNote';
 
 interface Shortcut {
   /** Shown in hint chips. */
@@ -44,6 +45,11 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
     // The physical key: with ⌥ held, macOS turns R into another character.
     matches: (e) => mod(e) && e.altKey && e.code === 'KeyR',
   },
+  newNote: {
+    label: '⌘N',
+    // ⌘N has no editing meaning in text fields, so it acts there too, the editor included.
+    matches: (e) => mod(e) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'n',
+  },
 };
 
 /** Text fields where ⌘[ keeps its editing meaning. */
@@ -70,7 +76,8 @@ export function useShortcuts(
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.repeat) return;
+      // Keys pressed while composing (accents, IME) belong to the text being typed.
+      if (event.defaultPrevented || event.repeat || event.isComposing) return;
       const id = (Object.keys(SHORTCUTS) as ShortcutId[]).find((key) =>
         SHORTCUTS[key].matches(event),
       );

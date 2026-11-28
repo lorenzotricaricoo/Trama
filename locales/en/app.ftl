@@ -48,7 +48,24 @@ home-empty-title = Your overview starts here
 home-empty-body = Latest meetings, open actions and active projects will appear here.
 sources-description = Meetings, notes and documents, kept as you brought them.
 sources-empty-title = Everything you bring into { -brand } lands here
-sources-empty-body = The list of sources, with filters and search, comes in a next version.
+sources-empty-body = Write a note to start. The full list, with filters and search, comes in a next version.
 settings-description = Providers, transcription, recording, data and privacy.
 settings-empty-title = Settings are on their way
 settings-empty-body = Each section arrives together with the feature it controls.
+
+## Notes
+
+note-new = New note
+note-title = Note
+note-editor-label = Note text
+note-placeholder = Start writing. Markdown works: # for a heading, - for a list.
+# Shown next to the editor; notes save on their own.
+note-status-idle = Saved automatically
+note-status-saving = Saving…
+note-status-saved = Saved
+note-status-error = Not saved yet: trying again.
+note-untitled = Untitled note
+note-load-failed-title = This note can't be opened
+note-load-failed-body = It may have been moved to the trash.
+sources-list-label = Sources
+source-kind-note = Note

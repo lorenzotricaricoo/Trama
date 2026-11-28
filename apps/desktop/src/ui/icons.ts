@@ -5,6 +5,8 @@
 export { CaretLeftIcon } from '@phosphor-icons/react/dist/csr/CaretLeft';
 export { GearIcon } from '@phosphor-icons/react/dist/csr/Gear';
 export { HouseIcon } from '@phosphor-icons/react/dist/csr/House';
+export { NoteIcon } from '@phosphor-icons/react/dist/csr/Note';
+export { NotePencilIcon } from '@phosphor-icons/react/dist/csr/NotePencil';
 export { MagnifyingGlassIcon } from '@phosphor-icons/react/dist/csr/MagnifyingGlass';
 export { RecordIcon } from '@phosphor-icons/react/dist/csr/Record';
 export { SidebarSimpleIcon } from '@phosphor-icons/react/dist/csr/SidebarSimple';

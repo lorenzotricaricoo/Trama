@@ -1,0 +1,108 @@
+import { isTauri } from '@tauri-apps/api/core';
+import { motion, type Variants } from 'motion/react';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, GridList, GridListItem } from 'react-aria-components';
+import { useI18n } from '../i18n/I18nProvider';
+import { duration, ease } from '../motion';
+import { listSources, type SourceRow } from '../notes/api';
+import { SHORTCUTS } from '../shell/shortcuts';
+import { NoteIcon, NotePencilIcon, StackIcon } from '../ui/icons';
+
+interface SourcesScreenProps {
+  onOpenNote: (noteId: string) => void;
+  onNewNote: () => void;
+}
+
+const list: Variants = { show: { transition: { staggerChildren: 0.045, delayChildren: 0.03 } } };
+const rise: Variants = {
+  hide: { opacity: 0, y: 10 },
+  show: { opacity: 1, y: 0, transition: { duration: duration.d4, ease: ease.out } },
+};
+
+/**
+ * Sources, kept minimal until the full list with filters and search (#35): the notes,
+ * newest first, each opening in the editor, and a way to write a new one. Meetings join the
+ * list when recording ships.
+ */
+export function SourcesScreen({ onOpenNote, onNewNote }: SourcesScreenProps) {
+  const { t, locale } = useI18n();
+  // Outside the app (a plain browser) there is no core to ask.
+  const [rows, setRows] = useState<SourceRow[] | null>(() => (isTauri() ? null : []));
+  const date = useMemo(
+    () => new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }),
+    [locale],
+  );
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let active = true;
+    listSources('note')
+      .then((sources) => {
+        if (active) setRows(sources);
+      })
+      .catch((error: unknown) => {
+        console.error('Cannot list the sources', error);
+        if (active) setRows([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const newNote = (
+    <Button className="btn" onPress={onNewNote}>
+      <NotePencilIcon aria-hidden />
+      {t('note-new')}
+      <kbd className="kbd" aria-hidden>
+        {SHORTCUTS.newNote.label}
+      </kbd>
+    </Button>
+  );
+
+  return (
+    <motion.div className="screen" variants={list} initial="hide" animate="show">
+      <motion.header className="screen-top screen-top-row" variants={rise}>
+        <div>
+          <h1 className="screen-title">{t('nav-sources')}</h1>
+          <p className="screen-desc">{t('sources-description')}</p>
+        </div>
+        {newNote}
+      </motion.header>
+      {rows !== null && rows.length === 0 && (
+        <motion.section className="empty" variants={rise} aria-label={t('sources-empty-title')}>
+          <span className="empty-ic" aria-hidden>
+            <StackIcon />
+          </span>
+          <h2 className="empty-title">{t('sources-empty-title')}</h2>
+          <p className="empty-body">{t('sources-empty-body')}</p>
+        </motion.section>
+      )}
+      {rows !== null && rows.length > 0 && (
+        <motion.div className="src" variants={rise}>
+          <GridList
+            className="src-list"
+            aria-label={t('sources-list-label')}
+            items={rows}
+            onAction={(key) => onOpenNote(String(key))}
+          >
+            {(row) => {
+              const name = row.title || row.preview || t('note-untitled');
+              return (
+                <GridListItem id={row.id} className="src-row" textValue={name}>
+                  <NoteIcon className="src-ic" aria-hidden />
+                  <span className="src-name" data-untitled={!row.title && !row.preview}>
+                    {name}
+                  </span>
+                  <span className="src-kind">{t('source-kind-note')}</span>
+                  <time className="src-date" dateTime={new Date(row.occurredAt).toISOString()}>
+                    {date.format(row.occurredAt)}
+                  </time>
+                </GridListItem>
+              );
+            }}
+          </GridList>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
