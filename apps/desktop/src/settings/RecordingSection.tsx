@@ -99,9 +99,14 @@ export function RecordingSection({ app, onApp }: Props) {
   );
 
   // While recording, the next key press with a modifier becomes the shortcut; Escape cancels.
+  // Tab still moves the focus, so the keyboard is never trapped.
   useEffect(() => {
     if (!recording) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Tab') {
+        setRecording(false);
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       if (event.key === 'Escape') {

@@ -4,6 +4,7 @@ import { useI18n } from './i18n/I18nProvider';
 import { useJobs } from './jobs/useJobs';
 import { duration, ease } from './motion';
 import { Screen } from './screens/screens';
+import { useStartupNotices } from './settings/useStartupNotices';
 import { CommandBar, useCommandBar, type Command } from './shell/CommandBar';
 import { NAV_ITEMS, useNavigation, type Direction } from './shell/navigation';
 import { Notice, useNotice } from './shell/Notice';
@@ -37,6 +38,7 @@ export function App() {
   const bar = useCommandBar();
   const jobs = useJobs();
   const notice = useNotice();
+  useStartupNotices(notice.show);
 
   // The theme classes go on <html>, so that overlays rendered in portals get the tokens too.
   useLayoutEffect(() => {

@@ -117,14 +117,19 @@ settings-budget-unpriced = { $count ->
 }
 settings-budget-warning = Hai usato più del { $percent }% del budget di questo mese.
 settings-budget-exceeded = Il budget di questo mese è esaurito. Le attività continuano perché il limite è disattivato.
-settings-budget-exceeded-blocked = Il budget di questo mese è esaurito: le attività che richiedono un modello aspettano finché non lo aumenti o disattivi il limite.
+settings-budget-exceeded-blocked = Il budget di questo mese è esaurito: le attività che richiedono un modello falliscono con un errore finché non lo aumenti o disattivi il limite.
 settings-currency = Valuta
 settings-currency-desc = Per prezzi e budget. Gli importi non vengono convertiti.
 settings-budget-amount = Budget mensile
 settings-budget-amount-desc = Lascia vuoto per non avere un budget.
 settings-budget-warn = Avvisa dal
 settings-budget-enforce = Fermati al budget
-settings-budget-enforce-desc = Rifiuta le nuove attività che richiedono un modello quando il budget è esaurito. Un'attività già in corso finisce.
+settings-budget-enforce-desc = Rifiuta le chiamate a un modello quando il budget è esaurito, anche a metà di un'attività, che allora fallisce con un errore. Funziona solo con modelli che hanno un prezzo: gli altri vengono rifiutati.
+# $count: modelli scelti per un'attività senza prezzo; $models: i loro id.
+settings-budget-price-missing = { $count ->
+    [one] { $models } non ha un prezzo, quindi con il limite attivo le sue attività vengono rifiutate. Imposta i prezzi in Provider.
+   *[other] { $models } non hanno un prezzo, quindi con il limite attivo le loro attività vengono rifiutate. Imposta i prezzi in Provider.
+}
 
 ## Trascrizione
 
@@ -217,6 +222,7 @@ settings-error-library-not-absolute = Scegli una cartella su un disco.
 settings-error-library-not-a-folder = Questa non è una cartella.
 settings-error-library-folder-not-empty = Questa cartella contiene altri file. Scegli una cartella vuota o una che contiene già una libreria di Trama.
 settings-error-library-synced = Questa cartella è sincronizzata da iCloud Drive o da un altro servizio cloud, che può danneggiare una libreria aperta. Scegline una fuori.
+settings-error-library-not-writable = Trama non può scrivere in questa cartella. Scegline una che hai il permesso di modificare.
 settings-error-model-not-enough-space = Non c'è abbastanza spazio libero sul disco per il modello.
 settings-error-model-network = Il download si è interrotto. Controlla la connessione e riprendilo.
 settings-error-model-http-status = Il server del download ha rifiutato la richiesta. Riprova più tardi.
@@ -227,3 +233,10 @@ settings-error-model-io = Trama non è riuscita a scrivere i file del modello.
 settings-error-model-panicked = Il download si è fermato per un errore di Trama.
 settings-error-capture-no-input-device = Nessun microfono collegato.
 settings-error-capture-device-open-failed = L'elenco dei microfoni non si può leggere ora.
+
+## Problemi trovati all'avvio ($path: la cartella o il file)
+
+settings-notice-settings-reset = Non è stato possibile leggere il file delle impostazioni, quindi sono in uso quelle predefinite. Il file danneggiato è conservato accanto come settings.json.corrupt.
+settings-notice-settings-unreadable = Non è stato possibile leggere il file delle impostazioni, quindi sono in uso quelle predefinite. Le modifiche non vengono salvate, per non sovrascrivere il file: controlla { $path }.
+settings-notice-library-unavailable = Non è stato possibile aprire la libreria in { $path }, quindi Trama ha aperto quella predefinita. Collega il suo disco o controlla i permessi, poi riavvia Trama.
+settings-notice-library-failed = Non è stato possibile aprire nessuna libreria in { $path }. Controlla che il disco sia collegato e che tu possa scriverci, poi riavvia Trama.

@@ -16,6 +16,7 @@ import {
 } from 'react-aria-components';
 import { useI18n } from '../i18n/I18nProvider';
 import { CaretDownIcon, WarningIcon } from '../ui/icons';
+import type { StartupNotice } from './api';
 
 /** Translates an error code: a settings message, a provider message, or a generic one. */
 export function useErrorText() {
@@ -29,6 +30,16 @@ export function useErrorText() {
       return t('settings-error-internal');
     },
     [t, has],
+  );
+}
+
+/** A problem found at start, as a sentence (`settings-notice-<code>`). */
+export function useNoticeText() {
+  const { t } = useI18n();
+  return useCallback(
+    (notice: StartupNotice) =>
+      t(`settings-notice-${notice.code.replace(/_/g, '-')}`, { path: notice.path ?? '' }),
+    [t],
   );
 }
 

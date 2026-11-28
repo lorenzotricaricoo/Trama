@@ -83,6 +83,8 @@ function mockShell(overrides: Record<string, (args: Record<string, unknown>) => 
         return [];
       case 'model_status':
         return modelStatus;
+      case 'startup_notices':
+        return [];
       case 'input_devices':
         return { devices: [{ id: 'mic-1', name: 'Built-in Microphone' }], defaultId: 'mic-1' };
       case 'plugin:event|listen':
@@ -236,6 +238,91 @@ describe('SettingsScreen', () => {
   });
 });
 
+describe('SettingsScreen safeguards', () => {
+  it('shows what went wrong at start, even without a library', async () => {
+    mockShell({
+      startup_notices: () => [
+        { code: 'library_failed', path: '/Volumes/Gone/Trama' },
+        { code: 'settings_reset', path: '/Users/test/settings.json' },
+      ],
+      app_settings: () => {
+        throw 'storage';
+      },
+    });
+    renderSettings();
+    expect(
+      await screen.findByText(/No library could be opened in .*\/Volumes\/Gone\/Trama/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/settings\.json\.corrupt/)).toBeInTheDocument();
+  });
+
+  it('warns that an enforced budget refuses models without a price', async () => {
+    const provider: Provider = {
+      id: '0190b1c2-0000-7000-8000-000000000002',
+      name: 'Gateway',
+      baseUrl: 'https://gateway.example.com/v1',
+      needsKey: true,
+      hasKey: true,
+      catalogFetchedAt: null,
+      models: [
+        {
+          modelId: 'small-model',
+          listed: true,
+          catalogContextTokens: 128_000,
+          catalogMaxOutputTokens: 4096,
+          contextTokensOverride: null,
+          maxOutputTokensOverride: null,
+          inputPriceMicros: 150_000,
+          outputPriceMicros: null,
+        },
+      ],
+    };
+    mockShell({
+      library_settings: () => ({
+        ...librarySettings,
+        monthlyBudgetMicros: 5_000_000,
+        enforceBudget: true,
+      }),
+      list_providers: () => [provider],
+      task_models: () => [{ task: 'summary', providerId: provider.id, modelId: 'small-model' }],
+    });
+    const user = renderSettings();
+    await user.click(await screen.findByRole('tab', { name: 'Providers and models' }));
+    expect(
+      await screen.findByText(/small-model has no price, so with the limit on/),
+    ).toBeInTheDocument();
+  });
+
+  it('ignores an older answer that arrives after a newer change', async () => {
+    const answers: ((value: unknown) => void)[] = [];
+    mockShell({
+      set_library_settings: () =>
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+    });
+    const user = renderSettings();
+    await user.click(await screen.findByRole('tab', { name: 'Data and privacy' }));
+    await user.click(await screen.findByRole('radio', { name: /^7 days/ }));
+    await user.click(screen.getByRole('radio', { name: /^Always/ }));
+    await waitFor(() => expect(answers).toHaveLength(2));
+    answers[1]?.({ ...librarySettings, audioRetention: 'always' });
+    answers[0]?.({ ...librarySettings, audioRetention: '7_days' });
+    await waitFor(() => expect(screen.getByRole('radio', { name: /^Always/ })).toBeChecked());
+  });
+
+  it('lets Tab leave the shortcut recorder', async () => {
+    const calls = mockShell();
+    const user = renderSettings();
+    await user.click(await screen.findByRole('tab', { name: 'Recording' }));
+    await user.click(await screen.findByRole('button', { name: 'Change shortcut' }));
+    expect(screen.getByText(/Press the new shortcut/)).toBeInTheDocument();
+    await user.tab();
+    expect(screen.queryByText(/Press the new shortcut/)).not.toBeInTheDocument();
+    expect(calls.some((call) => call.cmd === 'set_global_shortcut')).toBe(false);
+  });
+});
+
 describe('global shortcut', () => {
   const key = (code: string, mods: Partial<KeyboardEventInit> = {}) =>
     new KeyboardEvent('keydown', { code, ...mods });
@@ -290,8 +377,10 @@ const SETTINGS_CODES = [
   'model_panicked',
   'capture_no_input_device',
   'capture_device_open_failed',
+  'library_not_writable',
 ];
 const WARNINGS = ['library_maybe_synced', 'library_exists'];
+const NOTICES = ['settings_reset', 'settings_unreadable', 'library_unavailable', 'library_failed'];
 
 describe('error messages', () => {
   it.each(SUPPORTED_LOCALES)('has a message for every code in %s', (locale) => {
@@ -299,6 +388,10 @@ describe('error messages', () => {
     for (const code of SETTINGS_CODES) {
       expect(bundle.hasMessage(`settings-error-${code.replace(/_/g, '-')}`), code).toBe(true);
     }
+    for (const code of NOTICES) {
+      expect(bundle.hasMessage(`settings-notice-${code.replace(/_/g, '-')}`), code).toBe(true);
+    }
+    expect(bundle.hasMessage('provider-error-price-missing')).toBe(true);
     for (const code of WARNINGS) {
       expect(bundle.hasMessage(`settings-warning-${code.replace(/_/g, '-')}`), code).toBe(true);
     }

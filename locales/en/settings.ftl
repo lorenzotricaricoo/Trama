@@ -117,14 +117,19 @@ settings-budget-unpriced = { $count ->
 }
 settings-budget-warning = You have used more than { $percent }% of this month's budget.
 settings-budget-exceeded = This month's budget is used up. Tasks still run because the limit is off.
-settings-budget-exceeded-blocked = This month's budget is used up: tasks that need a model wait until you raise it or turn the limit off.
+settings-budget-exceeded-blocked = This month's budget is used up: tasks that need a model fail with an error until you raise it or turn the limit off.
 settings-currency = Currency
 settings-currency-desc = For prices and the budget. Amounts are not converted.
 settings-budget-amount = Monthly budget
 settings-budget-amount-desc = Leave empty for no budget.
 settings-budget-warn = Warn from
 settings-budget-enforce = Stop at the budget
-settings-budget-enforce-desc = Refuse new tasks that need a model once the budget is used up. A task already running finishes.
+settings-budget-enforce-desc = Refuse calls to a model once the budget is used up, also in the middle of a task, which then fails with an error. It only works with models that have a price: the others are refused.
+# $count: models chosen for a task without a price; $models: their ids.
+settings-budget-price-missing = { $count ->
+    [one] { $models } has no price, so with the limit on its tasks are refused. Set its prices under Providers.
+   *[other] { $models } have no price, so with the limit on their tasks are refused. Set their prices under Providers.
+}
 
 ## Transcription
 
@@ -217,6 +222,7 @@ settings-error-library-not-absolute = Choose a folder on a disk.
 settings-error-library-not-a-folder = This isn't a folder.
 settings-error-library-folder-not-empty = This folder has other files in it. Choose an empty folder or one that already holds a Trama library.
 settings-error-library-synced = This folder is synced by iCloud Drive or another cloud service, which can damage an open library. Choose a folder outside it.
+settings-error-library-not-writable = Trama can't write in this folder. Choose one you have permission to change.
 settings-error-model-not-enough-space = There isn't enough free space on the disk for the model.
 settings-error-model-network = The download was interrupted. Check the connection and resume it.
 settings-error-model-http-status = The download server refused the request. Try again later.
@@ -227,3 +233,10 @@ settings-error-model-io = Trama couldn't write the model files.
 settings-error-model-panicked = The download stopped because of an error in Trama.
 settings-error-capture-no-input-device = No microphone is connected.
 settings-error-capture-device-open-failed = The microphone list can't be read right now.
+
+## Problems found at start ($path: the folder or file)
+
+settings-notice-settings-reset = The settings file couldn't be read, so the defaults are in use. The damaged file is kept next to it as settings.json.corrupt.
+settings-notice-settings-unreadable = The settings file couldn't be read, so the defaults are in use. Changes aren't saved, so that the file is not overwritten: check { $path }.
+settings-notice-library-unavailable = The library in { $path } couldn't be opened, so Trama opened the default library. Connect its disk or check its permissions, then restart Trama.
+settings-notice-library-failed = No library could be opened in { $path }. Check that the disk is connected and that you can write to it, then restart Trama.

@@ -1,5 +1,5 @@
 import { motion, type Variants } from 'motion/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { useI18n } from '../i18n/I18nProvider';
 import { duration, ease } from '../motion';
@@ -8,17 +8,18 @@ import {
   MicrophoneIcon,
   SlidersHorizontalIcon,
   SparkleIcon,
+  WarningIcon,
   WaveformIcon,
   type Icon,
 } from '../ui/icons';
-import { api, errorCode, type AppSettings, type LibrarySettings } from './api';
+import { api, errorCode, type AppSettings, type LibrarySettings, type StartupNotice } from './api';
 import { DataSection } from './DataSection';
 import { GeneralSection } from './GeneralSection';
 import { ProvidersSection } from './ProvidersSection';
 import { RecordingSection } from './RecordingSection';
 import './settings.css';
 import { TranscriptionSection } from './TranscriptionSection';
-import { ErrorText } from './ui';
+import { ErrorText, useNoticeText } from './ui';
 
 type SectionId = 'general' | 'providers' | 'transcription' | 'recording' | 'data' | 'claude';
 
@@ -55,12 +56,23 @@ export type UpdateLibrary = (change: Partial<LibrarySettings>) => Promise<string
 /** Settings: providers and models, transcription, recording, data and privacy, general. */
 export function SettingsScreen() {
   const { t } = useI18n();
+  const noticeText = useNoticeText();
   const [app, setApp] = useState<AppSettings | null>(null);
   const [library, setLibrary] = useState<LibrarySettings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [notices, setNotices] = useState<StartupNotice[]>([]);
+  // Number of the latest library change: answers to older ones are ignored.
+  const libraryRequest = useRef(0);
 
   useEffect(() => {
     let active = true;
+    // Notices are shown even when the library can't be read.
+    void api
+      .startupNotices()
+      .then((list) => {
+        if (active) setNotices(list);
+      })
+      .catch(() => {});
     Promise.all([api.appSettings(), api.librarySettings()])
       .then(([appSettings, librarySettings]) => {
         if (!active) return;
@@ -78,14 +90,16 @@ export function SettingsScreen() {
   const updateLibrary: UpdateLibrary = useCallback(
     async (change) => {
       if (!library) return null;
+      const request = ++libraryRequest.current;
       const previous = library;
       const next = { ...library, ...change };
       setLibrary(next);
       try {
-        setLibrary(await api.setLibrarySettings(next));
+        const saved = await api.setLibrarySettings(next);
+        if (request === libraryRequest.current) setLibrary(saved);
         return null;
       } catch (error) {
-        setLibrary(previous);
+        if (request === libraryRequest.current) setLibrary(previous);
         return errorCode(error);
       }
     },
@@ -98,6 +112,16 @@ export function SettingsScreen() {
         <h1 className="screen-title">{t('nav-settings')}</h1>
         <p className="screen-desc">{t('settings-description')}</p>
       </motion.header>
+      {notices.length > 0 && (
+        <div className="set-notices">
+          {notices.map((notice) => (
+            <p key={notice.code} className="set-warn" role="status">
+              <WarningIcon aria-hidden />
+              {noticeText(notice)}
+            </p>
+          ))}
+        </div>
+      )}
       {loadError !== null ? (
         <div className="set-load">
           <ErrorText code={loadError} />

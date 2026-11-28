@@ -92,6 +92,13 @@
   }
 }
 
+.set-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 12px 28px 0;
+}
+
 /* Groups and rows */
 
 .set-group {

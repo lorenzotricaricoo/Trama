@@ -118,6 +118,12 @@ export interface ModelStatus {
   progress: number | null;
 }
 
+/** A problem found at start; Trama started anyway. */
+export interface StartupNotice {
+  code: 'settings_reset' | 'settings_unreadable' | 'library_unavailable' | 'library_failed';
+  path: string | null;
+}
+
 /** Event the core sends for every change of the transcription model. */
 export const MODEL_EVENT = 'model';
 
@@ -141,6 +147,7 @@ export const api = {
   setLibraryLocation: (path: string | null) =>
     invoke<LibraryLocation>('set_library_location', { path }),
   revealLibrary: () => invoke<void>('reveal_library'),
+  startupNotices: () => invoke<StartupNotice[]>('startup_notices'),
   librarySettings: () => invoke<LibrarySettings>('library_settings'),
   setLibrarySettings: (settings: LibrarySettings) =>
     invoke<LibrarySettings>('set_library_settings', { settings }),

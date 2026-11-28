@@ -175,6 +175,7 @@ export function ProvidersSection({ library, onLibrary }: Props) {
       <BudgetGroup
         library={library}
         budget={budget}
+        unpriced={unpricedTaskModels(providers ?? [], tasks)}
         onLibrary={async (change) => {
           const code = await onLibrary(change);
           if (code === null) setBudget(await api.budgetStatus().catch(() => budget));
@@ -239,10 +240,11 @@ function ProviderCard({
     setConfirmRemove(false);
     try {
       await api.removeProvider(provider.id);
-      onRemoved();
     } catch (err) {
       setRemoveError(errorCode(err));
     }
+    // Reloaded either way: a failed removal may still have deleted the key.
+    onRemoved();
   };
 
   const keyStatus = !provider.needsKey
@@ -702,13 +704,26 @@ function ProviderDialog({
   );
 }
 
+/** Models chosen for a task that lack a price: an enforced budget refuses them. */
+function unpricedTaskModels(providers: Provider[], tasks: TaskModel[]): string[] {
+  return tasks.flatMap(({ providerId, modelId }) => {
+    const model = providers
+      .find((provider) => provider.id === providerId)
+      ?.models.find((m) => m.modelId === modelId);
+    const priced = model && model.inputPriceMicros !== null && model.outputPriceMicros !== null;
+    return priced ? [] : [modelId];
+  });
+}
+
 function BudgetGroup({
   library,
   budget,
+  unpriced,
   onLibrary,
 }: {
   library: LibrarySettings;
   budget: Budget | null;
+  unpriced: string[];
   onLibrary: UpdateLibrary;
 }) {
   const { t, locale } = useI18n();
@@ -834,6 +849,15 @@ function BudgetGroup({
           </span>
         </Switch>
       </Row>
+      {library.enforceBudget && library.monthlyBudgetMicros !== null && unpriced.length > 0 && (
+        <p className="set-warn" role="alert">
+          <WarningIcon aria-hidden />
+          {t('settings-budget-price-missing', {
+            count: unpriced.length,
+            models: unpriced.join(', '),
+          })}
+        </p>
+      )}
       <ErrorText code={error} />
     </Group>
   );
