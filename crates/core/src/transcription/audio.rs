@@ -2,8 +2,10 @@
 //! sits in memory at once.
 
 use std::fs::File;
-use std::io::{BufReader, ErrorKind};
+use std::io::{BufReader, ErrorKind, Read};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use hound::{SampleFormat, WavReader};
 use sherpa_onnx::LinearResampler;
@@ -25,9 +27,15 @@ const CHUNK_FRAMES: usize = 24_000;
 /// A WAV file: 32-bit float (what the recorder writes) or integer PCM, any sample rate,
 /// any number of channels. Channels are averaged and the result is resampled to
 /// [`SAMPLE_RATE`].
+///
+/// A file cut short (the recorder crashed before writing all of it, so its header
+/// declares more data than there is) is read up to where it ends: what is there gets
+/// transcribed.
 pub struct WavSource {
     path: PathBuf,
-    reader: WavReader<BufReader<File>>,
+    reader: WavReader<EofReader>,
+    /// Set once the file has no more bytes.
+    at_eof: Arc<AtomicBool>,
     channels: usize,
     sample_rate: u32,
     format: SampleFormat,
@@ -51,19 +59,28 @@ impl std::fmt::Debug for WavSource {
 
 impl WavSource {
     pub fn open(path: &Path) -> Result<Self> {
-        let reader = WavReader::open(path).map_err(|err| match err {
-            hound::Error::IoError(io) if io.kind() == ErrorKind::NotFound => {
-                TranscriptionError::permanent(error_code::AUDIO_MISSING, path.display())
-            }
-            hound::Error::IoError(io) => TranscriptionError::retryable(
-                error_code::AUDIO_READ_FAILED,
-                format!("{}: {io}", path.display()),
-            ),
-            other => TranscriptionError::permanent(
-                error_code::AUDIO_INVALID,
-                format!("{}: {other}", path.display()),
-            ),
-        })?;
+        let at_eof = Arc::new(AtomicBool::new(false));
+        let file = File::open(path).map_err(hound::Error::IoError);
+        let reader = file
+            .and_then(|file| {
+                WavReader::new(EofReader {
+                    inner: BufReader::new(file),
+                    at_eof: Arc::clone(&at_eof),
+                })
+            })
+            .map_err(|err| match err {
+                hound::Error::IoError(io) if io.kind() == ErrorKind::NotFound => {
+                    TranscriptionError::permanent(error_code::AUDIO_MISSING, path.display())
+                }
+                hound::Error::IoError(io) => TranscriptionError::retryable(
+                    error_code::AUDIO_READ_FAILED,
+                    format!("{}: {io}", path.display()),
+                ),
+                other => TranscriptionError::permanent(
+                    error_code::AUDIO_INVALID,
+                    format!("{}: {other}", path.display()),
+                ),
+            })?;
         let spec = reader.spec();
         let supported = match spec.sample_format {
             SampleFormat::Float => spec.bits_per_sample == 32,
@@ -93,6 +110,7 @@ impl WavSource {
             path: path.to_owned(),
             frames: u64::from(reader.duration()),
             reader,
+            at_eof,
             channels: usize::from(spec.channels),
             sample_rate: spec.sample_rate,
             format: spec.sample_format,
@@ -108,7 +126,8 @@ impl WavSource {
         self.sample_rate
     }
 
-    /// Frames in the file.
+    /// Frames in the file, as its header declares them (fewer if it turned out to be
+    /// cut short once read to the end).
     pub fn frames(&self) -> u64 {
         self.frames
     }
@@ -116,6 +135,23 @@ impl WavSource {
     /// Length of the file in seconds.
     pub fn duration_s(&self) -> f64 {
         self.frames as f64 / f64::from(self.sample_rate)
+    }
+}
+
+/// The file under the WAV reader, noting when it runs out of bytes: a read error there
+/// means the file was cut short, not that the disk failed.
+struct EofReader {
+    inner: BufReader<File>,
+    at_eof: Arc<AtomicBool>,
+}
+
+impl Read for EofReader {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let n = self.inner.read(buf)?;
+        if n == 0 && !buf.is_empty() {
+            self.at_eof.store(true, Ordering::Relaxed);
+        }
+        Ok(n)
     }
 }
 
@@ -135,28 +171,38 @@ impl AudioSource for WavSource {
         let frames = left.min(CHUNK_FRAMES as u64) as usize;
         let wanted = frames * self.channels;
         self.interleaved.clear();
-        match self.format {
-            SampleFormat::Float => {
-                for sample in self.reader.samples::<f32>().take(wanted) {
-                    let sample = sample.map_err(|err| read_error(&self.path, err))?;
-                    self.interleaved.push(sample);
-                }
-            }
+        let result = match self.format {
+            SampleFormat::Float => self
+                .reader
+                .samples::<f32>()
+                .take(wanted)
+                .try_for_each(|sample| sample.map(|s| self.interleaved.push(s))),
             SampleFormat::Int => {
                 let scale = 1.0 / (1u64 << (self.bits - 1)) as f32;
-                for sample in self.reader.samples::<i32>().take(wanted) {
-                    let sample = sample.map_err(|err| read_error(&self.path, err))?;
-                    self.interleaved.push(sample as f32 * scale);
-                }
+                self.reader
+                    .samples::<i32>()
+                    .take(wanted)
+                    .try_for_each(|sample| sample.map(|s| self.interleaved.push(s as f32 * scale)))
             }
+        };
+        let truncated = match result {
+            Ok(()) => self.interleaved.len() != wanted,
+            // The header promised more than the file holds: the end of the data.
+            Err(hound::Error::IoError(_)) if self.at_eof.load(Ordering::Relaxed) => true,
+            Err(err) => return Err(read_error(&self.path, err)),
+        };
+        if truncated {
+            // Drop a frame cut in the middle, and stop here.
+            let whole = self.interleaved.len() / self.channels * self.channels;
+            self.interleaved.truncate(whole);
+            self.frames = self.frames_read + (whole / self.channels) as u64;
+            eprintln!(
+                "trama: {} ends early, after {} frames (fewer than its header declares); transcribing what is there",
+                self.path.display(),
+                self.frames
+            );
         }
-        if self.interleaved.len() != wanted {
-            return Err(TranscriptionError::permanent(
-                error_code::AUDIO_INVALID,
-                format!("{}: the file ends early", self.path.display()),
-            ));
-        }
-        self.frames_read += frames as u64;
+        self.frames_read += (self.interleaved.len() / self.channels) as u64;
         let last = self.frames_read == self.frames;
 
         let mono: Vec<f32> = if self.channels == 1 {
@@ -317,6 +363,38 @@ mod tests {
         let mut out = Vec::new();
         assert!(!source.read(&mut out).unwrap());
         assert!(out.is_empty());
+    }
+
+    #[test]
+    fn a_file_cut_short_is_read_up_to_where_it_ends() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("others.wav");
+        let spec = hound::WavSpec {
+            channels: 2,
+            sample_rate: 48_000,
+            bits_per_sample: 32,
+            sample_format: SampleFormat::Float,
+        };
+        // Two seconds written, then the file loses its last half second and a few
+        // bytes more, ending inside a frame: the header still declares two seconds.
+        write_wav(&path, spec, 96_000, |_| 0.25);
+        let len = std::fs::metadata(&path).unwrap().len();
+        let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        file.set_len(len - 24_000 * 8 - 6).unwrap();
+        drop(file);
+
+        let mut source = WavSource::open(&path).unwrap();
+        assert_eq!(source.frames(), 96_000);
+        let samples = read_all(&mut source);
+        // 1.5 s minus the cut frame, at 16 kHz.
+        assert!(
+            (samples.len() as i64 - 24_000).abs() <= 16,
+            "{} samples",
+            samples.len()
+        );
+        assert_eq!(source.frames(), 72_000 - 1);
+        assert_eq!(source.progress(), 1.0);
+        assert!(samples[100..23_000].iter().all(|s| (s - 0.25).abs() < 1e-3));
     }
 
     #[test]
