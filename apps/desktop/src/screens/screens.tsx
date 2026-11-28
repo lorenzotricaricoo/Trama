@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { useI18n } from '../i18n/I18nProvider';
 import type { ScreenId } from '../shell/navigation';
-import { GearIcon, HouseIcon, StackIcon } from '../ui/icons';
+import { SettingsScreen } from '../settings/SettingsScreen';
+import { HouseIcon, StackIcon } from '../ui/icons';
 import { PlaceholderScreen } from './PlaceholderScreen';
 
-// Home and Sources arrive with #35, Settings with #36.
+// Home and Sources arrive with #35.
 
 function HomeScreen() {
   const { t, locale } = useI18n();
@@ -36,19 +37,6 @@ function SourcesScreen() {
       icon={StackIcon}
       emptyTitle={t('sources-empty-title')}
       emptyBody={t('sources-empty-body')}
-    />
-  );
-}
-
-function SettingsScreen() {
-  const { t } = useI18n();
-  return (
-    <PlaceholderScreen
-      title={t('nav-settings')}
-      description={t('settings-description')}
-      icon={GearIcon}
-      emptyTitle={t('settings-empty-title')}
-      emptyBody={t('settings-empty-body')}
     />
   );
 }

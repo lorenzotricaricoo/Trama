@@ -50,5 +50,3 @@ sources-description = Meeting, note e documenti, tenuti così come li hai portat
 sources-empty-title = Qui arriva tutto quello che porti in { -brand }
 sources-empty-body = L'elenco delle fonti, con filtri e ricerca, arriva in una prossima versione.
 settings-description = Provider, trascrizione, registrazione, dati e privacy.
-settings-empty-title = Le impostazioni stanno arrivando
-settings-empty-body = Ogni sezione arriva insieme alla funzione che regola.

@@ -3,6 +3,7 @@ import '@fontsource-variable/geist-mono';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { loadAppearance } from './appearance';
 import './app.css';
 import { negotiateLocale } from './i18n/catalogs';
 import { I18nProvider } from './i18n/I18nProvider';
@@ -13,7 +14,9 @@ if (!root) {
   throw new Error('Missing #root element');
 }
 
-const locale = negotiateLocale(await requestedLocales());
+// The language and the appearance are read before the first render, so nothing flashes.
+const [requested] = await Promise.all([requestedLocales(), loadAppearance()]);
+const locale = negotiateLocale(requested);
 
 createRoot(root).render(
   <StrictMode>

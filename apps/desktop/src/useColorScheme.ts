@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { useAppearance } from './appearance';
 
 export type ColorScheme = 'light' | 'dark';
 
@@ -14,7 +15,9 @@ function snapshot(): ColorScheme {
   return window.matchMedia(query).matches ? 'dark' : 'light';
 }
 
-/** Follows the system appearance. */
+/** The theme chosen in Settings, or the system appearance when it follows the system. */
 export function useColorScheme(): ColorScheme {
-  return useSyncExternalStore(subscribe, snapshot);
+  const system = useSyncExternalStore(subscribe, snapshot);
+  const { theme } = useAppearance();
+  return theme === 'system' ? system : theme;
 }
