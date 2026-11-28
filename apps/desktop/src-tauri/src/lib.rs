@@ -5,12 +5,14 @@
 
 mod jobs;
 mod models;
+mod notes;
+mod quit;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
-use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
+use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
+use tauri::{AppHandle, Manager, RunEvent, Runtime, State, WindowEvent};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
 use trama_core::jobs::{DeleteAudio, JobHandler, Runner};
 use trama_core::storage::Library;
@@ -106,7 +108,14 @@ fn app_menu<R: Runtime>(app: &AppHandle<R>, l10n: &Localizer) -> tauri::Result<M
             &PredefinedMenuItem::hide_others(app, t("menu-hide-others").as_deref())?,
             &PredefinedMenuItem::show_all(app, t("menu-show-all").as_deref())?,
             &separator()?,
-            &PredefinedMenuItem::quit(app, t("menu-quit").as_deref())?,
+            // Not the predefined item: quitting first lets the editor save (see `quit`).
+            &MenuItem::with_id(
+                app,
+                quit::QUIT_MENU_ID,
+                l10n.message("menu-quit", None),
+                true,
+                Some("CmdOrCtrl+Q"),
+            )?,
         ],
     )?;
     let edit_submenu = Submenu::with_items(
@@ -146,6 +155,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(AppState { locale })
+        .manage(quit::Quit::default())
         .invoke_handler(tauri::generate_handler![
             app_locale,
             jobs::active_jobs,
@@ -155,8 +165,27 @@ pub fn run() {
             models::download_model,
             models::cancel_model_download,
             models::verify_model,
-            models::remove_model
+            models::remove_model,
+            notes::create_note,
+            notes::save_note,
+            notes::get_note,
+            notes::list_sources,
+            quit::quit_ready
         ])
+        .on_menu_event(|app, event| {
+            if event.id() == quit::QUIT_MENU_ID {
+                quit::request(app);
+            }
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                // Closing the window quits the app: let the editor save first.
+                if !window.state::<quit::Quit>().may_close() {
+                    api.prevent_close();
+                    quit::request(window.app_handle());
+                }
+            }
+        })
         .setup(move |app| {
             app.manage(start_core(app.handle())?);
             app.manage(models::start(app.handle())?);

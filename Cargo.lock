@@ -4404,6 +4404,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "tempfile",
  "trama-core",
 ]
 
