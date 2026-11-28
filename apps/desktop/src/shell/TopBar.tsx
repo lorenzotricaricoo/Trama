@@ -19,11 +19,15 @@ export function TopBar({ title, canGoBack, onBack, jobs }: TopBarProps) {
   return (
     <div className="topbar" data-tauri-drag-region>
       <Hint label={t('back')} shortcut={SHORTCUTS.back.label} placement="bottom">
+        {/* aria-disabled rather than disabled: going back to the first screen must not drop
+            the focus of the button that was just pressed. */}
         <Button
           className="icon-btn"
           aria-label={t('back')}
-          isDisabled={!canGoBack}
-          onPress={onBack}
+          aria-disabled={canGoBack ? undefined : true}
+          onPress={() => {
+            if (canGoBack) onBack();
+          }}
         >
           <CaretLeftIcon aria-hidden />
         </Button>

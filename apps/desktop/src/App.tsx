@@ -7,13 +7,15 @@ import { Screen } from './screens/screens';
 import { CommandBar, useCommandBar, type Command } from './shell/CommandBar';
 import { NAV_ITEMS, useNavigation, type Direction } from './shell/navigation';
 import { Notice, useNotice } from './shell/Notice';
-import { SHORTCUTS, useShortcuts } from './shell/shortcuts';
+import { SHORTCUTS, useShortcuts, type ShortcutId } from './shell/shortcuts';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
 import { useTranslucency } from './shell/useTranslucency';
 import { ArrowBendUpLeftIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
 import { useColorScheme } from './useColorScheme';
+
+const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings'];
 
 // Screens leave quickly towards where they came from and enter from the direction of travel.
 const stage: Variants = {
@@ -48,16 +50,20 @@ export function App() {
   const record = () => notice.show(t('record-unavailable'));
   const sidebarLabel = collapsed ? t('sidebar-expand') : t('sidebar-collapse');
 
-  useShortcuts({
-    commandBar: bar.toggle,
-    toggleSidebar,
-    settings: () => {
-      bar.close();
-      nav.navigate('settings');
+  useShortcuts(
+    {
+      commandBar: bar.toggle,
+      toggleSidebar,
+      settings: () => {
+        bar.close();
+        nav.navigate('settings');
+      },
+      back: nav.back,
+      record,
     },
-    back: nav.back,
-    record,
-  });
+    // Behind the command bar only its own toggle and Settings act.
+    bar.state === 'closed' ? undefined : COMMAND_BAR_SHORTCUTS,
+  );
 
   const commands: Command[] = [
     ...NAV_ITEMS.map((item): Command => ({

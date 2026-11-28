@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from './App';
@@ -46,7 +46,7 @@ describe('App shell', () => {
     renderApp();
     expect(await title('Welcome to Trama')).toBeInTheDocument();
     expect(link('Home')).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('navigates from the sidebar and back', async () => {
@@ -63,7 +63,7 @@ describe('App shell', () => {
     expect(await title('Sources')).toBeInTheDocument();
     await user.keyboard('{Meta>}[[{/Meta}');
     expect(await title('Welcome to Trama')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Back' })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('moves through the sidebar with the keyboard', async () => {
@@ -101,6 +101,62 @@ describe('App shell', () => {
     const { user } = renderApp();
     await user.keyboard('{Meta>},{/Meta}');
     expect(await title('Settings')).toBeInTheDocument();
+  });
+
+  it('keeps the focus on Back when it leads to the first screen', async () => {
+    const { user } = renderApp();
+    await user.click(link('Sources'));
+    await title('Sources');
+    const back = screen.getByRole('button', { name: 'Back' });
+    back.focus();
+    await user.keyboard('{Enter}');
+    expect(await title('Welcome to Trama')).toBeInTheDocument();
+    expect(back).toHaveAttribute('aria-disabled', 'true');
+    expect(back).toHaveFocus();
+    // Pressing it again does nothing.
+    await user.keyboard('{Enter}');
+    expect(await title('Welcome to Trama')).toBeInTheDocument();
+  });
+
+  it('goes back with ⌘ and the [ key of layouts where [ needs ⌥', async () => {
+    const { user } = renderApp();
+    await user.click(link('Sources'));
+    await title('Sources');
+    // Italian layout: the physical [ key types è.
+    fireEvent.keyDown(document.body, { key: 'è', code: 'BracketLeft', metaKey: true });
+    expect(await title('Welcome to Trama')).toBeInTheDocument();
+  });
+
+  it('leaves Ctrl shortcuts to text editing on macOS', () => {
+    renderApp();
+    // Ctrl+K deletes to the end of the line in macOS text fields.
+    const notCancelled = fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
+    expect(notCancelled).toBe(true);
+    expect(commandBar()).not.toBeInTheDocument();
+  });
+
+  it('uses Ctrl instead of ⌘ on other platforms', async () => {
+    Object.defineProperty(navigator, 'platform', { configurable: true, value: 'Win32' });
+    renderApp();
+    fireEvent.keyDown(document.body, { key: 'k', metaKey: true });
+    expect(commandBar()).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'k', ctrlKey: true });
+    expect(await screen.findByRole('dialog', { name: 'Command bar' })).toBeInTheDocument();
+  });
+
+  it('ignores the other shortcuts while the command bar is open', async () => {
+    const { user, container } = renderApp();
+    await user.keyboard('{Meta>}k{/Meta}');
+    await screen.findByRole('dialog', { name: 'Command bar' });
+    await user.keyboard('{Meta>}\\{/Meta}');
+    await user.keyboard('{Meta>}{Alt>}r{/Alt}{/Meta}');
+    expect(container.querySelector('.app')).not.toHaveAttribute('data-collapsed');
+    // The page behind the bar is hidden from assistive technologies while it is open.
+    expect(screen.getByRole('status', { hidden: true })).toBeEmptyDOMElement();
+    // ⌘, still works, and closes the bar.
+    await user.keyboard('{Meta>},{/Meta}');
+    expect(await title('Settings')).toBeInTheDocument();
+    await waitFor(() => expect(commandBar()).not.toBeInTheDocument());
   });
 
   it('collapses and expands the sidebar, and remembers it', async () => {

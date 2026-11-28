@@ -9,8 +9,17 @@ interface Shortcut {
   matches: (event: KeyboardEvent) => boolean;
 }
 
-/** ⌘ on macOS; Ctrl is accepted too, for other platforms. */
-const mod = (event: KeyboardEvent) => event.metaKey || event.ctrlKey;
+/** Whether the app runs on macOS, where the shortcuts use ⌘. */
+export function onMac(): boolean {
+  return /Mac/.test(navigator.platform) || /Mac OS X/.test(navigator.userAgent);
+}
+
+/**
+ * ⌘ on macOS, Ctrl elsewhere. On macOS Ctrl is left alone: Ctrl+K, Ctrl+[ and the like are
+ * standard text-editing keys there.
+ */
+const mod = (event: KeyboardEvent) =>
+  onMac() ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
 
 export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
   commandBar: {
@@ -27,7 +36,8 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
   },
   back: {
     label: '⌘[',
-    matches: (e) => mod(e) && !e.altKey && e.key === '[',
+    // The physical key too: on some layouts (Italian) [ needs ⌥.
+    matches: (e) => mod(e) && !e.altKey && (e.key === '[' || e.code === 'BracketLeft'),
   },
   record: {
     label: '⌥⌘R',
@@ -44,12 +54,18 @@ function isTextField(target: EventTarget | null): boolean {
   );
 }
 
-/** Runs the handler of a shell shortcut pressed anywhere in the window. */
-export function useShortcuts(handlers: Record<ShortcutId, () => void>) {
-  // The latest handlers, so the listener is added once.
-  const latest = useRef(handlers);
+/**
+ * Runs the handler of a shell shortcut pressed anywhere in the window. Only the shortcuts in
+ * `enabled` act (all by default); the others are left to the page.
+ */
+export function useShortcuts(
+  handlers: Record<ShortcutId, () => void>,
+  enabled?: readonly ShortcutId[],
+) {
+  // The latest values, so the listener is added once.
+  const latest = useRef({ handlers, enabled });
   useEffect(() => {
-    latest.current = handlers;
+    latest.current = { handlers, enabled };
   });
 
   useEffect(() => {
@@ -59,9 +75,11 @@ export function useShortcuts(handlers: Record<ShortcutId, () => void>) {
         SHORTCUTS[key].matches(event),
       );
       if (id === undefined) return;
+      const { handlers: current, enabled: allowed } = latest.current;
+      if (allowed && !allowed.includes(id)) return;
       if (id === 'back' && isTextField(event.target)) return;
       event.preventDefault();
-      latest.current[id]();
+      current[id]();
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
