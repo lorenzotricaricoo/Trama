@@ -149,8 +149,9 @@ pub fn collect_files(paths: &[PathBuf]) -> (Vec<PathBuf>, Vec<Skipped>) {
     (files, skipped)
 }
 
-/// Adds the Markdown files under `dir` to `found`. Symbolic links to folders are not
-/// followed, so a loop cannot trap the walk.
+/// Adds the Markdown files under `dir` to `found`. Symbolic links are left out: a link
+/// named `.md` inside a dropped folder could point anywhere, and a link to a folder could
+/// trap the walk in a loop. Files the user picks or drops themselves are read as given.
 fn walk(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
     if depth > MAX_DEPTH {
         return;
@@ -166,6 +167,9 @@ fn walk(dir: &Path, depth: usize, found: &mut Vec<PathBuf>) {
         let Ok(kind) = entry.file_type() else {
             continue;
         };
+        if kind.is_symlink() {
+            continue;
+        }
         if kind.is_dir() {
             walk(&path, depth + 1, found);
         } else if is_markdown(&path) {

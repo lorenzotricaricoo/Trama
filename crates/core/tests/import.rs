@@ -193,6 +193,13 @@ fn a_folder_imports_the_markdown_files_inside_it() {
     write(&root, ".obsidian/workspace.md", b"hidden", MAY_2025);
     write(&root, ".hidden.md", b"hidden", MAY_2025);
     let a = root.join("a.md");
+    // Links inside a dropped folder are not followed.
+    #[cfg(unix)]
+    {
+        let secret = write(files.path(), "secret.txt", b"private", MAY_2025);
+        std::os::unix::fs::symlink(&secret, root.join("link.md")).unwrap();
+        std::os::unix::fs::symlink(&root, root.join("loop")).unwrap();
+    }
 
     // A file given on its own and inside a dropped folder counts once.
     let (found, skipped) = collect_files(&[root.clone(), a]);
