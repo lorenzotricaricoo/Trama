@@ -20,6 +20,12 @@ tauri-plugin-dialog = "2.8.4"
 tauri-plugin-notification = "2.8.1"
 trama-core.workspace = true
 
+# The Dock icon that follows the accent (see `dock_icon.rs`): already in the tree through Tauri.
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6.5"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSApplication", "NSImage", "NSResponder"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSData"] }
+
 [lints]
 workspace = true
 

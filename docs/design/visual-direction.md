@@ -106,6 +106,21 @@ hints and citations. Both are open source (SIL Open Font License).
 **Phosphor** (regular weight, MIT licence). Every sidebar item has an icon. Every
 project has an icon and a colour that the user can change from the sidebar.
 
+### App icon
+
+**Ordito**: a swatch of fabric on the dark graphite of the frame, three accent threads
+(warp) crossing three light ones (weft), over and under. It is the name taken literally:
+different sources woven into one base. It follows the macOS grid (824 px squircle on a
+1024 px canvas, soft shadow, light inner edge) and uses no red, which stays for recording.
+
+- The source is `apps/desktop/src-tauri/icons/source/ordito.svg`, in Lime.
+- The bundle icon (Finder, Launchpad, Spotlight, the `.dmg` and the Dock of a closed app)
+  is always Lime: changing it after install would break the signature.
+- While Trama is open the Dock icon follows the accent: the threads and the glow take the
+  accent's hue (graphite also its low chroma), one image per accent in `icons/dock/`.
+- `python3 scripts/app-icon.py` (from `apps/desktop`, needs `rsvg-convert`) renders the
+  bundle sizes with `tauri icon` and the Dock icons from the source.
+
 ## Motion
 
 Motion explains what happened: where a screen came from, where a doubt went, where
