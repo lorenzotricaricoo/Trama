@@ -16,6 +16,7 @@ const appSettings: AppSettings = {
   theme: 'system',
   accent: 'lime',
   reduceTransparency: false,
+  reduceMotion: false,
   microphone: null,
   globalShortcut: 'Alt+Super+KeyR',
   defaultGlobalShortcut: 'Alt+Super+KeyR',
@@ -119,11 +120,12 @@ describe('SettingsScreen', () => {
     const user = renderSettings();
     const tabs = within(await sections()).getAllByRole('tab');
     expect(tabs.map((tab) => tab.textContent)).toEqual([
-      'General',
       'Providers and models',
       'Transcription',
       'Recording',
       'Data and privacy',
+      'Appearance',
+      'General',
     ]);
     expect(screen.queryByRole('tab', { name: 'Claude (MCP)' })).not.toBeInTheDocument();
 
@@ -143,6 +145,7 @@ describe('SettingsScreen', () => {
     const user = renderSettings();
     await sections();
 
+    await user.click(screen.getByRole('tab', { name: 'Appearance' }));
     await user.click(await screen.findByRole('radio', { name: 'Dark' }));
     await waitFor(() =>
       expect(calls).toContainEqual({
@@ -167,11 +170,27 @@ describe('SettingsScreen', () => {
     const user = renderSettings();
     await sections();
 
+    await user.click(screen.getByRole('tab', { name: 'Appearance' }));
     const toggle = await screen.findByRole('switch', { name: /Reduce transparency/ });
     expect(toggle).not.toBeChecked();
     await user.click(toggle);
     await waitFor(() =>
       expect(calls).toContainEqual({ cmd: 'set_reduce_transparency', args: { enabled: true } }),
+    );
+    expect(toggle).toBeChecked();
+  });
+
+  it('saves Reduce motion and calms the interface', async () => {
+    const calls = mockShell();
+    const user = renderSettings();
+    await sections();
+
+    await user.click(screen.getByRole('tab', { name: 'Appearance' }));
+    const toggle = await screen.findByRole('switch', { name: /Reduce motion/ });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(calls).toContainEqual({ cmd: 'set_reduce_motion', args: { enabled: true } }),
     );
     expect(toggle).toBeChecked();
   });
@@ -185,6 +204,7 @@ describe('SettingsScreen', () => {
     const user = renderSettings();
     await sections();
 
+    await user.click(screen.getByRole('tab', { name: 'Appearance' }));
     await user.click(await screen.findByRole('radio', { name: 'Light' }));
     expect(await screen.findByRole('alert')).toHaveTextContent("This appearance isn't available.");
     expect(screen.getByRole('radio', { name: 'System' })).toBeChecked();
@@ -330,7 +350,7 @@ describe('SettingsScreen safeguards', () => {
     const calls = mockShell();
     const user = renderSettings();
     await user.click(await screen.findByRole('tab', { name: 'Recording' }));
-    await user.click(await screen.findByRole('button', { name: 'Change shortcut' }));
+    await user.click(await screen.findByRole('button', { name: /^Change shortcut/ }));
     expect(screen.getByText(/Press the new shortcut/)).toBeInTheDocument();
     await user.tab();
     expect(screen.queryByText(/Press the new shortcut/)).not.toBeInTheDocument();

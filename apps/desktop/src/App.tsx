@@ -14,6 +14,7 @@ import { TopBar } from './shell/TopBar';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
 import { useTranslucency } from './shell/useTranslucency';
 import { ArrowBendUpLeftIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
+import { useAppearance } from './appearance';
 import { useColorScheme } from './useColorScheme';
 
 const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings'];
@@ -33,6 +34,7 @@ export function App() {
   const { t } = useI18n();
   const scheme = useColorScheme();
   const translucent = useTranslucency();
+  const { reduceMotion } = useAppearance();
   const nav = useNavigation();
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
   const bar = useCommandBar();
@@ -44,9 +46,10 @@ export function App() {
   useLayoutEffect(() => {
     const root = document.documentElement;
     const classes = ['t-app', `t-${scheme}`, translucent ? 't-translucent' : 't-opaque'];
+    if (reduceMotion) classes.push('t-calm');
     root.classList.add(...classes);
     return () => root.classList.remove(...classes);
-  }, [scheme, translucent]);
+  }, [scheme, translucent, reduceMotion]);
 
   // Recording arrives with the recording window (#31); until then the button explains it.
   const record = () => notice.show(t('record-unavailable'));
@@ -107,7 +110,7 @@ export function App() {
   const current = NAV_ITEMS.find((item) => item.id === nav.screen);
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
       <div className="app" data-collapsed={collapsed || undefined}>
         {/* The content extends under the transparent title bar; this strip moves the window. */}
         <div className="titlebar" data-tauri-drag-region />

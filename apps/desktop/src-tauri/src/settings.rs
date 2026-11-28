@@ -117,6 +117,7 @@ pub struct AppSettingsPayload {
     pub theme: String,
     pub accent: String,
     pub reduce_transparency: bool,
+    pub reduce_motion: bool,
     /// Microphone by device id; `None` follows the system default.
     pub microphone: Option<String>,
     pub global_shortcut: String,
@@ -146,6 +147,7 @@ fn payload(settings: &Settings) -> AppSettingsPayload {
         theme: config.theme,
         accent: config.accent,
         reduce_transparency: config.reduce_transparency,
+        reduce_motion: config.reduce_motion,
         microphone: config.microphone,
         global_shortcut: config.global_shortcut,
         default_global_shortcut: trama_core::config::DEFAULT_GLOBAL_SHORTCUT,
@@ -215,6 +217,17 @@ pub fn set_reduce_transparency(settings: State<'_, Settings>, enabled: bool) -> 
     settings
         .update(|config| {
             config.reduce_transparency = enabled;
+            Ok(())
+        })
+        .map(drop)
+}
+
+/// Turns transitions off even when macOS keeps motion on.
+#[tauri::command]
+pub fn set_reduce_motion(settings: State<'_, Settings>, enabled: bool) -> Result<(), String> {
+    settings
+        .update(|config| {
+            config.reduce_motion = enabled;
             Ok(())
         })
         .map(drop)

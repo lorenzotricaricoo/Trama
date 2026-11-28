@@ -49,4 +49,3 @@ home-empty-body = Latest meetings, open actions and active projects will appear 
 sources-description = Meetings, notes and documents, kept as you brought them.
 sources-empty-title = Everything you bring into { -brand } lands here
 sources-empty-body = The list of sources, with filters and search, comes in a next version.
-settings-description = Providers, transcription, recording, data and privacy.

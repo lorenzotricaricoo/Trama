@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Button } from 'react-aria-components';
+import { Button, Radio, RadioGroup } from 'react-aria-components';
 import { useI18n } from '../i18n/I18nProvider';
 import type { Translate } from '../i18n/catalogs';
-import { ArrowsClockwiseIcon } from '../ui/icons';
+import { ArrowsClockwiseIcon, MicrophoneIcon } from '../ui/icons';
 import { api, errorCode, type AppSettings, type InputDevices } from './api';
-import { ErrorText, Group, Row, SelectField } from './ui';
+import { ErrorText, Group, Row } from './ui';
 
 const SYSTEM_DEFAULT = '';
 
@@ -126,15 +126,22 @@ export function RecordingSection({ app, onApp }: Props) {
   const options = [
     {
       id: SYSTEM_DEFAULT,
-      label: defaultName
-        ? t('settings-microphone-default-named', { name: defaultName })
-        : t('settings-microphone-default'),
+      label: t('settings-microphone-default'),
+      detail: defaultName,
     },
-    ...(devices?.devices ?? []).map((device) => ({ id: device.id, label: device.name })),
+    ...(devices?.devices ?? []).map((device) => ({
+      id: device.id,
+      label: device.name,
+      detail: undefined as string | undefined,
+    })),
   ];
   // A chosen microphone that is not connected now is still shown, so the choice isn't lost.
   if (app.microphone && !options.some((option) => option.id === app.microphone)) {
-    options.push({ id: app.microphone, label: t('settings-microphone-missing') });
+    options.push({
+      id: app.microphone,
+      label: t('settings-microphone-missing'),
+      detail: undefined,
+    });
   }
 
   const changeMicrophone = async (value: string) => {
@@ -150,50 +157,64 @@ export function RecordingSection({ app, onApp }: Props) {
 
   return (
     <>
-      <Group title={t('settings-group-devices')} description={t('settings-devices-desc')}>
-        <Row wide>
-          <SelectField
-            label={t('settings-microphone')}
-            description={t('settings-microphone-desc')}
-            options={options}
-            value={app.microphone ?? SYSTEM_DEFAULT}
-            onChange={(value) => void changeMicrophone(value)}
-          />
-          <ErrorText code={micError} />
-          <ErrorText code={devicesError} />
-        </Row>
-        <div className="set-actions">
-          <Button className="set-btn" onPress={() => void loadDevices()}>
+      <Group
+        title={t('settings-microphone')}
+        description={t('settings-microphone-desc')}
+        action={
+          <Button className="set-btn" data-variant="quiet" onPress={() => void loadDevices()}>
             <ArrowsClockwiseIcon aria-hidden />
             {t('settings-microphone-refresh')}
           </Button>
-        </div>
+        }
+      >
+        <RadioGroup
+          className="set-devices"
+          aria-label={t('settings-microphone')}
+          value={app.microphone ?? SYSTEM_DEFAULT}
+          onChange={(value) => void changeMicrophone(value)}
+        >
+          {options.map((option) => (
+            <Radio key={option.id} value={option.id} className="set-device">
+              <span className="set-radio" aria-hidden />
+              <MicrophoneIcon className="set-device-ic" aria-hidden />
+              <span className="set-device-name">{option.label}</span>
+              {option.detail && <span className="set-mono set-device-detail">{option.detail}</span>}
+            </Radio>
+          ))}
+        </RadioGroup>
+        <ErrorText code={micError} />
+        <ErrorText code={devicesError} />
       </Group>
 
       <Group title={t('settings-group-shortcut')}>
         <Row label={t('settings-shortcut')} description={t('settings-shortcut-desc')}>
-          <kbd className="kbd set-kbd">{formatShortcut(app.globalShortcut, t)}</kbd>
+          <div className="set-shortcut">
+            <Button
+              className="set-keycap"
+              data-recording={recording || undefined}
+              aria-label={
+                recording
+                  ? t('settings-shortcut-stop')
+                  : `${t('settings-shortcut-change')}: ${formatShortcut(app.globalShortcut, t)}`
+              }
+              onPress={() => setRecording((on) => !on)}
+            >
+              {recording ? t('settings-shortcut-press') : formatShortcut(app.globalShortcut, t)}
+            </Button>
+            {app.globalShortcut !== app.defaultGlobalShortcut && (
+              <Button
+                className="set-link"
+                onPress={() => void saveShortcut(app.defaultGlobalShortcut)}
+              >
+                {t('settings-shortcut-reset')}
+              </Button>
+            )}
+          </div>
         </Row>
         <div role="status" className="set-recording-hint">
           {recording && <p className="set-row-desc">{t('settings-shortcut-recording')}</p>}
         </div>
         <ErrorText code={shortcutError} />
-        <div className="set-actions">
-          <Button
-            className="set-btn"
-            data-variant={recording ? 'primary' : undefined}
-            onPress={() => setRecording((on) => !on)}
-          >
-            {recording ? t('settings-shortcut-stop') : t('settings-shortcut-change')}
-          </Button>
-          <Button
-            className="set-btn"
-            isDisabled={app.globalShortcut === app.defaultGlobalShortcut}
-            onPress={() => void saveShortcut(app.defaultGlobalShortcut)}
-          >
-            {t('settings-shortcut-reset')}
-          </Button>
-        </div>
         <p className="set-row-desc set-note">{t('settings-shortcut-note')}</p>
       </Group>
     </>

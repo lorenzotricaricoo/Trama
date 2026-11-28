@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Button, Label, Radio, RadioGroup, Text } from 'react-aria-components';
+import { Button } from 'react-aria-components';
 import { useI18n } from '../i18n/I18nProvider';
-import { FolderOpenIcon, InfoIcon } from '../ui/icons';
+import { HardDrivesIcon, InfoIcon } from '../ui/icons';
 import {
   api,
   errorCode,
@@ -12,7 +12,7 @@ import {
   type Retention,
 } from './api';
 import type { UpdateLibrary } from './SettingsScreen';
-import { ConfirmDialog, ErrorText, Group, Row } from './ui';
+import { ConfirmDialog, ErrorText, Group, Segmented } from './ui';
 
 interface Props {
   app: AppSettings;
@@ -63,50 +63,46 @@ export function DataSection({ app, onApp, library, onLibrary }: Props) {
   return (
     <>
       <Group title={t('settings-group-retention')} description={t('settings-retention-desc')}>
-        <Row wide>
-          <RadioGroup
-            className="set-radios"
-            value={library.audioRetention}
-            onChange={(value) => {
-              setRetentionError(null);
-              void onLibrary({ audioRetention: value as Retention }).then(setRetentionError);
-            }}
-          >
-            <Label className="set-row-label">{t('settings-retention')}</Label>
-            <div className="set-choices">
-              {RETENTIONS.map((option) => (
-                <Radio key={option} value={option} className="set-choice">
-                  <span className="set-choice-dot" aria-hidden />
-                  <span className="set-choice-text">
-                    <span className="set-row-label">{t(`settings-retention-${option}`)}</span>
-                    <span className="set-row-desc">{t(`settings-retention-${option}-desc`)}</span>
-                  </span>
-                </Radio>
-              ))}
+        <Segmented
+          label={t('settings-retention')}
+          labelHidden
+          options={RETENTIONS.map((option) => ({
+            id: option,
+            label: t(`settings-retention-${option}`),
+          }))}
+          value={library.audioRetention}
+          onChange={(value) => {
+            setRetentionError(null);
+            void onLibrary({ audioRetention: value as Retention }).then(setRetentionError);
+          }}
+        />
+        <div className="set-callout">
+          <InfoIcon aria-hidden />
+          <p>
+            {t(`settings-retention-${library.audioRetention}-desc`)} {t('settings-retention-note')}
+          </p>
+        </div>
+        <ErrorText code={retentionError} />
+      </Group>
+
+      <Group title={t('settings-group-leaves')} description={t('settings-leaves-desc')}>
+        <dl className="set-table">
+          {(['audio', 'sources', 'index'] as const).map((item) => (
+            <div key={item} className="set-table-row">
+              <dt>{t(`settings-leaves-${item}`)}</dt>
+              <dd>{t(`settings-leaves-${item}-desc`)}</dd>
             </div>
-            <Text slot="description" className="set-row-desc set-note">
-              {t('settings-retention-note')}
-            </Text>
-          </RadioGroup>
-          <ErrorText code={retentionError} />
-        </Row>
+          ))}
+        </dl>
       </Group>
 
       <Group title={t('settings-group-library')} description={t('settings-library-desc')}>
-        <Row wide label={t('settings-library-location')}>
-          <div className="set-path">{location.current}</div>
-        </Row>
-        {location.restartRequired && (
-          <p className="set-warn" role="status">
-            <InfoIcon aria-hidden />
-            {t('settings-library-restart', { path: location.next })}
-          </p>
-        )}
-        {location.overridden && <p className="set-row-desc">{t('settings-library-overridden')}</p>}
-        <ErrorText code={locationError} />
-        <div className="set-actions">
-          <Button className="set-btn" onPress={() => void reveal()}>
-            <FolderOpenIcon aria-hidden />
+        <div className="set-pathbox">
+          <HardDrivesIcon aria-hidden />
+          <span className="set-mono set-pathbox-path" title={location.current}>
+            {location.current}
+          </span>
+          <Button className="set-btn" data-variant="quiet" onPress={() => void reveal()}>
             {t('settings-library-reveal')}
           </Button>
           <Button
@@ -116,14 +112,20 @@ export function DataSection({ app, onApp, library, onLibrary }: Props) {
           >
             {t('settings-library-change')}
           </Button>
-          <Button
-            className="set-btn"
-            isDisabled={location.overridden || location.next === location.default}
-            onPress={() => void move(null)}
-          >
+        </div>
+        {location.restartRequired && (
+          <p className="set-warn" role="status">
+            <InfoIcon aria-hidden />
+            {t('settings-library-restart', { path: location.next })}
+          </p>
+        )}
+        {location.overridden && <p className="set-row-desc">{t('settings-library-overridden')}</p>}
+        {!location.overridden && location.next !== location.default && (
+          <Button className="set-link" onPress={() => void move(null)}>
             {t('settings-library-default')}
           </Button>
-        </div>
+        )}
+        <ErrorText code={locationError} />
       </Group>
 
       <ConfirmDialog

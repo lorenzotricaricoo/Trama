@@ -24,9 +24,16 @@ export interface Appearance {
   accent: Accent;
   /** Opaque window even when macOS keeps transparency on. */
   reduceTransparency: boolean;
+  /** No transitions even when macOS keeps motion on. */
+  reduceMotion: boolean;
 }
 
-const DEFAULT: Appearance = { theme: 'system', accent: 'lime', reduceTransparency: false };
+const DEFAULT: Appearance = {
+  theme: 'system',
+  accent: 'lime',
+  reduceTransparency: false,
+  reduceMotion: false,
+};
 
 let current: Appearance = DEFAULT;
 const listeners = new Set<() => void>();
@@ -52,9 +59,14 @@ function publish(next: Appearance) {
   for (const listener of listeners) listener();
 }
 
-/** Shows `next` at once; the caller saves it in the core. */
-export function setAppearance(next: Appearance) {
-  publish(next);
+/** Shows a change at once; the caller saves it in the core. */
+export function setAppearance(change: Partial<Appearance>) {
+  publish({ ...current, ...change });
+}
+
+/** The appearance shown now, for undoing a change that could not be saved. */
+export function currentAppearance(): Appearance {
+  return current;
 }
 
 /** Reads the saved appearance before the first render, so the window opens with it. */
@@ -64,13 +76,17 @@ export async function loadAppearance(): Promise<void> {
     return;
   }
   try {
-    const saved = await invoke<{ theme: unknown; accent: unknown; reduceTransparency: unknown }>(
-      'app_settings',
-    );
+    const saved = await invoke<{
+      theme: unknown;
+      accent: unknown;
+      reduceTransparency: unknown;
+      reduceMotion: unknown;
+    }>('app_settings');
     publish({
       theme: isTheme(saved.theme) ? saved.theme : DEFAULT.theme,
       accent: isAccent(saved.accent) ? saved.accent : DEFAULT.accent,
       reduceTransparency: saved.reduceTransparency === true,
+      reduceMotion: saved.reduceMotion === true,
     });
   } catch (error) {
     console.error('Cannot read the appearance, using the defaults', error);

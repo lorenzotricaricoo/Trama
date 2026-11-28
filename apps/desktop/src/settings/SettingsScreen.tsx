@@ -4,14 +4,16 @@ import { Tab, TabList, TabPanel, Tabs } from 'react-aria-components';
 import { useI18n } from '../i18n/I18nProvider';
 import { duration, ease } from '../motion';
 import {
-  DatabaseIcon,
   MicrophoneIcon,
+  PaletteIcon,
+  ShieldCheckIcon,
   SlidersHorizontalIcon,
   SparkleIcon,
   WarningIcon,
   WaveformIcon,
   type Icon,
 } from '../ui/icons';
+import { AppearanceSection } from './AppearanceSection';
 import { api, errorCode, type AppSettings, type LibrarySettings, type StartupNotice } from './api';
 import { DataSection } from './DataSection';
 import { GeneralSection } from './GeneralSection';
@@ -21,7 +23,8 @@ import './settings.css';
 import { TranscriptionSection } from './TranscriptionSection';
 import { ErrorText, useNoticeText } from './ui';
 
-type SectionId = 'general' | 'providers' | 'transcription' | 'recording' | 'data' | 'claude';
+type SectionId =
+  'providers' | 'transcription' | 'recording' | 'data' | 'appearance' | 'claude' | 'general';
 
 interface SectionDef {
   id: SectionId;
@@ -35,12 +38,13 @@ interface SectionDef {
 const CURRENT_PHASE = 1;
 
 const SECTIONS: readonly SectionDef[] = [
-  { id: 'general', label: 'settings-section-general', icon: SlidersHorizontalIcon, phase: 1 },
   { id: 'providers', label: 'settings-section-providers', icon: SparkleIcon, phase: 1 },
   { id: 'transcription', label: 'settings-section-transcription', icon: WaveformIcon, phase: 1 },
   { id: 'recording', label: 'settings-section-recording', icon: MicrophoneIcon, phase: 1 },
-  { id: 'data', label: 'settings-section-data', icon: DatabaseIcon, phase: 1 },
+  { id: 'data', label: 'settings-section-data', icon: ShieldCheckIcon, phase: 1 },
+  { id: 'appearance', label: 'settings-section-appearance', icon: PaletteIcon, phase: 1 },
   { id: 'claude', label: 'settings-section-claude', icon: SparkleIcon, phase: 3 },
+  { id: 'general', label: 'settings-section-general', icon: SlidersHorizontalIcon, phase: 1 },
 ];
 
 export const VISIBLE_SECTIONS = SECTIONS.filter((section) => section.phase <= CURRENT_PHASE);
@@ -53,7 +57,7 @@ const rise: Variants = {
 /** Saves a change of the library settings, showing it at once and undoing it on failure. */
 export type UpdateLibrary = (change: Partial<LibrarySettings>) => Promise<string | null>;
 
-/** Settings: providers and models, transcription, recording, data and privacy, general. */
+/** Settings: providers and models, transcription, recording, data and privacy, appearance, general. */
 export function SettingsScreen() {
   const { t } = useI18n();
   const noticeText = useNoticeText();
@@ -110,7 +114,6 @@ export function SettingsScreen() {
     <motion.div className="screen set-screen" initial="hide" animate="show">
       <motion.header className="screen-top" variants={rise}>
         <h1 className="screen-title">{t('nav-settings')}</h1>
-        <p className="screen-desc">{t('settings-description')}</p>
       </motion.header>
       {notices.length > 0 && (
         <div className="set-notices">
@@ -141,25 +144,23 @@ export function SettingsScreen() {
                 </Tab>
               ))}
             </TabList>
-            <TabPanel id="general" className="set-panel">
-              <GeneralSection
-                app={app}
-                onApp={setApp}
-                library={library}
-                onLibrary={updateLibrary}
-              />
-            </TabPanel>
             <TabPanel id="providers" className="set-panel">
               <ProvidersSection library={library} onLibrary={updateLibrary} />
             </TabPanel>
             <TabPanel id="transcription" className="set-panel">
-              <TranscriptionSection />
+              <TranscriptionSection library={library} onLibrary={updateLibrary} />
             </TabPanel>
             <TabPanel id="recording" className="set-panel">
               <RecordingSection app={app} onApp={setApp} />
             </TabPanel>
             <TabPanel id="data" className="set-panel">
               <DataSection app={app} onApp={setApp} library={library} onLibrary={updateLibrary} />
+            </TabPanel>
+            <TabPanel id="appearance" className="set-panel">
+              <AppearanceSection app={app} onApp={setApp} />
+            </TabPanel>
+            <TabPanel id="general" className="set-panel">
+              <GeneralSection app={app} onApp={setApp} />
             </TabPanel>
           </Tabs>
         </motion.div>

@@ -11,15 +11,16 @@ import {
   Modal,
   ModalOverlay,
   NumberField,
-  Switch,
   Text,
   TextField,
 } from 'react-aria-components';
 import { useI18n } from '../i18n/I18nProvider';
 import {
-  ArrowsClockwiseIcon,
   CaretDownIcon,
   CheckIcon,
+  CloudIcon,
+  DesktopIcon,
+  LockSimpleIcon,
   PencilSimpleIcon,
   PlusIcon,
   TrashIcon,
@@ -38,7 +39,7 @@ import {
   type TaskModel,
 } from './api';
 import type { UpdateLibrary } from './SettingsScreen';
-import { ConfirmDialog, ErrorText, Group, Row, SelectField } from './ui';
+import { ConfirmDialog, ErrorText, Group, Row, SelectField, ToggleRow } from './ui';
 
 /** Currencies offered for prices and the budget; amounts are never converted. */
 export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD'] as const;
@@ -46,6 +47,16 @@ export const CURRENCIES = ['USD', 'EUR', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD'] as c
 /** Separates provider and model in the key of a task's model choice. */
 const KEY_SEPARATOR = '\n';
 const NO_MODEL = '';
+
+/** Whether a provider runs on this Mac (Ollama, LM Studio), for its icon. */
+function isLocal(baseUrl: string): boolean {
+  try {
+    const host = new URL(baseUrl).hostname;
+    return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+  } catch {
+    return false;
+  }
+}
 
 function useFormat(currency: string) {
   const { locale } = useI18n();
@@ -158,10 +169,15 @@ export function ProvidersSection({ library, onLibrary }: Props) {
         {TASKS.map((task) => {
           const choice = tasks.find((existing) => existing.task === task);
           return (
-            <Row key={task} wide>
+            <Row
+              key={task}
+              label={t(`settings-task-${task}`)}
+              description={t(`settings-task-${task}-desc`)}
+            >
               <SelectField
                 label={t(`settings-task-${task}`)}
-                description={t(`settings-task-${task}-desc`)}
+                labelHidden
+                mono
                 options={modelOptions}
                 value={choice ? `${choice.providerId}${KEY_SEPARATOR}${choice.modelId}` : NO_MODEL}
                 onChange={(key) => void chooseTask(task, key)}
@@ -247,6 +263,13 @@ function ProviderCard({
     onRemoved();
   };
 
+  const status: { tone?: 'ok' | 'warn'; text: string } =
+    provider.needsKey && !provider.hasKey
+      ? { tone: 'warn', text: t('settings-key-missing') }
+      : provider.catalogFetchedAt !== null
+        ? { tone: 'ok', text: t('settings-provider-connected', { count: provider.models.length }) }
+        : { text: t('settings-provider-untested') };
+
   const keyStatus = !provider.needsKey
     ? t('settings-key-none')
     : provider.hasKey
@@ -256,46 +279,48 @@ function ProviderCard({
   return (
     <article className="set-provider" aria-label={provider.name}>
       <div className="set-provider-head">
+        <span className="set-provider-logo" aria-hidden>
+          {isLocal(provider.baseUrl) ? <DesktopIcon /> : <CloudIcon />}
+        </span>
         <div className="set-provider-text">
           <h3 className="set-provider-name">{provider.name}</h3>
-          <div className="set-provider-url">{provider.baseUrl}</div>
-          <div className="set-provider-meta">
-            <span
-              className="set-chip"
-              data-tone={provider.needsKey && !provider.hasKey ? 'warn' : undefined}
-            >
-              {keyStatus}
-            </span>
-            {provider.catalogFetchedAt !== null && (
-              <span>
-                {t('settings-catalog-fetched', {
-                  count: provider.models.length,
-                  date: format.date(provider.catalogFetchedAt),
-                })}
-              </span>
-            )}
-          </div>
+          <div className="set-mono set-provider-url">{provider.baseUrl}</div>
         </div>
-        <div className="set-provider-actions">
-          <Button className="set-btn" onPress={() => void test()} isPending={testing}>
-            <ArrowsClockwiseIcon aria-hidden />
-            {testing ? t('settings-provider-testing') : t('settings-provider-test')}
-          </Button>
-          <Button
-            className="icon-btn"
-            aria-label={t('settings-provider-edit', { name: provider.name })}
-            onPress={onEdit}
-          >
-            <PencilSimpleIcon aria-hidden />
-          </Button>
-          <Button
-            className="icon-btn"
-            aria-label={t('settings-provider-remove', { name: provider.name })}
-            onPress={() => setConfirmRemove(true)}
-          >
-            <TrashIcon aria-hidden />
-          </Button>
+        <div className="set-status" data-tone={status.tone}>
+          <span className="set-dot" aria-hidden />
+          {status.text}
         </div>
+        <Button
+          className="set-btn"
+          aria-label={t('settings-provider-edit', { name: provider.name })}
+          onPress={onEdit}
+        >
+          {t('settings-edit')}
+        </Button>
+        <Button
+          className="icon-btn"
+          aria-label={t('settings-provider-remove', { name: provider.name })}
+          onPress={() => setConfirmRemove(true)}
+        >
+          <TrashIcon aria-hidden />
+        </Button>
+      </div>
+      <div className="set-provider-foot">
+        <span className="set-provider-key">
+          <LockSimpleIcon aria-hidden />
+          {keyStatus}
+        </span>
+        {provider.catalogFetchedAt !== null && (
+          <span className="set-provider-fetched">
+            {t('settings-catalog-fetched', {
+              count: provider.models.length,
+              date: format.date(provider.catalogFetchedAt),
+            })}
+          </span>
+        )}
+        <Button className="set-link" onPress={() => void test()} isPending={testing}>
+          {testing ? t('settings-provider-testing') : t('settings-provider-test')}
+        </Button>
       </div>
       <div role="status" className="set-provider-result">
         {result?.ok && (
@@ -421,6 +446,7 @@ function ModelRow({
 /** A number field whose empty value means "not set". */
 function OptionalNumber({
   label,
+  labelHidden,
   description,
   value,
   onChange,
@@ -429,6 +455,7 @@ function OptionalNumber({
   autoFocus,
 }: {
   label: string;
+  labelHidden?: boolean;
   description?: string;
   value: number | null;
   onChange: (value: number | null) => void;
@@ -444,8 +471,9 @@ function OptionalNumber({
       minValue={minValue}
       formatOptions={formatOptions}
       autoFocus={autoFocus}
+      aria-label={labelHidden ? label : undefined}
     >
-      <Label className="set-field-label">{label}</Label>
+      {!labelHidden && <Label className="set-field-label">{label}</Label>}
       <Input className="set-input" />
       {description && (
         <Text slot="description" className="set-field-desc">
@@ -798,27 +826,28 @@ function BudgetGroup({
           )}
         </div>
       )}
-      <Row wide>
+      <Row label={t('settings-currency')} description={t('settings-currency-desc')}>
         <SelectField
           label={t('settings-currency')}
-          description={t('settings-currency-desc')}
+          labelHidden
           options={CURRENCIES.map((code) => ({ id: code, label: currencyName(code) }))}
           value={library.currency}
           onChange={(currency) => update({ currency })}
         />
       </Row>
-      <Row wide>
+      <Row label={t('settings-budget-amount')} description={t('settings-budget-amount-desc')}>
         <OptionalNumber
           label={t('settings-budget-amount')}
-          description={t('settings-budget-amount-desc')}
+          labelHidden
           value={fromMicros(library.monthlyBudgetMicros)}
           onChange={(value) => update({ monthlyBudgetMicros: toMicros(value) })}
           formatOptions={{ style: 'currency', currency: library.currency }}
         />
       </Row>
-      <Row wide>
+      <Row label={t('settings-budget-warn')}>
         <NumberField
           className="set-field"
+          aria-label={t('settings-budget-warn')}
           value={library.warnPercent / 100}
           onChange={(value) => {
             if (!Number.isNaN(value)) update({ warnPercent: Math.round(value * 100) });
@@ -829,26 +858,16 @@ function BudgetGroup({
           formatOptions={{ style: 'percent' }}
           isDisabled={library.monthlyBudgetMicros === null}
         >
-          <Label className="set-field-label">{t('settings-budget-warn')}</Label>
           <Input className="set-input" />
         </NumberField>
       </Row>
-      <Row wide>
-        <Switch
-          className="set-switch"
-          isSelected={library.enforceBudget}
-          onChange={(enforceBudget) => update({ enforceBudget })}
-          isDisabled={library.monthlyBudgetMicros === null}
-        >
-          <span className="set-switch-track" aria-hidden>
-            <span className="set-switch-thumb" />
-          </span>
-          <span className="set-switch-text">
-            <span className="set-row-label">{t('settings-budget-enforce')}</span>
-            <span className="set-row-desc">{t('settings-budget-enforce-desc')}</span>
-          </span>
-        </Switch>
-      </Row>
+      <ToggleRow
+        label={t('settings-budget-enforce')}
+        description={t('settings-budget-enforce-desc')}
+        isSelected={library.enforceBudget}
+        onChange={(enforceBudget) => update({ enforceBudget })}
+        isDisabled={library.monthlyBudgetMicros === null}
+      />
       {library.enforceBudget && library.monthlyBudgetMicros !== null && unpriced.length > 0 && (
         <p className="set-warn" role="alert">
           <WarningIcon aria-hidden />

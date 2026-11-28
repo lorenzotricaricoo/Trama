@@ -19,6 +19,7 @@ export interface AppSettings {
   theme: Theme;
   accent: Accent;
   reduceTransparency: boolean;
+  reduceMotion: boolean;
   microphone: string | null;
   globalShortcut: string;
   defaultGlobalShortcut: string;
@@ -142,6 +143,7 @@ export const api = {
   setAppearance: (theme: Theme, accent: Accent) =>
     invoke<void>('set_appearance', { theme, accent }),
   setReduceTransparency: (enabled: boolean) => invoke<void>('set_reduce_transparency', { enabled }),
+  setReduceMotion: (enabled: boolean) => invoke<void>('set_reduce_motion', { enabled }),
   setMicrophone: (device: string | null) => invoke<void>('set_microphone', { device }),
   setGlobalShortcut: (shortcut: string) => invoke<void>('set_global_shortcut', { shortcut }),
   inputDevices: () => invoke<InputDevices>('input_devices'),

@@ -8,24 +8,26 @@ settings-section-providers = Providers and models
 settings-section-transcription = Transcription
 settings-section-recording = Recording
 settings-section-data = Data and privacy
+settings-section-appearance = Appearance
 settings-section-claude = Claude (MCP)
 settings-cancel = Cancel
 settings-save = Save
+settings-edit = Edit
 
 ## General
 
-settings-group-language = Language
 settings-interface-language = Interface language
 settings-interface-language-desc = The language of menus, buttons and messages.
 settings-language-system = Same as macOS
 settings-meeting-language = Meeting language
 settings-meeting-language-desc = The language your meetings are held in. Transcripts and summaries use it; it is never guessed.
-settings-group-appearance = Appearance
 settings-theme = Theme
 settings-theme-system = System
 settings-theme-light = Light
 settings-theme-dark = Dark
 settings-accent = Accent colour
+settings-accent-desc = The colour of buttons, selections and indicators. Red stays reserved for recording.
+settings-accent-preview = Preview
 settings-reduce-transparency = Reduce transparency
 settings-reduce-transparency-desc = Makes the window opaque, so the desktop no longer shows through.
 settings-reduce-transparency-system = On because Reduce transparency is on in macOS (System Settings › Accessibility › Display).
@@ -38,6 +40,10 @@ settings-accent-orange = Orange
 settings-accent-yellow = Yellow
 settings-accent-green = Green
 settings-accent-graphite = Graphite
+settings-group-accessibility = Accessibility
+settings-reduce-motion = Reduce motion
+settings-reduce-motion-desc = Turns off the interface's animations and transitions.
+settings-reduce-motion-system = On because Reduce motion is on in macOS (System Settings › Accessibility › Display).
 
 ## Providers and models
 
@@ -70,6 +76,11 @@ settings-provider-key-replace = A key is saved in the Keychain. Type a new one o
 settings-key-none = No key needed
 settings-key-stored = Key in the Keychain
 settings-key-missing = Key missing
+settings-provider-connected = Connected · { $count ->
+    [one] { $count } model
+   *[other] { $count } models
+}
+settings-provider-untested = Not tried yet
 # $count: models; $date: last catalogue read.
 settings-catalog-fetched = { $count ->
     [one] One model
@@ -139,7 +150,13 @@ settings-budget-price-missing = { $count ->
 settings-group-transcription = Transcription model
 settings-model-desc = Meetings are transcribed on this Mac: the audio never leaves it. The model is downloaded once.
 settings-model-name = Parakeet Ultra
-settings-model-size = Download of { $size }
+settings-model-spec = fp32 · { $size }
+settings-model-fact-languages = 25 languages
+settings-model-fact-languages-desc = European, English included
+settings-model-fact-local = On the Mac
+settings-model-fact-local-desc = Audio never leaves the computer
+settings-model-fact-offline = Offline
+settings-model-fact-offline-desc = Transcribes without a connection too
 settings-model-state-missing = Not downloaded
 settings-model-state-downloading = Downloading
 settings-model-state-verifying = Checking
@@ -162,12 +179,9 @@ settings-model-credit = Parakeet Ultra by Moondream, based on NVIDIA Parakeet TD
 
 ## Recording
 
-settings-group-devices = Devices
-settings-devices-desc = Your voice is recorded from the microphone, the other participants from what the Mac plays.
 settings-microphone = Microphone
 settings-microphone-desc = Following the system default also follows its changes during a meeting.
 settings-microphone-default = System default
-settings-microphone-default-named = System default ({ $name })
 settings-microphone-missing = Chosen microphone (not connected)
 settings-microphone-refresh = Refresh devices
 settings-group-shortcut = Global shortcut
@@ -175,6 +189,7 @@ settings-shortcut = Start and stop recording
 settings-shortcut-desc = Works from any app, without opening Trama.
 settings-shortcut-change = Change shortcut
 settings-shortcut-stop = Cancel
+settings-shortcut-press = Press the keys…
 settings-shortcut-recording = Press the new shortcut, with at least ⌘, ⌥ or ⌃. Press Escape to cancel.
 settings-shortcut-reset = Restore default
 settings-shortcut-note = Trama listens for this shortcut once it can run from the menu bar.
@@ -194,9 +209,16 @@ settings-retention-30_days-desc = Kept for a month after the transcription.
 settings-retention-always = Always
 settings-retention-always-desc = Kept until you delete the meeting. Uses the most space.
 settings-retention-note = Without audio a meeting can't be transcribed again with a better engine. Trama always asks before deleting audio you already have.
+settings-group-leaves = What leaves the Mac
+settings-leaves-desc = Trama sends out only the text a task needs, and only to the provider you chose.
+settings-leaves-audio = Audio
+settings-leaves-audio-desc = Never. It stays on the Mac and is transcribed here.
+settings-leaves-sources = Source text
+settings-leaves-sources-desc = Only the passages an answer needs, to the chosen provider.
+settings-leaves-index = Data and indexes
+settings-leaves-index-desc = Always on the Mac.
 settings-group-library = Library
 settings-library-desc = Your meetings, notes and their audio, in one folder on this Mac.
-settings-library-location = Location
 settings-library-reveal = Show in Finder
 settings-library-change = Change…
 settings-library-default = Use the default location

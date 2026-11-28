@@ -1,15 +1,61 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button, Label, ProgressBar } from 'react-aria-components';
 import { useI18n } from '../i18n/I18nProvider';
-import { CheckIcon, DownloadSimpleIcon, TrashIcon, WarningIcon } from '../ui/icons';
-import { api, errorCode, MODEL_EVENT, type ModelStatus } from './api';
-import { ConfirmDialog, ErrorText, Group, Row } from './ui';
+import { DownloadSimpleIcon, TrashIcon, WaveformIcon } from '../ui/icons';
+import { api, errorCode, MODEL_EVENT, type LibrarySettings, type ModelStatus } from './api';
+import { languageName } from './GeneralSection';
+import type { UpdateLibrary } from './SettingsScreen';
+import { ConfirmDialog, ErrorText, Group, SelectField } from './ui';
 
-/** The transcription model: its state, download, check and removal. */
-export function TranscriptionSection() {
+/**
+ * Languages the transcription model handles (Parakeet v3: 25 European languages), offered
+ * as the meeting language. Names come from Intl, in the interface language.
+ */
+export const MEETING_LANGUAGES = [
+  'bg',
+  'cs',
+  'da',
+  'de',
+  'el',
+  'en',
+  'es',
+  'et',
+  'fi',
+  'fr',
+  'hr',
+  'hu',
+  'it',
+  'lt',
+  'lv',
+  'mt',
+  'nl',
+  'pl',
+  'pt',
+  'ro',
+  'ru',
+  'sk',
+  'sl',
+  'sv',
+  'uk',
+] as const;
+
+function statusTone(state: ModelStatus['state']) {
+  if (state === 'ready') return 'ok';
+  if (state === 'corrupt') return 'warn';
+  return undefined;
+}
+
+interface Props {
+  library: LibrarySettings;
+  onLibrary: UpdateLibrary;
+}
+
+/** The transcription model (state, download, check, removal) and the meeting language. */
+export function TranscriptionSection({ library, onLibrary }: Props) {
   const { t, locale } = useI18n();
+  const [meetingError, setMeetingError] = useState<string | null>(null);
   const [status, setStatus] = useState<ModelStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
@@ -55,103 +101,135 @@ export function TranscriptionSection() {
     }).format(bytes / 1e9);
 
   const busy = status?.state === 'downloading' || status?.state === 'verifying';
+  const meetingOptions = useMemo(
+    () =>
+      MEETING_LANGUAGES.map((tag) => ({ id: tag, label: languageName(tag, locale) })).sort((a, b) =>
+        a.label.localeCompare(b.label, locale),
+      ),
+    [locale],
+  );
 
   return (
     <>
       <Group title={t('settings-group-transcription')} description={t('settings-model-desc')}>
-        {status === null ? (
-          <Row>
-            <ErrorText code={error} />
-          </Row>
-        ) : (
-          <>
-            <Row
-              label={t('settings-model-name')}
-              description={t('settings-model-size', { size: gigabytes(status.totalBytes) })}
-            >
-              <span
-                className="set-chip"
-                data-tone={status.state === 'corrupt' ? 'warn' : undefined}
-              >
-                {status.state === 'ready' && <CheckIcon aria-hidden />}
-                {status.state === 'corrupt' && <WarningIcon aria-hidden />}
-                {t(`settings-model-state-${status.state}`)}
-              </span>
-            </Row>
-            {busy && (
-              <Row wide>
-                <ProgressBar
-                  className="set-progress"
-                  value={(status.progress ?? 0) * 100}
-                  valueLabel={
-                    status.state === 'downloading'
-                      ? t('settings-model-progress', {
-                          done: gigabytes(status.downloadedBytes),
-                          total: gigabytes(status.totalBytes),
-                        })
-                      : undefined
-                  }
-                >
-                  {({ percentage, valueText }) => (
-                    <>
-                      <div className="set-meter-head">
-                        <Label className="set-row-label">
-                          {status.state === 'verifying'
-                            ? t('settings-model-verifying')
-                            : t('settings-model-downloading')}
-                        </Label>
-                        <span className="set-meter-value">{valueText}</span>
-                      </div>
-                      <div className="set-meter-track">
-                        <div
-                          className="set-meter-fill"
-                          style={{ transform: `scaleX(${(percentage ?? 0) / 100})` }}
-                        />
-                      </div>
-                    </>
-                  )}
-                </ProgressBar>
-              </Row>
-            )}
-            {status.errorCode !== null && !busy && <ErrorText code={`model_${status.errorCode}`} />}
-            <ErrorText code={error} />
-            <div className="set-actions">
-              {(status.state === 'missing' || status.state === 'corrupt') && (
-                <Button
-                  className="set-btn"
-                  data-variant="primary"
-                  onPress={() => void run(api.downloadModel)}
-                >
-                  <DownloadSimpleIcon aria-hidden />
-                  {status.state === 'corrupt'
-                    ? t('settings-model-download-again')
-                    : status.downloadedBytes > 0
-                      ? t('settings-model-resume')
-                      : t('settings-model-download')}
-                </Button>
-              )}
-              {busy && (
-                <Button className="set-btn" onPress={() => void run(api.cancelModelDownload)}>
-                  {status.state === 'verifying'
-                    ? t('settings-model-cancel-check')
-                    : t('settings-model-pause')}
-                </Button>
-              )}
-              {status.state === 'ready' && (
-                <Button className="set-btn" onPress={() => void run(api.verifyModel)}>
-                  {t('settings-model-verify')}
-                </Button>
-              )}
-              {(status.state !== 'missing' || status.downloadedBytes > 0) && (
-                <Button className="set-btn" onPress={() => setConfirmRemove(true)}>
-                  <TrashIcon aria-hidden />
-                  {t('settings-model-remove')}
-                </Button>
+        <div className="set-card set-engine" data-state={status?.state}>
+          <div className="set-engine-head">
+            <span className="set-engine-ic" aria-hidden>
+              <WaveformIcon />
+            </span>
+            <div className="set-engine-text">
+              <div className="set-engine-name">
+                {t('settings-model-name')}
+                <span className="set-mono set-engine-spec">
+                  {status ? t('settings-model-spec', { size: gigabytes(status.totalBytes) }) : ''}
+                </span>
+              </div>
+              {status && (
+                <div className="set-status" data-tone={statusTone(status.state)}>
+                  <span className="set-dot" aria-hidden />
+                  {t(`settings-model-state-${status.state}`)}
+                </div>
               )}
             </div>
-          </>
-        )}
+            {status && (
+              <div className="set-engine-actions">
+                {(status.state === 'missing' || status.state === 'corrupt') && (
+                  <Button
+                    className="set-btn"
+                    data-variant="primary"
+                    onPress={() => void run(api.downloadModel)}
+                  >
+                    <DownloadSimpleIcon aria-hidden />
+                    {status.state === 'corrupt'
+                      ? t('settings-model-download-again')
+                      : status.downloadedBytes > 0
+                        ? t('settings-model-resume')
+                        : t('settings-model-download')}
+                  </Button>
+                )}
+                {busy && (
+                  <Button className="set-btn" onPress={() => void run(api.cancelModelDownload)}>
+                    {status.state === 'verifying'
+                      ? t('settings-model-cancel-check')
+                      : t('settings-model-pause')}
+                  </Button>
+                )}
+                {status.state === 'ready' && (
+                  <Button className="set-btn" onPress={() => void run(api.verifyModel)}>
+                    {t('settings-model-verify')}
+                  </Button>
+                )}
+                {(status.state !== 'missing' || status.downloadedBytes > 0) && !busy && (
+                  <Button className="set-btn" onPress={() => setConfirmRemove(true)}>
+                    <TrashIcon aria-hidden />
+                    {t('settings-model-remove')}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+          {status && busy && (
+            <ProgressBar
+              className="set-progress"
+              value={(status.progress ?? 0) * 100}
+              valueLabel={
+                status.state === 'downloading'
+                  ? t('settings-model-progress', {
+                      done: gigabytes(status.downloadedBytes),
+                      total: gigabytes(status.totalBytes),
+                    })
+                  : undefined
+              }
+            >
+              {({ percentage, valueText }) => (
+                <>
+                  <div className="set-meter-head">
+                    <Label className="set-row-desc">
+                      {status.state === 'verifying'
+                        ? t('settings-model-verifying')
+                        : t('settings-model-downloading')}
+                    </Label>
+                    <span className="set-meter-value">{valueText}</span>
+                  </div>
+                  <div className="set-meter-track">
+                    <div
+                      className="set-meter-fill"
+                      style={{ transform: `scaleX(${(percentage ?? 0) / 100})` }}
+                    />
+                  </div>
+                </>
+              )}
+            </ProgressBar>
+          )}
+          {status?.errorCode != null && !busy && <ErrorText code={`model_${status.errorCode}`} />}
+          <ErrorText code={error} />
+        </div>
+        <div className="set-facts">
+          {(['languages', 'local', 'offline'] as const).map((fact) => (
+            <div key={fact} className="set-fact">
+              <b>{t(`settings-model-fact-${fact}`)}</b>
+              <span>{t(`settings-model-fact-${fact}-desc`)}</span>
+            </div>
+          ))}
+        </div>
         <p className="set-credit">{t('settings-model-credit')}</p>
+      </Group>
+
+      <Group
+        title={t('settings-meeting-language')}
+        description={t('settings-meeting-language-desc')}
+      >
+        <SelectField
+          label={t('settings-meeting-language')}
+          labelHidden
+          options={meetingOptions}
+          value={library.meetingLanguage}
+          onChange={(meetingLanguage) => {
+            setMeetingError(null);
+            void onLibrary({ meetingLanguage }).then(setMeetingError);
+          }}
+        />
+        <ErrorText code={meetingError} />
       </Group>
       <ConfirmDialog
         isOpen={confirmRemove}

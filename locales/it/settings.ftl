@@ -8,24 +8,26 @@ settings-section-providers = Provider e modelli
 settings-section-transcription = Trascrizione
 settings-section-recording = Registrazione
 settings-section-data = Dati e privacy
+settings-section-appearance = Aspetto
 settings-section-claude = Claude (MCP)
 settings-cancel = Annulla
 settings-save = Salva
+settings-edit = Modifica
 
 ## Generali
 
-settings-group-language = Lingua
 settings-interface-language = Lingua dell'interfaccia
 settings-interface-language-desc = La lingua di menu, pulsanti e messaggi.
 settings-language-system = Come macOS
 settings-meeting-language = Lingua delle riunioni
 settings-meeting-language-desc = La lingua in cui si svolgono le tue riunioni. Trascrizioni e riassunti la usano; non viene mai indovinata.
-settings-group-appearance = Aspetto
 settings-theme = Tema
 settings-theme-system = Sistema
 settings-theme-light = Chiaro
 settings-theme-dark = Scuro
 settings-accent = Colore di accento
+settings-accent-desc = Il colore di pulsanti, selezioni e indicatori. Il rosso resta riservato alla registrazione.
+settings-accent-preview = Anteprima
 settings-reduce-transparency = Riduci trasparenza
 settings-reduce-transparency-desc = Rende la finestra opaca, così la scrivania non si vede più attraverso.
 settings-reduce-transparency-system = Attiva perché Riduci trasparenza è attivo in macOS (Impostazioni di Sistema › Accessibilità › Schermo).
@@ -38,6 +40,10 @@ settings-accent-orange = Arancione
 settings-accent-yellow = Giallo
 settings-accent-green = Verde
 settings-accent-graphite = Grafite
+settings-group-accessibility = Accessibilità
+settings-reduce-motion = Riduci movimento
+settings-reduce-motion-desc = Toglie animazioni e transizioni dell'interfaccia.
+settings-reduce-motion-system = Attivo perché Riduci movimento è attivo in macOS (Impostazioni di Sistema › Accessibilità › Schermo).
 
 ## Provider e modelli
 
@@ -70,6 +76,11 @@ settings-provider-key-replace = Una chiave è salvata nel Portachiavi. Scrivine 
 settings-key-none = Nessuna chiave richiesta
 settings-key-stored = Chiave nel Portachiavi
 settings-key-missing = Chiave mancante
+settings-provider-connected = Connesso · { $count ->
+    [one] { $count } modello
+   *[other] { $count } modelli
+}
+settings-provider-untested = Non ancora provato
 # $count: modelli; $date: ultima lettura del catalogo.
 settings-catalog-fetched = { $count ->
     [one] Un modello
@@ -139,7 +150,13 @@ settings-budget-price-missing = { $count ->
 settings-group-transcription = Modello di trascrizione
 settings-model-desc = Le riunioni vengono trascritte su questo Mac: l'audio non lo lascia mai. Il modello si scarica una volta sola.
 settings-model-name = Parakeet Ultra
-settings-model-size = Download di { $size }
+settings-model-spec = fp32 · { $size }
+settings-model-fact-languages = 25 lingue
+settings-model-fact-languages-desc = Europee, compreso l'italiano
+settings-model-fact-local = Sul Mac
+settings-model-fact-local-desc = L'audio non lascia mai il computer
+settings-model-fact-offline = Offline
+settings-model-fact-offline-desc = Trascrive anche senza connessione
 settings-model-state-missing = Non scaricato
 settings-model-state-downloading = Download in corso
 settings-model-state-verifying = Verifica in corso
@@ -162,12 +179,9 @@ settings-model-credit = Parakeet Ultra di Moondream, basato su NVIDIA Parakeet T
 
 ## Registrazione
 
-settings-group-devices = Dispositivi
-settings-devices-desc = La tua voce viene registrata dal microfono, gli altri partecipanti da ciò che il Mac riproduce.
 settings-microphone = Microfono
 settings-microphone-desc = Seguire quello di sistema segue anche i suoi cambi durante una riunione.
 settings-microphone-default = Predefinito di sistema
-settings-microphone-default-named = Predefinito di sistema ({ $name })
 settings-microphone-missing = Microfono scelto (non collegato)
 settings-microphone-refresh = Aggiorna i dispositivi
 settings-group-shortcut = Scorciatoia globale
@@ -175,6 +189,7 @@ settings-shortcut = Avvia e ferma la registrazione
 settings-shortcut-desc = Funziona da qualsiasi app, senza aprire Trama.
 settings-shortcut-change = Cambia scorciatoia
 settings-shortcut-stop = Annulla
+settings-shortcut-press = Premi i tasti…
 settings-shortcut-recording = Premi la nuova scorciatoia, con almeno ⌘, ⌥ o ⌃. Premi Esc per annullare.
 settings-shortcut-reset = Ripristina predefinita
 settings-shortcut-note = Trama ascolta questa scorciatoia quando potrà funzionare dalla barra dei menu.
@@ -194,9 +209,16 @@ settings-retention-30_days-desc = Conservato per un mese dopo la trascrizione.
 settings-retention-always = Sempre
 settings-retention-always-desc = Conservato finché non cancelli la riunione. Occupa più spazio.
 settings-retention-note = Senza audio una riunione non può essere trascritta di nuovo con un motore migliore. Trama chiede sempre prima di cancellare l'audio che hai già.
+settings-group-leaves = Cosa esce dal Mac
+settings-leaves-desc = Trama manda fuori solo il testo che serve a un compito, e solo al provider che hai scelto.
+settings-leaves-audio = Audio
+settings-leaves-audio-desc = Mai. Resta sul Mac e viene trascritto qui.
+settings-leaves-sources = Testo delle fonti
+settings-leaves-sources-desc = Solo i passaggi che servono a una risposta, al provider scelto.
+settings-leaves-index = Dati e indici
+settings-leaves-index-desc = Sempre sul Mac.
 settings-group-library = Libreria
 settings-library-desc = Le tue riunioni, le note e il loro audio, in una cartella su questo Mac.
-settings-library-location = Posizione
 settings-library-reveal = Mostra nel Finder
 settings-library-change = Cambia…
 settings-library-default = Usa la posizione predefinita

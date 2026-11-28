@@ -9,8 +9,11 @@ import {
   Modal,
   ModalOverlay,
   Popover,
+  Radio,
+  RadioGroup,
   Select,
   SelectValue,
+  Switch,
   Text,
   type Key,
 } from 'react-aria-components';
@@ -55,23 +58,29 @@ export function ErrorText({ code }: { code: string | null }) {
   );
 }
 
-/** A group of settings with a title and an optional description. */
+/** A group of settings: a title, an optional description, then its rows. */
 export function Group({
   title,
   description,
+  action,
   children,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
+  /** A control beside the title, such as Refresh. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="set-group" aria-label={title}>
       <div className="set-group-head">
-        <h2 className="set-group-title">{title}</h2>
-        {description && <p className="set-group-desc">{description}</p>}
+        <div className="set-group-text">
+          <h2 className="set-group-title">{title}</h2>
+          {description && <p className="set-group-desc">{description}</p>}
+        </div>
+        {action}
       </div>
-      <div className="set-card">{children}</div>
+      <div className="set-group-body">{children}</div>
     </section>
   );
 }
@@ -86,6 +95,7 @@ export function Row({
   label?: ReactNode;
   description?: ReactNode;
   children: ReactNode;
+  /** The control goes under the text, across the whole width. */
   wide?: boolean;
 }) {
   return (
@@ -98,6 +108,72 @@ export function Row({
       )}
       <div className="set-row-control">{children}</div>
     </div>
+  );
+}
+
+/** A row whose control is a switch on the right, as in the macOS settings. */
+export function ToggleRow({
+  label,
+  description,
+  isSelected,
+  isDisabled,
+  onChange,
+}: {
+  label: string;
+  description?: ReactNode;
+  isSelected: boolean;
+  isDisabled?: boolean;
+  onChange: (selected: boolean) => void;
+}) {
+  return (
+    <Switch
+      className="set-row set-toggle"
+      isSelected={isSelected}
+      isDisabled={isDisabled}
+      onChange={onChange}
+    >
+      <span className="set-row-text">
+        <span className="set-row-label">{label}</span>
+        {description && <span className="set-row-desc">{description}</span>}
+      </span>
+      <span className="set-switch-track" aria-hidden>
+        <span className="set-switch-thumb" />
+      </span>
+    </Switch>
+  );
+}
+
+/** A choice among a few options, shown as segments (the macOS segmented control). */
+export function Segmented<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+  labelHidden,
+}: {
+  label: string;
+  options: readonly { id: T; label: ReactNode }[];
+  value: T;
+  onChange: (value: T) => void;
+  labelHidden?: boolean;
+}) {
+  return (
+    <RadioGroup
+      className="set-radios"
+      orientation="horizontal"
+      value={value}
+      onChange={(next) => onChange(next as T)}
+      aria-label={labelHidden ? label : undefined}
+    >
+      {!labelHidden && <Label className="set-row-label">{label}</Label>}
+      <div className="set-segments">
+        {options.map((option) => (
+          <Radio key={option.id} value={option.id} className="set-segment">
+            {option.label}
+          </Radio>
+        ))}
+      </div>
+    </RadioGroup>
   );
 }
 
@@ -115,26 +191,34 @@ export function SelectField({
   onChange,
   isDisabled,
   placeholder,
+  mono,
+  labelHidden,
 }: {
   label: string;
+  /** The label is shown elsewhere (by the row); it still names the control. */
+  labelHidden?: boolean;
   description?: string;
   options: readonly Option[];
   value: string | null;
   onChange: (value: string) => void;
   isDisabled?: boolean;
   placeholder?: string;
+  /** Values are identifiers (model names), shown in the monospaced font. */
+  mono?: boolean;
 }) {
   return (
     <Select
       className="set-select"
+      data-mono={mono || undefined}
       selectedKey={value}
       onSelectionChange={(key: Key | null) => {
         if (key !== null) onChange(String(key));
       }}
       isDisabled={isDisabled}
       placeholder={placeholder}
+      aria-label={labelHidden ? label : undefined}
     >
-      <Label className="set-row-label">{label}</Label>
+      {!labelHidden && <Label className="set-row-label">{label}</Label>}
       {description && (
         <Text slot="description" className="set-row-desc">
           {description}
