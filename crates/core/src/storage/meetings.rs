@@ -185,36 +185,36 @@ impl Library {
         let now = self.now();
         let tx = self.conn.transaction()?;
         live_source(&tx, meeting_id, SourceKind::Meeting)?;
-        let version = insert_version(
-            &tx,
-            meeting_id,
-            VersionOrigin::Transcription,
-            Some(engine),
-            None,
-            now,
-        )?;
-        {
-            let mut insert = tx.prepare_cached(
-                "INSERT INTO transcript_segment (version_id, seq, role, start_ms, end_ms, text)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            )?;
-            for (seq, segment) in segments.iter().enumerate() {
-                insert.execute(params![
-                    version.id.to_string(),
-                    seq as i64,
-                    segment.role.as_str(),
-                    segment.start_ms,
-                    segment.end_ms,
-                    segment.text
-                ])?;
-            }
-        }
+        let version = insert_transcription(&tx, meeting_id, engine, segments, now)?;
+        touch_source(&tx, meeting_id, now)?;
+        let version = load_version(&tx, version)?;
+        tx.commit()?;
+        Ok(version)
+    }
+
+    /// Ends a meeting's transcription: stores it like [`Self::add_transcription`] and
+    /// marks the meeting `ready`, clearing its error code, in one transaction. A job
+    /// that fails after this, or runs again, cannot leave a version without the status
+    /// or store the same transcription twice.
+    ///
+    /// Fails with [`StorageError::NotFound`], writing nothing, if the meeting is in the
+    /// trash.
+    pub fn complete_transcription(
+        &mut self,
+        meeting_id: Id,
+        engine: &str,
+        segments: &[NewSegment],
+    ) -> Result<Version> {
+        let now = self.now();
+        let tx = self.conn.transaction()?;
+        live_source(&tx, meeting_id, SourceKind::Meeting)?;
+        let version = insert_transcription(&tx, meeting_id, engine, segments, now)?;
         tx.execute(
-            "UPDATE source_version SET sealed_at = ?2 WHERE id = ?1",
-            params![version.id.to_string(), now],
+            "UPDATE meeting SET status = ?2, error_code = NULL WHERE source_id = ?1",
+            params![meeting_id.to_string(), MeetingStatus::Ready.as_str()],
         )?;
         touch_source(&tx, meeting_id, now)?;
-        let version = load_version(&tx, version.id)?;
+        let version = load_version(&tx, version)?;
         tx.commit()?;
         Ok(version)
     }
@@ -291,4 +291,41 @@ impl Library {
             .optional()?
             .ok_or_else(|| StorageError::not_found("recording note", id))
     }
+}
+
+/// Inserts a sealed transcription version with its segments; returns its id.
+fn insert_transcription(
+    conn: &rusqlite::Connection,
+    meeting_id: Id,
+    engine: &str,
+    segments: &[NewSegment],
+    now: Timestamp,
+) -> Result<Id> {
+    let version = insert_version(
+        conn,
+        meeting_id,
+        VersionOrigin::Transcription,
+        Some(engine),
+        None,
+        now,
+    )?;
+    let mut insert = conn.prepare_cached(
+        "INSERT INTO transcript_segment (version_id, seq, role, start_ms, end_ms, text)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+    )?;
+    for (seq, segment) in segments.iter().enumerate() {
+        insert.execute(params![
+            version.id.to_string(),
+            seq as i64,
+            segment.role.as_str(),
+            segment.start_ms,
+            segment.end_ms,
+            segment.text
+        ])?;
+    }
+    conn.execute(
+        "UPDATE source_version SET sealed_at = ?2 WHERE id = ?1",
+        params![version.id.to_string(), now],
+    )?;
+    Ok(version.id)
 }

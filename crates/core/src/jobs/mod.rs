@@ -9,6 +9,7 @@
 //! Jobs run one at a time: transcription uses the whole machine, and the others are short.
 
 mod delete_audio;
+mod transcribe;
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
@@ -17,6 +18,7 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 pub use delete_audio::DeleteAudio;
+pub use transcribe::Transcribe;
 
 use crate::storage::{Id, Job, JobKind, Library, Result, StorageError};
 
@@ -142,6 +144,18 @@ impl JobContext {
                 progress: Some(fraction),
             });
         }
+    }
+
+    /// Queues a follow-up job (or returns the same one already queued) and tells the
+    /// interface; for example the summary after a transcription. The worker picks it up
+    /// once the current job is over.
+    pub fn enqueue(&self, kind: JobKind, target_id: Id) -> Result<Job> {
+        let job = self.library().enqueue_job(kind, target_id)?;
+        self.events.send(JobEvent {
+            job: job.clone(),
+            progress: None,
+        });
+        Ok(job)
     }
 
     /// True when the app is stopping or the user cancelled the job.
