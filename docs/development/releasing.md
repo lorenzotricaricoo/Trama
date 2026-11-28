@@ -41,15 +41,15 @@ The version is written in three places, and `npm run bundle` stops if they diffe
 6. Tag and publish, attaching the `.dmg`:
 
    ```sh
-   git tag -a v0.1.0-alpha.1 -m "Trama 0.1.0-alpha.1"
-   git push origin v0.1.0-alpha.1
-   gh release create v0.1.0-alpha.1 --verify-tag --prerelease \
-     --title "Trama 0.1.0-alpha.1" --notes-file <notes> \
-     ../../target/release/bundle/dmg/Trama_0.1.0-alpha.1_aarch64.dmg
+   git tag -a v0.1.0 -m "Trama 0.1.0"
+   git push origin v0.1.0
+   gh release create v0.1.0 --verify-tag \
+     --title "Trama 0.1.0" --notes-file <notes> \
+     ../../target/release/bundle/dmg/Trama_0.1.0_aarch64.dmg
    ```
 
    The notes are the version's section of the changelog, the [install](../../README.md#install)
-   steps and the SHA-256. Drop `--prerelease` for a final version.
+   steps and the SHA-256. Add `--prerelease` for a pre-release.
 7. Download the `.dmg` from the release page and open it once more: the download is
    quarantined, so this is the path users take, Gatekeeper step included.
 
@@ -63,6 +63,9 @@ does not have yet is skipped.
 
 - [ ] Downloaded copy only: the `.dmg`, and then the app if macOS blocks it again, open
       after **Privacy & Security → Open Anyway**.
+- [ ] On a new install (another macOS account, or no `settings.json` and no library) the
+      onboarding opens; *Not now* and *Skip setup* work, and the next start resumes at
+      the step reached. An existing install does not show it.
 - [ ] Settings → Transcription: the model downloads, resumes after a pause and is
       reported ready.
 - [ ] Settings → Providers: a provider is added, its key is saved, the connection test
@@ -76,16 +79,30 @@ does not have yet is skipped.
 - [ ] After stopping, transcription shows its progress, then the title and the summary
       appear.
 - [ ] A meeting of at least 60 minutes records, transcribes and summarizes.
+- [ ] The global shortcut (⌥⌘R) starts and stops a recording from another app, and so
+      does the menu bar item.
+- [ ] Closing the window during a recording leaves Trama in the menu bar and the
+      recording goes on; opening it again brings back the window and the Dock icon.
+- [ ] Quitting during a recording asks first.
 
 **F3 · Write a note**
 
 - [ ] ⌘N opens a new note; what is typed is still there after quitting and reopening.
+- [ ] A Markdown file dropped on the window, or chosen with ⌘O, becomes a note.
 
 **F4 · Review a meeting**
 
 - [ ] The meeting page shows the summary, the key points and the transcript.
 - [ ] The player plays both tracks together; a key point or a line jumps to its moment.
 - [ ] Editing the summary and renaming the meeting survive a restart.
+- [ ] Sources lists meetings and notes; a word said in a meeting is found and opens the
+      meeting at that minute; ⌘K finds it too.
+- [ ] Home shows the latest meetings, the recent notes and what is being processed.
+
+**Appearance**
+
+- [ ] Changing the accent changes the Dock icon while Trama is open; the menu bar icon
+      is monochrome and turns red only while recording.
 
 **Update**
 

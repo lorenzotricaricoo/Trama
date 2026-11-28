@@ -5,6 +5,43 @@ All notable changes to Trama are listed here. Versions follow
 [Conventional Commits](https://www.conventionalcommits.org/) merged since the previous
 release ([releasing](docs/development/releasing.md)).
 
+## [0.1.0] - 2026-11-28
+
+Phase 1 complete: record, transcribe and summarize meetings, write notes and find
+everything again, all on the Mac. It is not notarized: see [Install](README.md#install)
+for the first launch. Installing it over 0.1.0-alpha.1 keeps the library.
+
+### Added
+
+- **Onboarding** on a new install: accent, meeting language, microphone and system audio
+  permissions, AI provider, transcription model, menu bar and shortcut. Every step can be
+  postponed, and ⌘K › _Set up Trama_ opens it again
+  ([#38](https://github.com/lorenzotricaricoo/Trama/issues/38)).
+- **Menu bar item**: record and stop, new note, what is being processed and the latest
+  meetings. Closing the window leaves Trama running in the menu bar, recording and
+  processing included; the Mac does not go to sleep meanwhile. A **global shortcut**
+  (⌥⌘R, configurable) starts and stops a recording from any app, Trama can **open at
+  login**, and quitting during a recording or while a meeting is processed asks first
+  ([#32](https://github.com/lorenzotricaricoo/Trama/issues/32)).
+- **Sources and search**: every meeting and note in one list, filtered by kind;
+  full-text search across transcripts, summaries, notes taken during the call and
+  notes, which opens a meeting at the minute something was said. The command bar
+  searches too ([#35](https://github.com/lorenzotricaricoo/Trama/issues/35)).
+- **Home** with the latest meetings, the recent notes and what is being processed.
+- **Import Markdown files** as notes: drop them on the window, ⌘O, the File menu or the
+  command bar ([#57](https://github.com/lorenzotricaricoo/Trama/issues/57)).
+- **Audio retention**: meeting audio is deleted after the period chosen in Settings ›
+  Data; the transcript, summary and notes stay
+  ([#37](https://github.com/lorenzotricaricoo/Trama/issues/37)).
+- **Native menu bar** listing the app's commands with their shortcuts
+  ([#56](https://github.com/lorenzotricaricoo/Trama/issues/56)).
+- **App icon** _Ordito_; while Trama is open the Dock icon follows the accent colour
+  ([#62](https://github.com/lorenzotricaricoo/Trama/issues/62)).
+
+### Fixed
+
+- Install steps for the Gatekeeper block on the `.dmg`.
+
 ## [0.1.0-alpha.1] - 2026-11-28
 
 First pre-release of phase 1, for trying Trama on real meetings. It is not notarized:
@@ -29,4 +66,5 @@ the menu bar and audio retention are not there yet.
   providers (keys kept in the macOS Keychain) and data.
 - **App shell** with sidebar and command bar, in Italian and English.
 
+[0.1.0]: https://github.com/lorenzotricaricoo/Trama/releases/tag/v0.1.0
 [0.1.0-alpha.1]: https://github.com/lorenzotricaricoo/Trama/releases/tag/v0.1.0-alpha.1
