@@ -1,19 +1,25 @@
-//! The model download as a background task for the app.
+//! The model download and check as background tasks for the app.
 //!
 //! A model download has no source row, so it does not fit the job queue (jobs target a
-//! source). It is a task of its own: one worker thread at a time, cancellable, with its
-//! state sent to an event sink after every change, like the job runner does. Nothing is
-//! stored in the database: the state lives on disk, next to the model, so after a
-//! restart the next download resumes from the partial files.
+//! source). It is a task of its own: one worker thread at a time (a download or a
+//! check), cancellable, with the status sent to an event sink after every change, like
+//! the job runner does. Nothing is stored in the database: the state lives on disk, next
+//! to the model, so after a restart the next download resumes from the partial files.
+//!
+//! Every event is sent while the manager's lock is held, so events arrive in the order
+//! of the changes: a fast failure can't be overtaken by the status announcing the start.
 
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
-use std::thread::JoinHandle;
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError};
 
 use super::{ModelError, ModelState, ModelStatus, ModelStore, Progress, Result};
 
-/// Receives the model status after every change. Must not block: it is called from the
-/// download thread.
+/// Error code of a task that panicked; a bug.
+pub const PANICKED: &str = "panicked";
+
+/// Receives the model status after every change. It is called with the manager's lock
+/// held, so it must not block and must not call the manager.
 pub trait ModelEventSink: Send + Sync {
     fn send(&self, status: ModelStatus);
 }
@@ -24,17 +30,27 @@ impl<F: Fn(ModelStatus) + Send + Sync> ModelEventSink for F {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Task {
+    Download,
+    Verify,
+}
+
 struct Running {
     id: u64,
+    task: Task,
     cancel: Arc<AtomicBool>,
-    progress: Progress,
-    worker: Option<JoinHandle<()>>,
+    downloaded: u64,
+    total: u64,
+    progress: f32,
 }
 
 #[derive(Default)]
 struct Inner {
     running: Option<Running>,
-    /// Code of the last failed download, until the next one starts.
+    /// A removal is waiting for the running task to stop: no new task may start.
+    removing: bool,
+    /// Code of the last failed task, until the next one starts.
     last_error: Option<&'static str>,
     next_id: u64,
 }
@@ -43,6 +59,8 @@ struct Shared {
     store: ModelStore,
     events: Arc<dyn ModelEventSink>,
     inner: Mutex<Inner>,
+    /// Signalled when a task ends.
+    idle: Condvar,
 }
 
 impl Shared {
@@ -50,13 +68,18 @@ impl Shared {
         self.inner.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// The status; reads only file sizes, never hashes.
     fn status(&self, inner: &Inner) -> Result<ModelStatus> {
         if let Some(running) = &inner.running {
             return Ok(ModelStatus {
-                state: ModelState::Downloading,
-                downloaded_bytes: running.progress.downloaded,
-                total_bytes: running.progress.total,
+                state: match running.task {
+                    Task::Download => ModelState::Downloading,
+                    Task::Verify => ModelState::Verifying,
+                },
+                downloaded_bytes: running.downloaded,
+                total_bytes: running.total,
                 error_code: None,
+                progress: Some(running.progress),
             });
         }
         let mut status = self.store.status()?;
@@ -66,16 +89,30 @@ impl Shared {
         Ok(status)
     }
 
-    /// Sends the current status; a status that can't be read is reported, not sent.
-    fn emit(&self) {
-        let status = {
-            let inner = self.lock();
-            self.status(&inner)
-        };
-        match status {
-            Ok(status) => self.events.send(status),
-            Err(err) => eprintln!("trama: cannot read the model status: {err}"),
+    /// Sends the current status; the lock must be held, which keeps events in order.
+    fn emit(&self, inner: &Inner) -> Result<ModelStatus> {
+        let status = self.status(inner)?;
+        self.events.send(status.clone());
+        Ok(status)
+    }
+
+    /// Like [`Self::emit`], for the worker, which has no caller to return an error to.
+    fn emit_or_log(&self, inner: &Inner) {
+        if let Err(err) = self.emit(inner) {
+            eprintln!("trama: cannot read the model status: {err}");
         }
+    }
+
+    /// Cancels the running task and waits until it has ended.
+    fn stop_and_wait<'a>(&'a self, mut inner: MutexGuard<'a, Inner>) -> MutexGuard<'a, Inner> {
+        while let Some(running) = &inner.running {
+            running.cancel.store(true, Ordering::SeqCst);
+            inner = self
+                .idle
+                .wait(inner)
+                .unwrap_or_else(PoisonError::into_inner);
+        }
+        inner
     }
 }
 
@@ -99,6 +136,7 @@ impl ModelManager {
                 store,
                 events,
                 inner: Mutex::new(Inner::default()),
+                idle: Condvar::new(),
             }),
         }
     }
@@ -113,45 +151,54 @@ impl ModelManager {
         self.shared.status(&inner)
     }
 
-    /// Starts downloading in the background, or resumes; does nothing if a download is
-    /// already running. Progress and the outcome arrive as events.
+    /// Starts downloading in the background, or resumes. Does nothing if the model is
+    /// ready or a task is already running. Progress and the outcome arrive as events.
     pub fn download(&self) -> Result<ModelStatus> {
-        let status = {
-            let mut inner = self.shared.lock();
-            if inner.running.is_none() {
-                let on_disk = self.shared.store.status()?;
-                if on_disk.state != ModelState::Ready {
-                    inner.last_error = None;
-                    inner.next_id += 1;
-                    let id = inner.next_id;
-                    let cancel = Arc::new(AtomicBool::new(false));
-                    let worker = {
-                        let shared = Arc::clone(&self.shared);
-                        let cancel = Arc::clone(&cancel);
-                        std::thread::Builder::new()
-                            .name("trama-model-download".into())
-                            .spawn(move || work(&shared, id, &cancel))
-                            .map_err(|err| ModelError::io(&self.shared.store.dir(), err))?
-                    };
-                    inner.running = Some(Running {
-                        id,
-                        cancel,
-                        progress: Progress {
-                            downloaded: on_disk.downloaded_bytes,
-                            total: on_disk.total_bytes,
-                        },
-                        worker: Some(worker),
-                    });
-                }
-            }
-            self.shared.status(&inner)?
-        };
-        self.shared.events.send(status.clone());
-        Ok(status)
+        self.start(Task::Download)
     }
 
-    /// Asks a running download to stop. The partial files stay, so the next download
-    /// resumes; the final status arrives as an event when the download thread exits.
+    /// Starts hashing every file again in the background (several seconds for the
+    /// transcription model). A file that doesn't match is deleted and the model becomes
+    /// corrupt. Does nothing if a task is already running.
+    pub fn verify(&self) -> Result<ModelStatus> {
+        self.start(Task::Verify)
+    }
+
+    fn start(&self, task: Task) -> Result<ModelStatus> {
+        let mut inner = self.shared.lock();
+        if inner.running.is_some() || inner.removing {
+            return self.shared.status(&inner);
+        }
+        let on_disk = self.shared.store.status()?;
+        if task == Task::Download && on_disk.state == ModelState::Ready {
+            return Ok(on_disk);
+        }
+        inner.next_id += 1;
+        let id = inner.next_id;
+        let cancel = Arc::new(AtomicBool::new(false));
+        {
+            let shared = Arc::clone(&self.shared);
+            let cancel = Arc::clone(&cancel);
+            std::thread::Builder::new()
+                .name("trama-model".into())
+                .spawn(move || work(&shared, id, task, &cancel))
+                .map_err(|err| ModelError::io(&self.shared.store.dir(), err))?;
+        }
+        inner.last_error = None;
+        inner.running = Some(Running {
+            id,
+            task,
+            cancel,
+            downloaded: on_disk.downloaded_bytes,
+            total: on_disk.total_bytes,
+            progress: 0.0,
+        });
+        // The worker can't report anything before this: it needs the lock.
+        self.shared.emit(&inner)
+    }
+
+    /// Asks the running task to stop. The partial files stay, so the next download
+    /// resumes; the final status arrives as an event when the task has stopped.
     pub fn cancel(&self) -> Result<ModelStatus> {
         let inner = self.shared.lock();
         if let Some(running) = &inner.running {
@@ -160,55 +207,23 @@ impl ModelManager {
         self.shared.status(&inner)
     }
 
-    /// Hashes every file again (several seconds for the transcription model). A file
-    /// that doesn't match is deleted and the model becomes corrupt.
-    pub fn verify(&self) -> Result<ModelStatus> {
-        let status = {
-            let mut inner = self.shared.lock();
-            if inner.running.is_some() {
-                return self.shared.status(&inner);
-            }
-            let verified = self.shared.store.verify()?;
-            inner.last_error = verified.error_code;
-            self.shared.status(&inner)?
-        };
-        self.shared.events.send(status.clone());
-        Ok(status)
-    }
-
-    /// Stops a running download, waits for it, and deletes the model from disk.
+    /// Stops the running task, waits for it, and deletes the model from disk. No task
+    /// can start until the model is gone. Waiting may take as long as a stalled read.
     pub fn remove(&self) -> Result<ModelStatus> {
-        self.stop_and_wait();
-        let status = {
-            let mut inner = self.shared.lock();
-            if inner.running.is_none() {
-                self.shared.store.remove()?;
-                inner.last_error = None;
-            }
-            self.shared.status(&inner)?
-        };
-        self.shared.events.send(status.clone());
-        Ok(status)
+        let mut inner = self.shared.lock();
+        inner.removing = true;
+        let mut inner = self.shared.stop_and_wait(inner);
+        inner.removing = false;
+        self.shared.store.remove()?;
+        inner.last_error = None;
+        self.shared.emit(&inner)
     }
 
-    /// Stops a running download and waits for its thread; partial files stay for the
-    /// next start. Called automatically on drop.
+    /// Stops the running task and waits for it; partial files stay for the next start.
+    /// Called automatically on drop.
     pub fn shutdown(&self) {
-        self.stop_and_wait();
-    }
-
-    fn stop_and_wait(&self) {
-        let worker = {
-            let mut inner = self.shared.lock();
-            inner.running.as_mut().and_then(|running| {
-                running.cancel.store(true, Ordering::SeqCst);
-                running.worker.take()
-            })
-        };
-        if let Some(worker) = worker {
-            // A panic in the download is a bug; it has been reported on stderr already.
-            let _ = worker.join();
-        }
+        let inner = self.shared.lock();
+        drop(self.shared.stop_and_wait(inner));
     }
 }
 
@@ -218,37 +233,44 @@ impl Drop for ModelManager {
     }
 }
 
-/// The download thread.
-fn work(shared: &Shared, id: u64, cancel: &AtomicBool) {
+/// The worker thread of one task.
+fn work(shared: &Shared, id: u64, task: Task, cancel: &AtomicBool) {
     let on_progress = |progress: Progress| {
-        {
-            let mut inner = shared.lock();
-            match inner.running.as_mut() {
-                Some(running) if running.id == id => running.progress = progress,
-                _ => return,
-            }
-        }
-        shared.events.send(ModelStatus {
-            state: ModelState::Downloading,
-            downloaded_bytes: progress.downloaded,
-            total_bytes: progress.total,
-            error_code: None,
-        });
-    };
-    let outcome = shared.store.download(cancel, &on_progress);
-    {
         let mut inner = shared.lock();
-        if inner.running.as_ref().is_some_and(|r| r.id == id) {
-            inner.running = None;
-        }
-        inner.last_error = match &outcome {
-            Ok(()) | Err(ModelError::Cancelled) => None,
-            Err(err) => {
-                // Surfaced to the interface through the status, and logged (A4).
-                eprintln!("trama: model download failed: {err}");
-                Some(err.code())
+        match inner.running.as_mut() {
+            Some(running) if running.id == id => {
+                if task == Task::Download {
+                    running.downloaded = progress.downloaded;
+                }
+                running.progress = progress.fraction();
             }
-        };
+            _ => return,
+        }
+        shared.emit_or_log(&inner);
+    };
+    let outcome = catch_unwind(AssertUnwindSafe(|| match task {
+        Task::Download => shared.store.download(cancel, &on_progress),
+        Task::Verify => shared.store.verify(cancel, &on_progress).map(|_| ()),
+    }));
+
+    let mut inner = shared.lock();
+    if inner.running.as_ref().is_some_and(|r| r.id == id) {
+        inner.running = None;
     }
-    shared.emit();
+    inner.last_error = match &outcome {
+        Ok(Ok(())) | Ok(Err(ModelError::Cancelled)) => None,
+        Ok(Err(err)) => {
+            // Surfaced to the interface through the status, and logged (A4).
+            eprintln!("trama: model {task:?} failed: {err}");
+            Some(err.code())
+        }
+        Err(_) => {
+            // The panic message is already on stderr.
+            eprintln!("trama: model {task:?} panicked");
+            Some(PANICKED)
+        }
+    };
+    // Waiters wake once the lock is released, after the final event.
+    shared.idle.notify_all();
+    shared.emit_or_log(&inner);
 }

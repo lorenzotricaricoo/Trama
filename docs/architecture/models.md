@@ -69,48 +69,58 @@ Every file is pinned by URL, size and SHA-256 in `crates/core/src/models/catalog
    in place, `SHA256SUMS` marks the model ready, so the next start doesn't hash 2.5 GB
    again.
 4. **Retries.** Network errors, `429` and `5xx` are retried, resuming, with a growing
-   pause; attempts that downloaded something don't count against the limit of four. A
-   resumed file that fails its checksum (the old part may come from a different upstream
-   file) is downloaded once more from the start.
-5. **Cancellation.** A flag checked between reads stops the download and keeps the
-   parts. Every read also has a timeout, so a stalled connection is noticed and resumed.
+   pause. An attempt that reaches further than any before doesn't count against the
+   limit of four; one that throws data away and starts over does. A resumed file that
+   fails its checksum (the old part may come from a different upstream file) is
+   downloaded once more from the start.
+5. **Cancellation.** A flag checked between reads, and while hashing, stops the download
+   and keeps the parts. Every read also has a timeout, so a stalled connection is
+   noticed and resumed.
 
 `ModelStore::verify` hashes every file again; a file that doesn't match is deleted and
 the model becomes corrupt. `ModelStore::remove` deletes the model folder, parts included.
 
 The download does not use the [job queue](data-model.md): jobs target a source, and a
-model has none. `ModelManager` runs it on its own thread instead, one at a time, and
-sends the status to an event sink after every change, like the job runner. No state is
-stored in the database: the files on disk are the state, so after a restart a new
-download resumes from the parts.
+model has none. `ModelManager` runs downloads and checks on its own thread instead, one
+task at a time, and sends the status to an event sink after every change, like the job
+runner. Events are sent while the manager's lock is held, so they arrive in the order of
+the changes. A removal stops the running task, waits for it and deletes the folder; no
+task can start meanwhile. A task that panics ends with the error code `panicked`. No
+state is stored in the database: the files on disk are the state, so after a restart a
+new download resumes from the parts.
 
 ## What the interface sees
 
 The desktop shell exposes `model_status`, `download_model`, `cancel_model_download`,
-`verify_model` and `remove_model`, and sends the `model` event after every change:
+`verify_model` and `remove_model`, and sends the `model` event after every change. The
+commands run off the main thread; downloads and checks continue in the background and
+report through events. A failed command returns an error code, never text.
 
 ```json
-{ "state": "downloading", "downloadedBytes": 1234567, "totalBytes": 2550516424, "errorCode": null }
+{ "state": "downloading", "downloadedBytes": 1234567, "totalBytes": 2550516424, "errorCode": null, "progress": 0.0005 }
 ```
 
 | State | Meaning |
 |-------|---------|
 | `missing` | Not downloaded, or partly: `downloadedBytes > 0` means a download can resume |
 | `downloading` | Being downloaded; progress events about every 0.1% |
+| `verifying` | The files are being hashed again (`verify_model`); `progress` counts the bytes hashed |
 | `ready` | Every file is present and was verified |
 | `corrupt` | A file failed its checksum or changed size on disk; downloading again fixes it |
 
 `errorCode` holds the reason of the last failed download, for the interface to translate
 (the core never returns text): `not_enough_space`, `network`, `http_status`,
-`size_mismatch`, `checksum_mismatch`, `io`. A cancelled download has no error.
+`size_mismatch`, `checksum_mismatch`, `io`, `panicked`. A cancelled download has no
+error.
 
 ## Testing
 
 `crates/core/tests/models.rs` runs every case against a local fake HTTP server, with no
 real download: a dropped connection resumed with a range (through a redirect), a resume
 after a restart, a wrong checksum (corrupt, then downloaded again), a file damaged on
-disk, a bad partial file, a server that ignores ranges, not enough space, HTTP errors and
-cancellation. Two `#[ignore]`d tests use the network:
+disk, a bad partial file, a server that ignores ranges, not enough space, HTTP errors,
+retries that make no progress, cancellation, event order after a fast failure,
+concurrent removals and a panic in the download. Two `#[ignore]`d tests use the network:
 
 ```sh
 # Every pinned URL still serves the pinned size (one byte per file)

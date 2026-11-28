@@ -65,7 +65,7 @@ impl<'a> Reporter<'a> {
         }
     }
 
-    fn add(&mut self, bytes: u64) {
+    pub(super) fn add(&mut self, bytes: u64) {
         self.downloaded += bytes;
         self.report(false);
     }
@@ -145,7 +145,7 @@ pub(super) fn fetch(
 
         let mut hasher = Sha256::new();
         if have > 0 {
-            hash_into(part, &mut hasher, have).map_err(io_err)?;
+            hash_into(part, &mut hasher, have, cancel, &mut |_| {})?;
         }
         let resumed = have > 0;
         let mut out = OpenOptions::new()
@@ -185,7 +185,7 @@ pub(super) fn fetch(
 
     // The part is complete already (stopped between the last byte and the rename).
     let mut hasher = Sha256::new();
-    hash_into(part, &mut hasher, have).map_err(io_err)?;
+    hash_into(part, &mut hasher, have, cancel, &mut |_| {})?;
     finish(file, part, hasher, true, reporter)
 }
 

@@ -37,6 +37,8 @@ struct ServerState {
     statuses: HashMap<String, u16>,
     /// Close the connection after this many body bytes, once.
     drop_after: Option<usize>,
+    /// Close every connection after this many body bytes.
+    drop_always: Option<usize>,
     /// Stop after this many body bytes, once, until `release` is set.
     hold_after: Option<usize>,
     release: bool,
@@ -149,7 +151,8 @@ fn serve(stream: TcpStream, state: &Mutex<ServerState>) {
                 .and_then(|s| s.parse::<usize>().ok()),
             _ => None,
         };
-        (content, start, st.drop_after.take(), st.hold_after.take())
+        let drop_after = st.drop_after.take().or(st.drop_always);
+        (content, start, drop_after, st.hold_after.take())
     };
 
     let len = content.len();
@@ -280,6 +283,10 @@ fn download(store: &ModelStore) -> std::result::Result<Vec<Progress>, ModelError
     let seen = Mutex::new(Vec::new());
     store.download(&AtomicBool::new(false), &|p| seen.lock().unwrap().push(p))?;
     Ok(seen.into_inner().unwrap())
+}
+
+fn verify(store: &ModelStore) -> ModelStatus {
+    store.verify(&AtomicBool::new(false), &|_| {}).unwrap()
 }
 
 fn state(store: &ModelStore) -> ModelState {
@@ -424,7 +431,7 @@ fn a_file_damaged_on_disk_is_detected_and_downloaded_again() {
     std::fs::write(store.file("big.onnx"), &bytes).unwrap();
     assert_eq!(state(&store), ModelState::Ready);
 
-    let status = store.verify().unwrap();
+    let status = verify(&store);
     assert_eq!(status.state, ModelState::Corrupt);
     assert_eq!(status.error_code, Some("checksum_mismatch"));
     assert!(!store.file("big.onnx").exists());
@@ -435,7 +442,7 @@ fn a_file_damaged_on_disk_is_detected_and_downloaded_again() {
     assert_eq!(state(&store), ModelState::Ready);
     assert_eq!(read(&store.file("big.onnx")), fx.big);
     assert_eq!(fx.server.requests_for("/small.txt").len(), small_requests);
-    assert_eq!(store.verify().unwrap().state, ModelState::Ready);
+    assert_eq!(verify(&store).state, ModelState::Ready);
 }
 
 #[test]
@@ -659,14 +666,19 @@ fn is(state: ModelState) -> impl Fn(&ModelStatus) -> bool {
 #[test]
 fn the_manager_downloads_in_the_background() {
     let fx = fixture();
+    fx.server.with(|s| s.hold_after = Some(100_000));
     let (sink, events) = Events::sink();
     let manager = ModelManager::new(fx.store(), sink);
     assert_eq!(manager.status().unwrap().state, ModelState::Missing);
 
     let started = manager.download().unwrap();
     assert_eq!(started.state, ModelState::Downloading);
+    assert_eq!(started.progress, Some(0.0));
     // Asking again while it runs changes nothing.
+    events.wait_for(|s| s.downloaded_bytes >= 100_000);
     assert_eq!(manager.download().unwrap().state, ModelState::Downloading);
+    assert_eq!(manager.verify().unwrap().state, ModelState::Downloading);
+    fx.server.with(|s| s.release = true);
 
     let seen = events.wait_for(is(ModelState::Ready));
     assert!(
@@ -757,12 +769,122 @@ fn the_manager_verifies_the_model() {
     events.wait_for(is(ModelState::Ready));
 
     std::fs::write(manager.store().file("small.txt"), content(5_000, 1)).unwrap();
-    let status = manager.verify().unwrap();
+    assert_eq!(manager.verify().unwrap().state, ModelState::Verifying);
+    let seen = events.wait_for(|s| s.state != ModelState::Verifying);
+    let status = seen.last().unwrap();
     assert_eq!(status.state, ModelState::Corrupt);
     assert_eq!(status.error_code, Some("checksum_mismatch"));
+    assert!(seen.iter().any(|s| s.progress == Some(1.0)));
 
     manager.download().unwrap();
     events.wait_for(is(ModelState::Ready));
+}
+
+#[test]
+fn a_fast_failure_is_the_last_event() {
+    // The start event must never arrive after the outcome, or the interface would stay
+    // on "downloading".
+    for _ in 0..50 {
+        let fx = fixture();
+        let store = ModelStore::new(&fx.root, fx.spec.clone()).with_free_space(|_| Ok(0));
+        let (sink, events) = Events::sink();
+        let manager = ModelManager::new(store, sink);
+
+        manager.download().unwrap();
+        let seen = events.wait_for(|s| s.state != ModelState::Downloading);
+        assert_eq!(seen.last().unwrap().error_code, Some("not_enough_space"));
+        assert!(
+            events.0.recv_timeout(Duration::from_millis(5)).is_err(),
+            "an event arrived after the outcome"
+        );
+        assert_eq!(
+            manager.status().unwrap().error_code,
+            Some("not_enough_space")
+        );
+    }
+}
+
+#[test]
+fn concurrent_removals_both_delete_the_model() {
+    let fx = fixture();
+    fx.server.with(|s| s.hold_after = Some(100_000));
+    let (sink, events) = Events::sink();
+    let manager = Arc::new(ModelManager::new(fx.store(), sink));
+    manager.download().unwrap();
+    events.wait_for(|s| s.downloaded_bytes >= 100_000);
+
+    let removers: Vec<_> = (0..2)
+        .map(|_| {
+            let manager = Arc::clone(&manager);
+            std::thread::spawn(move || manager.remove().unwrap())
+        })
+        .collect();
+    std::thread::sleep(Duration::from_millis(50));
+    // Refused while a removal waits for the download to stop.
+    assert_eq!(manager.download().unwrap().state, ModelState::Downloading);
+    fx.server.with(|s| s.release = true);
+    for remover in removers {
+        let status = remover.join().unwrap();
+        assert_eq!(status.state, ModelState::Missing);
+        assert_eq!(status.downloaded_bytes, 0);
+    }
+    assert!(!manager.store().dir().exists());
+}
+
+#[test]
+fn a_panic_in_the_download_is_reported_and_not_stuck() {
+    let fx = fixture();
+    let panicked = Arc::new(AtomicBool::new(false));
+    let (sink, events) = Events::sink();
+    let flag = Arc::clone(&panicked);
+    let panicking: Arc<dyn ModelEventSink> = Arc::new(move |status: ModelStatus| {
+        if status.state == ModelState::Downloading
+            && status.downloaded_bytes > 0
+            && !flag.swap(true, Ordering::SeqCst)
+        {
+            panic!("a bug in the progress path");
+        }
+        sink.send(status);
+    });
+    let manager = ModelManager::new(fx.store(), panicking);
+
+    manager.download().unwrap();
+    let seen = events.wait_for(|s| s.state != ModelState::Downloading);
+    let failed = seen.last().unwrap();
+    assert_eq!(failed.state, ModelState::Missing);
+    assert_eq!(failed.error_code, Some(PANICKED));
+
+    manager.download().unwrap();
+    events.wait_for(is(ModelState::Ready));
+}
+
+#[test]
+fn a_check_can_be_cancelled() {
+    let fx = fixture();
+    let store = fx.store();
+    download(&store).unwrap();
+
+    let err = store.verify(&AtomicBool::new(true), &|_| {}).unwrap_err();
+    assert!(matches!(err, ModelError::Cancelled), "{err:?}");
+    assert_eq!(state(&store), ModelState::Ready);
+}
+
+#[test]
+fn retries_that_start_over_count_as_failures() {
+    let fx = fixture();
+    let store = fx.store();
+    std::fs::create_dir_all(store.dir()).unwrap();
+    std::fs::write(store.dir().join("big.onnx.part"), &fx.big[..100_000]).unwrap();
+    // Ranges are ignored and every connection drops early: each attempt throws the part
+    // away and gets less far than before, which is not progress.
+    fx.server.with(|s| {
+        s.ignore_range = true;
+        s.drop_always = Some(50_000);
+    });
+
+    let err = download(&store).unwrap_err();
+    assert_eq!(err.code(), "network", "{err:?}");
+    assert_eq!(fx.server.requests_for("/cdn/big.onnx").len(), 4);
 }
 
 // --- Real files (network, manual) ---------------------------------------------------
@@ -804,5 +926,5 @@ fn the_real_transcription_model_downloads() {
         })
         .unwrap();
     eprintln!();
-    assert_eq!(store.verify().unwrap().state, ModelState::Ready);
+    assert_eq!(verify(&store).state, ModelState::Ready);
 }

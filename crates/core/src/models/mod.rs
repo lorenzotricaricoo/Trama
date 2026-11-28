@@ -29,7 +29,7 @@ use std::time::Duration;
 use sha2::{Digest, Sha256};
 
 pub use catalog::{TRANSCRIPTION_MODEL_ID, files, transcription_model};
-pub use manager::{ModelEventSink, ModelManager};
+pub use manager::{ModelEventSink, ModelManager, PANICKED};
 
 /// Marker written when every file is in place and verified: one `<sha256>  <name>` line
 /// per file, the format `shasum -a 256 -c` reads.
@@ -87,6 +87,8 @@ pub enum ModelState {
     Missing,
     /// Being downloaded now.
     Downloading,
+    /// Its files are being hashed again.
+    Verifying,
     /// On disk and verified.
     Ready,
     /// A file failed its checksum or changed on disk; download it again.
@@ -99,6 +101,7 @@ impl ModelState {
         match self {
             Self::Missing => "missing",
             Self::Downloading => "downloading",
+            Self::Verifying => "verifying",
             Self::Ready => "ready",
             Self::Corrupt => "corrupt",
         }
@@ -106,7 +109,7 @@ impl ModelState {
 }
 
 /// What the interface needs to show a model.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ModelStatus {
     pub state: ModelState,
     /// Bytes already on disk, including partial files.
@@ -115,6 +118,8 @@ pub struct ModelStatus {
     pub total_bytes: u64,
     /// Code of the last failed download or check, for the interface to translate.
     pub error_code: Option<&'static str>,
+    /// Progress of the running download or check, from 0 to 1; `None` when idle.
+    pub progress: Option<f32>,
 }
 
 /// Progress of a download, in bytes of the whole model.
@@ -264,8 +269,8 @@ impl ModelStore {
         self.dir().join(format!("{}.{PART_EXTENSION}", file.name))
     }
 
-    /// The state on disk, without hashing: never [`ModelState::Downloading`] (only the
-    /// [`ModelManager`] knows that).
+    /// The state on disk, without hashing: never [`ModelState::Downloading`] or
+    /// [`ModelState::Verifying`] (only the [`ModelManager`] knows those).
     pub fn status(&self) -> Result<ModelStatus> {
         let dir = self.dir();
         let total = self.spec.total_size();
@@ -274,6 +279,7 @@ impl ModelStore {
             downloaded_bytes: downloaded,
             total_bytes: total,
             error_code: (state == ModelState::Corrupt).then_some("checksum_mismatch"),
+            progress: None,
         };
         if !dir.exists() {
             return Ok(status(ModelState::Missing, 0));
@@ -379,11 +385,13 @@ impl ModelStore {
         let part = self.part(file);
         let mut failed = 0;
         let mut delay = self.retry_delay;
+        // Most bytes ever reached: an attempt counts as progress only if it goes beyond,
+        // so attempts that discard data and start over still count as failures.
+        let mut high_water = reporter.downloaded();
         loop {
             if cancel.load(Ordering::Relaxed) {
                 return Err(ModelError::Cancelled);
             }
-            let before = reporter.downloaded();
             match download::fetch(&self.agent, file, &part, cancel, reporter) {
                 Ok(download::Fetched::Verified) => break,
                 Ok(download::Fetched::ResumedBadChecksum) => {
@@ -396,7 +404,9 @@ impl ModelStore {
                 Ok(download::Fetched::BadChecksum) => return Err(self.mark_corrupt(file)),
                 Err(err) if err.retryable() => {
                     // Attempts that moved forward don't count against the limit.
-                    if reporter.downloaded() == before {
+                    if reporter.downloaded() > high_water {
+                        high_water = reporter.downloaded();
+                    } else {
                         failed += 1;
                     }
                     if failed >= MAX_FAILED_ATTEMPTS {
@@ -434,20 +444,26 @@ impl ModelStore {
     }
 
     /// Hashes every downloaded file again. A file that doesn't match is deleted and the
-    /// model becomes corrupt; a complete model that matches becomes ready.
-    pub fn verify(&self) -> Result<ModelStatus> {
+    /// model becomes corrupt; a complete model that matches becomes ready. Progress counts
+    /// the bytes hashed; `cancel` stops the check, changing nothing.
+    pub fn verify(&self, cancel: &AtomicBool, progress: &dyn Fn(Progress)) -> Result<ModelStatus> {
+        let mut present = Vec::new();
         let mut bad = Vec::new();
         let mut complete = true;
         for file in &self.spec.files {
-            let path = self.file(&file.name);
-            match file_len(&path)? {
-                Some(len) if len == file.size => {
-                    if hash_file(&path)? != file.sha256 {
-                        bad.push(file);
-                    }
-                }
+            match file_len(&self.file(&file.name))? {
+                Some(len) if len == file.size => present.push(file),
                 Some(_) => bad.push(file),
                 None => complete = false,
+            }
+        }
+        let total = present.iter().map(|f| f.size).sum();
+        let mut reporter = download::Reporter::new(total, 0, progress);
+        reporter.report(true);
+        for file in present {
+            let path = self.file(&file.name);
+            if hash_file(&path, cancel, &mut |n| reporter.add(n))? != file.sha256 {
+                bad.push(file);
             }
         }
         if !bad.is_empty() {
@@ -504,24 +520,38 @@ fn write_atomically(path: &Path, content: &[u8]) -> Result<()> {
 }
 
 /// SHA-256 of a whole file, lowercase hex.
-fn hash_file(path: &Path) -> Result<String> {
+fn hash_file(path: &Path, cancel: &AtomicBool, on_chunk: &mut dyn FnMut(u64)) -> Result<String> {
     let mut hasher = Sha256::new();
-    hash_into(path, &mut hasher, u64::MAX).map_err(|err| ModelError::io(path, err))?;
+    hash_into(path, &mut hasher, u64::MAX, cancel, on_chunk)?;
     Ok(hex(&hasher.finalize()))
 }
 
-/// Feeds up to `limit` bytes of a file to `hasher`.
-fn hash_into(path: &Path, hasher: &mut Sha256, limit: u64) -> io::Result<u64> {
-    let mut reader = File::open(path)?.take(limit);
+/// Feeds up to `limit` bytes of a file to `hasher`, calling `on_chunk` with the bytes of
+/// every chunk and stopping soon after `cancel` becomes true.
+fn hash_into(
+    path: &Path,
+    hasher: &mut Sha256,
+    limit: u64,
+    cancel: &AtomicBool,
+    on_chunk: &mut dyn FnMut(u64),
+) -> Result<u64> {
+    let io_err = |err| ModelError::io(path, err);
+    let mut reader = File::open(path).map_err(io_err)?.take(limit);
     let mut buf = vec![0; download::CHUNK];
     let mut read = 0;
     loop {
-        let n = reader.read(&mut buf)?;
-        if n == 0 {
-            return Ok(read);
+        if cancel.load(Ordering::Relaxed) {
+            return Err(ModelError::Cancelled);
         }
+        let n = match reader.read(&mut buf) {
+            Ok(0) => return Ok(read),
+            Ok(n) => n,
+            Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+            Err(err) => return Err(io_err(err)),
+        };
         hasher.update(&buf[..n]);
         read += n as u64;
+        on_chunk(n as u64);
     }
 }
 
