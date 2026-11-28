@@ -35,6 +35,7 @@ function noteOf(id: string): Note {
     title: '',
     body: note.body,
     versionNumber: 1,
+    occurredAt: note.createdAt,
     createdAt: note.createdAt,
     updatedAt: 0,
   };

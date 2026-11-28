@@ -7,7 +7,9 @@ import { Screen } from './screens/screens';
 import { useStartupNotices } from './settings/useStartupNotices';
 import { CommandBar, useCommandBar, type Command } from './shell/CommandBar';
 import { NAV_ITEMS, navItemOf, useNavigation, type Direction } from './shell/navigation';
+import { DropOverlay } from './notes/DropOverlay';
 import { useFlushBeforeQuit } from './notes/flush';
+import { importMessage, useNoteImport } from './notes/importNotes';
 import { showRecordingPanel, startRecording, stopRecording } from './recording/api';
 import { errorCode, recordingErrorMessage } from './recording/errors';
 import { formatClock } from './recording/format';
@@ -24,7 +26,13 @@ import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { useShellEvents } from './shell/useShellEvents';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
-import { ArrowBendUpLeftIcon, NotePencilIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
+import {
+  ArrowBendUpLeftIcon,
+  DownloadSimpleIcon,
+  NotePencilIcon,
+  RecordIcon,
+  SidebarSimpleIcon,
+} from './ui/icons';
 import { useAppearance } from './appearance';
 import { useThemeClasses } from './useThemeClasses';
 
@@ -91,6 +99,27 @@ export function App() {
     nav.navigate('note');
   };
 
+  // Markdown files dropped on the window or chosen with ⌘O become notes (#57). One note
+  // opens; several show in Sources, which reads its list again.
+  const [revision, setRevision] = useState(0);
+  const noteImport = useNoteImport({
+    t,
+    onImported: (result) => {
+      notice.show(importMessage(t, result));
+      const [first, ...others] = result.imported;
+      if (!first) return;
+      setRevision((current) => current + 1);
+      bar.close();
+      if (others.length === 0) nav.navigate('note', first.id);
+      else nav.navigate('sources');
+    },
+    onFailed: (error) => notice.show(t('import-failed', { code: errorCode(error) })),
+  });
+  const importNotes = () => {
+    bar.close();
+    noteImport.choose();
+  };
+
   // Shortcuts and the native menu run the same actions, once.
   const goTo = (screen: 'home' | 'sources' | 'settings') => () => {
     bar.close();
@@ -106,6 +135,7 @@ export function App() {
       back: nav.back,
       record,
       newNote,
+      importNotes,
     },
     // Behind the command bar only its own toggle and navigation act.
     bar.state === 'closed' ? undefined : COMMAND_BAR_ACTIONS,
@@ -132,6 +162,14 @@ export function App() {
       icon: NotePencilIcon,
       shortcut: SHORTCUTS.newNote.label,
       run: newNote,
+    },
+    {
+      id: 'import-notes',
+      group: 'actions',
+      label: t('import-notes'),
+      icon: DownloadSimpleIcon,
+      shortcut: SHORTCUTS.importNotes.label,
+      run: importNotes,
     },
     {
       id: 'record',
@@ -215,10 +253,17 @@ export function App() {
                 animate="center"
                 exit="exit"
               >
-                <Screen id={nav.screen} nav={nav} jobs={jobs} onNotice={notice.show} />
+                <Screen
+                  id={nav.screen}
+                  nav={nav}
+                  jobs={jobs}
+                  onNotice={notice.show}
+                  revision={revision}
+                />
               </motion.div>
             </AnimatePresence>
           </div>
+          <DropOverlay visible={noteImport.dragging} />
           <Notice notice={notice.notice} onDismiss={notice.dismiss} />
         </main>
         <CommandBar

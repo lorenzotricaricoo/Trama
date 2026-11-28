@@ -7,6 +7,7 @@
 pub mod capture;
 pub mod config;
 pub mod i18n;
+pub mod import;
 pub mod jobs;
 pub mod models;
 pub mod providers;

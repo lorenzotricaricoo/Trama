@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 /** Keyboard shortcuts of the shell. Labels use the macOS symbols, which are not translated. */
 export type ShortcutId =
-  'commandBar' | 'toggleSidebar' | 'settings' | 'back' | 'record' | 'newNote';
+  'commandBar' | 'toggleSidebar' | 'settings' | 'back' | 'record' | 'newNote' | 'importNotes';
 
 interface Shortcut {
   /** Shown in hint chips. */
@@ -55,6 +55,15 @@ export const SHORTCUTS: Record<ShortcutId, Shortcut> = {
       !e.altKey &&
       !e.shiftKey &&
       (e.key.toLowerCase() === 'n' || (e.code === 'KeyN' && !/^[a-z]$/i.test(e.key))),
+  },
+  importNotes: {
+    label: '⌘O',
+    // Like ⌘N: no editing meaning in text fields, and the physical key on non-Latin layouts.
+    matches: (e) =>
+      mod(e) &&
+      !e.altKey &&
+      !e.shiftKey &&
+      (e.key.toLowerCase() === 'o' || (e.code === 'KeyO' && !/^[a-z]$/i.test(e.key))),
   },
 };
 

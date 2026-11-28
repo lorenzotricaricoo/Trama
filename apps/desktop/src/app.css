@@ -1289,6 +1289,17 @@ button {
   background: none;
 }
 
+.note-preview .note-front-matter {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 .note-preview a {
   color: var(--acc-t);
   text-decoration: underline;
@@ -1360,6 +1371,67 @@ button {
 
 .notice-text {
   font-weight: 500;
+}
+
+/* ---------- Drop to import */
+
+.drop {
+  position: absolute;
+  z-index: 20;
+  inset: 0;
+  padding: 14px;
+  background: color-mix(in oklch, var(--sheet) 86%, transparent);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+
+.drop-zone {
+  box-sizing: border-box;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 28px;
+  border: 1.5px dashed var(--acc-t);
+  border-radius: 10px;
+  background: var(--acc-soft);
+  text-align: center;
+}
+
+.drop-ic {
+  width: 52px;
+  height: 52px;
+  margin-bottom: 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-size: 24px;
+}
+
+.drop-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.drop-body {
+  max-width: 360px;
+  margin: 0;
+  color: var(--mute);
+}
+
+.drop-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 0;
+  color: var(--faint);
+  font-size: 12px;
 }
 
 /* ---------- Command bar */

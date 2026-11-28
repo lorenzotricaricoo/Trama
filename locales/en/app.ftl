@@ -88,7 +88,7 @@ home-empty-title = Your overview starts here
 home-empty-body = Your latest meetings and recent notes will appear here. Start by recording a meeting or writing a note.
 sources-description = Meetings, notes and documents, kept as you brought them.
 sources-empty-title = Everything you bring into { -brand } lands here
-sources-empty-body = Record a meeting or write a note to start.
+sources-empty-body = Record a meeting, write a note or drop Markdown files here to start.
 home-title = Overview
 home-latest-meetings = Latest meetings
 home-all-sources = All sources
@@ -161,6 +161,7 @@ note-stats = { $count ->
    *[other] { $count } words
 } · { $minutes } min read
 note-stats-empty = No words yet
+note-front-matter = Properties
 note-link-failed = This link can't be opened.
 note-load-failed-title = This note can't be opened
 note-load-failed-body = It may have been moved to the trash.
@@ -168,6 +169,45 @@ sources-list-label = Sources
 source-kind-note = Note
 # Shown when quitting is cancelled because a note could not be saved.
 quit-unsaved = A note is not saved yet, so { -brand } stayed open. Quit again within 30 seconds to quit anyway.
+
+## Import of Markdown files as notes
+
+import-notes = Import notes…
+import-dialog-title = Import Markdown files as notes
+import-dialog-filter = Markdown files
+# Shown over the window while files are dragged onto it.
+import-drop-title = Drop to import as notes
+import-drop-body = Each Markdown file becomes a note. Folders work too.
+import-done-one = Imported “{ $title }”.
+import-done = Imported { $count } notes.
+import-none = No notes imported.
+# A few file names, then how many others: “a.md, b.md and 3 more”.
+import-files-more = { $names } and { $count } more
+import-skip-not_markdown = { $count ->
+    [one] { $files } isn't a Markdown file.
+   *[other] { $files } aren't Markdown files.
+}
+import-skip-not_text = { $count ->
+    [one] { $files } isn't UTF-8 text.
+   *[other] { $files } aren't UTF-8 text.
+}
+import-skip-too_large = { $count ->
+    [one] { $files } is larger than { $limit }.
+   *[other] { $files } are larger than { $limit }.
+}
+import-skip-unreadable = { $count ->
+    [one] { $files } can't be read.
+   *[other] { $files } can't be read.
+}
+import-skip-duplicate = { $count ->
+    [one] { $files } is already in { -brand }.
+   *[other] { $files } are already in { -brand }.
+}
+import-skip-too_many = { $count ->
+    [one] 1 more file was left out: at most { $max } at a time.
+   *[other] { $count } more files were left out: at most { $max } at a time.
+}
+import-failed = The notes couldn't be imported ({ $code }).
 
 ## Meeting
 

@@ -2,8 +2,12 @@
 //! the storage API. Notes are saved automatically by the editor; the core decides when an
 //! edit updates the open version and when it starts a new one.
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
+use trama_core::import::{ImportReport, MARKDOWN_EXTENSIONS, import_files};
 use trama_core::jobs::lock;
 use trama_core::storage::{
     HitTarget, Id, Library, SearchHit, Source, SourceCursor, SourceKind, SourceListItem,
@@ -36,6 +40,9 @@ pub struct NotePayload {
     /// Markdown text of the current version.
     pub body: String,
     pub version_number: u32,
+    /// When the note happened: when it was written, or for an imported note when its
+    /// file was last modified.
+    pub occurred_at: Timestamp,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
 }
@@ -47,6 +54,7 @@ impl NotePayload {
             title: source.title.clone(),
             body: version.and_then(|v| v.body.clone()).unwrap_or_default(),
             version_number: version.map_or(0, |v| v.number),
+            occurred_at: source.occurred_at,
             created_at: source.created_at,
             updated_at: source.updated_at,
         }
@@ -344,6 +352,109 @@ pub fn source_counts(core: State<'_, Core>) -> Result<SourceCountsPayload, Strin
     })
 }
 
+/// A note created by an import.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportedNotePayload {
+    pub id: String,
+    pub title: String,
+}
+
+/// A file an import left out, by name, with the reason as a code the interface translates:
+/// `not_markdown`, `not_text`, `too_large`, `unreadable`, `duplicate` or `too_many`.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SkippedFilePayload {
+    pub name: String,
+    pub reason: &'static str,
+}
+
+/// What an import did.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportPayload {
+    pub imported: Vec<ImportedNotePayload>,
+    pub skipped: Vec<SkippedFilePayload>,
+}
+
+fn file_name(path: &std::path::Path) -> String {
+    path.file_name().map_or_else(
+        || path.display().to_string(),
+        |name| name.to_string_lossy().into_owned(),
+    )
+}
+
+fn import_payload(report: &ImportReport) -> ImportPayload {
+    ImportPayload {
+        imported: report
+            .imported
+            .iter()
+            .map(|note| ImportedNotePayload {
+                id: note.id.to_string(),
+                title: note.title.clone(),
+            })
+            .collect(),
+        skipped: report
+            .skipped
+            .iter()
+            .map(|file| SkippedFilePayload {
+                name: file_name(&file.path),
+                reason: file.reason.as_str(),
+            })
+            .collect(),
+    }
+}
+
+/// Imports Markdown files as notes: files and folders dropped on the window or chosen with
+/// [`choose_notes_to_import`]. Runs away from the main thread; the library is held only
+/// while each batch is stored.
+#[tauri::command]
+pub async fn import_notes(
+    core: State<'_, Core>,
+    paths: Vec<String>,
+) -> Result<ImportPayload, String> {
+    let library = Arc::clone(&core.library);
+    let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+    let report = tauri::async_runtime::spawn_blocking(move || import_files(&paths, &library))
+        .await
+        .map_err(|err| {
+            eprintln!("trama: the import did not finish: {err}");
+            crate::settings::INTERNAL_ERROR.to_owned()
+        })?
+        .map_err(|err| {
+            eprintln!("trama: cannot import notes: {err}");
+            err.to_string()
+        })?;
+    Ok(import_payload(&report))
+}
+
+/// Asks for Markdown files to import, in the system's open panel; empty when cancelled.
+/// `title` and `filter` are the panel's title and the name of its file type, translated
+/// by the frontend.
+#[tauri::command]
+pub async fn choose_notes_to_import(
+    app: AppHandle,
+    title: String,
+    filter: String,
+) -> Result<Vec<String>, String> {
+    crate::settings::blocking(app, move |app| {
+        use tauri_plugin_dialog::DialogExt;
+        let picked = app
+            .dialog()
+            .file()
+            .set_title(title)
+            .add_filter(filter, MARKDOWN_EXTENSIONS)
+            .blocking_pick_files();
+        Ok(picked
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|path| path.into_path().ok())
+            .map(|path| path.to_string_lossy().into_owned())
+            .collect())
+    })
+    .await
+}
+
 fn page(items: &[SourceListItem], limit: u32) -> SourcePagePayload {
     let full = u32::try_from(items.len()).is_ok_and(|len| len >= limit);
     SourcePagePayload {
@@ -485,6 +596,36 @@ mod tests {
         );
         assert_eq!(last.sources.len(), 1);
         assert_eq!(last.next, None);
+    }
+
+    #[test]
+    fn import_results_name_the_files_and_the_reasons() {
+        let files = tempfile::TempDir::new().unwrap();
+        let note = files.path().join("Piano.md");
+        std::fs::write(&note, "testo").unwrap();
+        let image = files.path().join("foto.png");
+        std::fs::write(&image, "png").unwrap();
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut library = Library::open(dir.path()).unwrap();
+        let report = trama_core::import::import_into(&mut library, &[note, image]).unwrap();
+        let json = serde_json::to_value(import_payload(&report)).unwrap();
+        assert_eq!(json["imported"][0]["title"], "Piano");
+        assert_eq!(json["skipped"][0]["name"], "foto.png");
+        assert_eq!(json["skipped"][0]["reason"], "not_markdown");
+    }
+
+    #[test]
+    fn the_frontend_knows_the_import_limits() {
+        use trama_core::import::{MAX_FILE_BYTES, MAX_FILES};
+        let frontend = include_str!("../../src/notes/importNotes.ts");
+        let mb = MAX_FILE_BYTES / (1024 * 1024);
+        assert_eq!(
+            mb * 1024 * 1024,
+            MAX_FILE_BYTES,
+            "a whole number of megabytes"
+        );
+        assert!(frontend.contains(&format!("MAX_FILE_MB = {mb};")));
+        assert!(frontend.contains(&format!("MAX_FILES = {MAX_FILES};")));
     }
 
     #[test]

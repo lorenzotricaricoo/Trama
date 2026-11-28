@@ -39,7 +39,7 @@ interface NoteScreenProps {
 
 type Loaded =
   | { state: 'loading' }
-  | { state: 'ready'; id: string | undefined; title: string; body: string; createdAt: number }
+  | { state: 'ready'; id: string | undefined; title: string; body: string; occurredAt: number }
   | {
       state: 'failed';
     };
@@ -118,14 +118,14 @@ export default function NoteScreen({ noteId, entry, onCreated, onNotice }: NoteS
       .then(async (createdId): Promise<Loaded> => {
         const id = opened.noteId ?? createdId;
         if (id === undefined)
-          return { state: 'ready', id, title: '', body: '', createdAt: Date.now() };
+          return { state: 'ready', id, title: '', body: '', occurredAt: Date.now() };
         const note = await getNote(id);
         return {
           state: 'ready',
           id,
           title: note.title,
           body: note.body,
-          createdAt: note.createdAt,
+          occurredAt: note.occurredAt,
         };
       })
       .then((ready) => {
@@ -220,7 +220,7 @@ export default function NoteScreen({ noteId, entry, onCreated, onNotice }: NoteS
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
-          }).format(loaded.createdAt)
+          }).format(loaded.occurredAt)
         : '',
     [loaded, locale],
   );

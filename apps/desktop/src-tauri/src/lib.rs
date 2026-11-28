@@ -343,6 +343,8 @@ pub fn run() {
             notes::list_sources,
             notes::search_sources,
             notes::source_counts,
+            notes::import_notes,
+            notes::choose_notes_to_import,
             meetings::get_meeting,
             recording::start_recording,
             recording::stop_recording,
