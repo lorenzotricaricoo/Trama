@@ -31,7 +31,7 @@ fn summary(title: &str) -> NewSummary {
     NewSummary {
         title: title.into(),
         body: "Body".into(),
-        key_points: vec!["One".into(), "Two \"quoted\"".into()],
+        key_points: vec![KeyPoint::at("One", 1_500), KeyPoint::new("Two \"quoted\"")],
         language: "it".into(),
         model: "test-model".into(),
         prompt_version: "1".into(),
@@ -271,7 +271,10 @@ fn summaries_title_the_source_unless_the_user_did() {
     let first = library
         .add_summary(version.id, &summary("Titolo automatico"))
         .unwrap();
-    assert_eq!(first.key_points, ["One", "Two \"quoted\""]);
+    assert_eq!(
+        first.key_points,
+        [KeyPoint::at("One", 1_500), KeyPoint::new("Two \"quoted\"")]
+    );
     assert_eq!(
         library.source(meeting.id).unwrap().title,
         "Titolo automatico"
@@ -294,6 +297,41 @@ fn summaries_title_the_source_unless_the_user_did() {
         library.latest_summary(meeting.id).unwrap().unwrap().id,
         second.id
     );
+
+    // Giving the title back to the summaries takes the newest one.
+    let reset = library.reset_title(meeting.id).unwrap();
+    assert_eq!(
+        (reset.title.as_str(), reset.title_origin),
+        ("Altro titolo", TitleOrigin::Auto)
+    );
+}
+
+#[test]
+fn key_points_stored_as_plain_text_are_still_read() {
+    let (dir, _clock, mut library) = library();
+    let (meeting, version) = recorded_meeting(&mut library, &[segment(Role::Me, 0, "ok")]);
+    library.add_summary(version.id, &summary("Titolo")).unwrap();
+    drop(library);
+    let conn = rusqlite_connection(&dir.path().join(DATABASE_FILE));
+    conn.execute("UPDATE summary SET key_points = '[\"Vecchio\"]'", [])
+        .unwrap();
+    drop(conn);
+    let library = Library::open(dir.path()).unwrap();
+    let stored = library.latest_summary(meeting.id).unwrap().unwrap();
+    assert_eq!(stored.key_points, [KeyPoint::new("Vecchio")]);
+}
+
+#[test]
+fn the_meeting_language_has_a_default() {
+    let (_dir, _clock, mut library) = library();
+    assert_eq!(
+        library.meeting_language().unwrap(),
+        DEFAULT_MEETING_LANGUAGE
+    );
+    library
+        .set_setting(MEETING_LANGUAGE_SETTING, " it ")
+        .unwrap();
+    assert_eq!(library.meeting_language().unwrap(), "it");
 }
 
 #[test]

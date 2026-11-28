@@ -144,6 +144,18 @@ impl JobContext {
         }
     }
 
+    /// Queues a follow-up job (or returns the same one already queued) and tells the
+    /// interface; for example the summary after a transcription. The worker picks it up
+    /// once the current job is over.
+    pub fn enqueue(&self, kind: JobKind, target_id: Id) -> Result<Job> {
+        let job = self.library().enqueue_job(kind, target_id)?;
+        self.events.send(JobEvent {
+            job: job.clone(),
+            progress: None,
+        });
+        Ok(job)
+    }
+
     /// True when the app is stopping or the user cancelled the job.
     pub fn should_stop(&self) -> bool {
         self.stop.load(Ordering::Relaxed) || self.cancelled.load(Ordering::Relaxed)

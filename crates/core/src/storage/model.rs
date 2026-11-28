@@ -206,6 +206,34 @@ pub struct RecordingNote {
     pub updated_at: Timestamp,
 }
 
+/// One key point of a summary, pinned to a moment of the meeting when it has one.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct KeyPoint {
+    pub text: String,
+    /// Position in the recording (start of the segment where the point is discussed);
+    /// `None` for notes, or when the model gave no usable time.
+    #[serde(default)]
+    pub at_ms: Option<i64>,
+}
+
+impl KeyPoint {
+    /// A key point without a time.
+    pub fn new(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            at_ms: None,
+        }
+    }
+
+    /// A key point at `at_ms` from the start of the recording.
+    pub fn at(text: impl Into<String>, at_ms: i64) -> Self {
+        Self {
+            text: text.into(),
+            at_ms: Some(at_ms),
+        }
+    }
+}
+
 /// Title, summary and key points generated for a version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Summary {
@@ -214,7 +242,7 @@ pub struct Summary {
     pub title: String,
     /// Markdown.
     pub body: String,
-    pub key_points: Vec<String>,
+    pub key_points: Vec<KeyPoint>,
     pub language: String,
     pub model: String,
     pub prompt_version: String,
@@ -226,7 +254,7 @@ pub struct Summary {
 pub struct NewSummary {
     pub title: String,
     pub body: String,
-    pub key_points: Vec<String>,
+    pub key_points: Vec<KeyPoint>,
     pub language: String,
     pub model: String,
     pub prompt_version: String,
