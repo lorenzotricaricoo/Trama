@@ -140,7 +140,8 @@ pub struct Meeting {
     pub status: MeetingStatus,
     pub duration_ms: Option<i64>,
     pub audio_deleted_at: Option<Timestamp>,
-    /// Why the meeting failed, as a code the interface translates (see [`meeting_error`]).
+    /// Why the meeting failed, as a code the interface translates (see [`meeting_error`],
+    /// and [`crate::transcription::error_code`] for a failed transcription).
     pub error_code: Option<String>,
 }
 
