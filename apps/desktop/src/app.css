@@ -960,12 +960,25 @@ button {
   padding-left: 1.4em;
 }
 
+.note-preview ul {
+  list-style: disc;
+}
+
+.note-preview ol {
+  list-style: decimal;
+}
+
+.note-preview li::marker {
+  color: var(--mute);
+}
+
 .note-preview li + li {
   margin-top: 0.2em;
 }
 
-.note-preview .contains-task-list {
-  padding-left: 0.2em;
+/* A to-do shows its checkbox where the bullet would be. */
+.note-preview .task-list-item {
+  margin-left: -1.3em;
   list-style: none;
 }
 
