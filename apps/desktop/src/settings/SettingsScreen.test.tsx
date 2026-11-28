@@ -108,7 +108,12 @@ function renderSettings() {
   return user;
 }
 
-const sections = () => screen.findByRole('tablist', { name: 'Settings sections' });
+/** The section list, once its tabs are there: React Aria fills it in a second render. */
+async function sections() {
+  const list = await screen.findByRole('tablist', { name: 'Settings sections' });
+  await within(list).findAllByRole('tab');
+  return list;
+}
 
 afterEach(() => {
   clearMocks();
