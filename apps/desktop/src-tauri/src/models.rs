@@ -51,7 +51,7 @@ impl From<&ModelStatus> for ModelPayload {
 
 /// The models folder: the override if set, otherwise inside the app data folder
 /// (`~/Library/Application Support/<identifier>/Models` on macOS).
-fn models_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+pub fn models_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
     match std::env::var_os(MODELS_OVERRIDE_ENV) {
         Some(dir) if !dir.is_empty() => Ok(PathBuf::from(dir)),
         _ => Ok(app.path().app_data_dir()?.join(MODELS_DIR)),

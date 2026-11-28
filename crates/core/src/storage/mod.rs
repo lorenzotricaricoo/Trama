@@ -45,6 +45,13 @@ pub const LIST_TEXT_CHARS: u32 = 400;
 /// Pause after which a new edit to a note starts a new version.
 pub const NOTE_VERSION_PAUSE_MS: i64 = 10 * 60 * 1000;
 
+/// Setting with the meeting language (BCP 47, for example `it`), chosen in Settings: one
+/// language, never detected automatically. See [`Library::meeting_language`].
+pub const MEETING_LANGUAGE_SETTING: &str = "meeting.language";
+
+/// Meeting language until the user chooses one.
+pub const DEFAULT_MEETING_LANGUAGE: &str = "en";
+
 /// How long to wait for a busy database before failing.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -171,6 +178,17 @@ impl Library {
             params![key, value],
         )?;
         Ok(())
+    }
+
+    /// The language new meetings are recorded in, and their summaries written in (BCP 47,
+    /// setting [`MEETING_LANGUAGE_SETTING`]); [`DEFAULT_MEETING_LANGUAGE`] until the user
+    /// chooses one.
+    pub fn meeting_language(&self) -> Result<String> {
+        Ok(self
+            .setting(MEETING_LANGUAGE_SETTING)?
+            .map(|tag| tag.trim().to_owned())
+            .filter(|tag| !tag.is_empty())
+            .unwrap_or_else(|| DEFAULT_MEETING_LANGUAGE.to_owned()))
     }
 
     /// The current time, from the library's clock.

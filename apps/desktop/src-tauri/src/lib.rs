@@ -7,6 +7,7 @@ mod jobs;
 mod models;
 mod notes;
 mod quit;
+mod summary;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -14,8 +15,11 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State, WindowEvent};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
-use trama_core::jobs::{DeleteAudio, JobHandler, Runner};
+use trama_core::jobs::{DeleteAudio, JobHandler, Runner, Transcribe};
+use trama_core::providers::{ClientConfig, Keychain};
 use trama_core::storage::Library;
+use trama_core::summary::Summarize;
+use trama_core::transcription::SherpaLoader;
 
 /// Catalogs used by the shell itself (native menus). The frontend loads its own.
 const CATALOGS: &[Catalog] = &[
@@ -71,7 +75,13 @@ fn start_core<R: Runtime>(app: &AppHandle<R>) -> Result<jobs::Core, Box<dyn std:
         eprintln!("trama: recovered after an unclean stop: {recovery:?}");
     }
     let library = Arc::new(Mutex::new(library));
-    let handlers: Vec<Arc<dyn JobHandler>> = vec![Arc::new(DeleteAudio)];
+    // The transcription model is loaded from the folder the model manager downloads into.
+    let transcribe = Transcribe::new(SherpaLoader::new(models::models_dir(app)?));
+    let handlers: Vec<Arc<dyn JobHandler>> = vec![
+        Arc::new(DeleteAudio),
+        Arc::new(transcribe),
+        Arc::new(Summarize::new(Arc::new(Keychain), ClientConfig::default())),
+    ];
     let runner = Runner::start(
         Arc::clone(&library),
         handlers,
@@ -166,6 +176,9 @@ pub fn run() {
             models::cancel_model_download,
             models::verify_model,
             models::remove_model,
+            summary::source_summary,
+            summary::regenerate_summary,
+            summary::set_source_title,
             notes::create_note,
             notes::save_note,
             notes::get_note,

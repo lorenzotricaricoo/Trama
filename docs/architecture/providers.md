@@ -62,6 +62,55 @@ translates (`locales/<locale>/providers.ftl`).
   or zero. Values the schema lists in an `enum` are always accepted, and empty arrays
   ("nothing found") are a valid answer.
 
+## Meeting summaries
+
+The `summary` task gives each meeting a title, a short summary and key points with
+timestamps ([data model](data-model.md#summary)). The code is in
+`crates/core/src/summary/`.
+
+- **When**: a `summarize` [job](data-model.md#job) runs after each transcription (the
+  transcription job calls `summary::enqueue_after_transcription`) and whenever the user
+  asks to generate it again. It summarizes the meeting's current transcription version;
+  the summary points to that version. When it is stored, a meeting in `processing`
+  becomes `ready`.
+- **Language**: the meeting's language (`source.language`, else the `meeting.language`
+  setting). The prompt names it and asks for it whatever language the transcript is in;
+  it is never detected.
+- **Input**: one line per segment, `[HH:MM:SS] Me|Others: text`. The model copies the time
+  of each key point from those lines; the core snaps it to the start of the nearest
+  segment, and keeps the point without a time if it can't read it.
+- **Long transcripts** never get truncated. Each request is sized from the model's
+  limits: the reply gets up to 2048 tokens (less if the model's output limit or a quarter
+  of its context is smaller), the prompts, the schema and a margin are set aside, and
+  80% of the rest is room for text (20% stays free as a margin on the estimates). Text is
+  counted more pessimistically than the client does: three characters per token for most
+  languages but one for Chinese, Japanese and Korean, and two for the dense line
+  prefixes and note headers. A transcript that doesn't fit is split into parts between
+  segments (inside a segment only if it is longer than a part on its own); each part gets
+  notes (summary and timed key points), and the notes are merged into the summary. If
+  the notes don't fit one request either, neighbouring notes are combined first, in as
+  many rounds as needed. If the provider still refuses a request as too long (HTTP 413,
+  or a 400/422 whose message says so), the whole summary starts again once with half the
+  room. A model whose context leaves less than 1024 tokens of room, or notes that can't
+  be combined further, fail with `context_exceeded`; a provider that refuses the smaller
+  parts too fails with `bad_request`.
+- **Versions**: prompts, schemas and the input format are versioned together
+  (`PROMPT_VERSION`, now `summary-v1`); any change to them needs a new version. Each
+  summary stores it with the model id.
+- **Titles**: a summary titles its meeting unless the user wrote the title
+  (`title_origin = user`); generating again then adds a summary and leaves the title
+  alone. Clearing the title gives it back to the summaries.
+- **Errors**: provider failures keep their codes and retryability (table above), so the
+  job retries what may succeed later and fails at once on what needs the user. The
+  summary job adds `unsupported_source`, `no_transcript` and `empty_transcript`
+  (`locales/<locale>/summary.ftl`). After the last attempt (or a permanent error) a
+  meeting in `processing` becomes `ready` anyway: the transcript is complete, the summary
+  is optional, and the failed job stays visible for the user to retry. A job cancelled
+  while waiting for the model stores nothing. A retry starts the summary from the first
+  part again: notes on the parts are not kept between attempts.
+- **Desktop commands**: `source_summary`, `regenerate_summary` (returns the job) and
+  `set_source_title`; progress and failures arrive through the `job` event.
+
 ## Trying a real provider
 
 CI never calls a real provider. To check one locally, store its key in the Keychain (it

@@ -27,7 +27,9 @@ Every file is pinned by URL, size and SHA-256 in `crates/core/src/models/catalog
 - `encoder.weights` holds the encoder's external weights: ONNX Runtime loads it from the
   folder of `encoder.onnx`, so the two stay together.
 - The weights are **CC-BY-4.0** (Moondream's Parakeet Ultra, a post-training of NVIDIA's
-  parakeet-tdt-0.6b-v3): the app must credit them, for example in the About window.
+  parakeet-tdt-0.6b-v3): the app must credit them, for example in the About window. The
+  attribution is in [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md).
+- How the files are used: [transcription](transcription.md).
 - Upgrading the model means pinning new files under a **new model id**, which is also the
   folder name, so an old download is never mistaken for the new one. The old folder can
   then be removed.

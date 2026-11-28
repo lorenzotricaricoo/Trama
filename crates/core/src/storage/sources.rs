@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{
-    Id, LIST_TEXT_CHARS, Library, NOTE_VERSION_PAUSE_MS, NewSummary, Purged, Result, Source,
-    SourceCursor, SourceKind, SourceListItem, StorageError, Summary, Timestamp, TitleOrigin,
-    Version, VersionOrigin, enum_column, id_column, new_id, parse_id,
+    Id, KeyPoint, LIST_TEXT_CHARS, Library, NOTE_VERSION_PAUSE_MS, NewSummary, Purged, Result,
+    Source, SourceCursor, SourceKind, SourceListItem, StorageError, Summary, Timestamp,
+    TitleOrigin, Version, VersionOrigin, enum_column, id_column, new_id, parse_id,
 };
 
 const SOURCE_COLUMNS: &str =
@@ -47,11 +47,27 @@ pub(super) fn version_row(row: &Row<'_>) -> rusqlite::Result<Version> {
     })
 }
 
+/// A stored key point: an object with its time, or plain text (the first shape of the
+/// column, still read).
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum StoredKeyPoint {
+    Point(KeyPoint),
+    Text(String),
+}
+
 fn summary_row(row: &Row<'_>) -> rusqlite::Result<Summary> {
     let key_points: String = row.get(4)?;
-    let key_points = serde_json::from_str(&key_points).map_err(|err| {
+    let key_points: Vec<StoredKeyPoint> = serde_json::from_str(&key_points).map_err(|err| {
         rusqlite::Error::FromSqlConversionFailure(4, rusqlite::types::Type::Text, err.into())
     })?;
+    let key_points = key_points
+        .into_iter()
+        .map(|point| match point {
+            StoredKeyPoint::Point(point) => point,
+            StoredKeyPoint::Text(text) => KeyPoint::new(text),
+        })
+        .collect();
     Ok(Summary {
         id: id_column(row, 0)?,
         version_id: id_column(row, 1)?,
@@ -213,6 +229,22 @@ impl Library {
         load_source(&self.conn, id)
     }
 
+    /// Gives the title back to the summaries: the newest summary of the current version
+    /// titles the source again (empty if there is none), and later summaries replace it.
+    pub fn reset_title(&mut self, id: Id) -> Result<Source> {
+        let now = self.now();
+        load_source(&self.conn, id)?;
+        let title = self
+            .latest_summary(id)?
+            .map(|summary| summary.title)
+            .unwrap_or_default();
+        self.conn.execute(
+            "UPDATE source SET title = ?2, title_origin = 'auto', updated_at = ?3 WHERE id = ?1",
+            params![id.to_string(), title, now],
+        )?;
+        load_source(&self.conn, id)
+    }
+
     /// Every version of a source, oldest first.
     pub fn versions(&self, source_id: Id) -> Result<Vec<Version>> {
         let mut stmt = self.conn.prepare_cached(&format!(
@@ -365,14 +397,34 @@ impl Library {
     }
 
     /// Takes a source out of the trash.
+    ///
+    /// A transcription that ends while its meeting is in the trash stores nothing, not
+    /// even its failure (see [`crate::jobs::Transcribe`]). A restored meeting still
+    /// `processing` with no transcription job left to settle it would stay that way for
+    /// good, so it comes back `failed` with
+    /// [`crate::transcription::error_code::MEETING_DELETED`], ready to transcribe again.
     pub fn restore(&mut self, id: Id) -> Result<()> {
-        let changed = self.conn.execute(
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
             "UPDATE source SET deleted_at = NULL WHERE id = ?1",
             [id.to_string()],
         )?;
         if changed == 0 {
             return Err(StorageError::not_found("source", id));
         }
+        tx.execute(
+            "UPDATE meeting SET status = 'failed', error_code = ?2
+             WHERE source_id = ?1 AND status = 'processing'
+               AND NOT EXISTS (
+                   SELECT 1 FROM job
+                   WHERE target_id = ?1 AND kind = 'transcribe'
+                     AND state IN ('queued', 'running'))",
+            params![
+                id.to_string(),
+                crate::transcription::error_code::MEETING_DELETED
+            ],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 
