@@ -8,6 +8,8 @@ export interface Note {
   /** Markdown text of the current version. */
   body: string;
   versionNumber: number;
+  /** When the note happened: written, or for an imported note its file's last change. */
+  occurredAt: number;
   createdAt: number;
   updatedAt: number;
 }

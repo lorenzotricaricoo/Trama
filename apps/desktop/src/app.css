@@ -1289,6 +1289,17 @@ button {
   background: none;
 }
 
+.note-preview .note-front-matter {
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--mute);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 .note-preview a {
   color: var(--acc-t);
   text-decoration: underline;

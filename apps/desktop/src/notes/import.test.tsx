@@ -8,6 +8,7 @@ import { MENU_COMMAND_EVENT } from '../shell/actions';
 import { webview } from '../test/webview';
 import type { SourceRow } from './api';
 import { importMessage, type ImportResult } from './importNotes';
+import { splitFrontMatter } from './NotePreview';
 
 /** A core in memory, behind the import commands of `src-tauri/src/notes.rs`. */
 const core = vi.hoisted(() => ({
@@ -46,7 +47,7 @@ vi.mock('@tauri-apps/api/core', () => ({
           const note = {
             id: `note-${core.notes.length + 1}`,
             title: name.replace(/\.md$/, ''),
-            body: `# ${name}`,
+            body: `---\ntags: [q3]\n---\n# ${name}\n`,
           };
           core.notes.push(note);
           result.imported.push({ id: note.id, title: note.title });
@@ -56,7 +57,13 @@ vi.mock('@tauri-apps/api/core', () => ({
       case 'get_note': {
         const note = core.notes.find((n) => n.id === args.id);
         return note
-          ? Promise.resolve({ ...note, versionNumber: 1, createdAt: 0, updatedAt: 0 })
+          ? Promise.resolve({
+              ...note,
+              versionNumber: 1,
+              occurredAt: Date.UTC(2025, 4, 1),
+              createdAt: 0,
+              updatedAt: 0,
+            })
           : Promise.reject(new Error('not found'));
       }
       case 'list_sources': {
@@ -107,6 +114,18 @@ beforeEach(() => {
   core.chosen = [];
   core.skip.clear();
   core.failImport = false;
+});
+
+describe('splitFrontMatter', () => {
+  it('sets the front matter apart from the text', () => {
+    expect(splitFrontMatter('---\ntags: [q3]\ndate: 2025-05-01\n---\n# Piano\n')).toEqual({
+      frontMatter: 'tags: [q3]\ndate: 2025-05-01',
+      body: '# Piano\n',
+    });
+    expect(splitFrontMatter('---\r\na: 1\r\n---\r\ntext').body).toBe('text');
+    expect(splitFrontMatter('# Piano\n\n---\nnot: front matter\n---\n').frontMatter).toBeNull();
+    expect(splitFrontMatter('---\nno end').frontMatter).toBeNull();
+  });
 });
 
 describe('importMessage', () => {
@@ -194,6 +213,8 @@ describe('Importing Markdown files (#57)', () => {
     act(() => webview.drag({ type: 'drop', paths: ['/n/Piano Q3.md'], position }));
     await waitFor(() => expect(commands('get_note')[0]?.args.id).toBe('note-1'));
     expect(await screen.findByText('Imported “Piano Q3”.')).toBeInTheDocument();
+    // The note happened when its file was last modified.
+    expect(await screen.findByText(/May 1, 2025/)).toBeInTheDocument();
   });
 
   it('⌘O asks for files and imports the ones chosen', async () => {

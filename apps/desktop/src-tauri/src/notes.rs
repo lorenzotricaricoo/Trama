@@ -40,6 +40,9 @@ pub struct NotePayload {
     /// Markdown text of the current version.
     pub body: String,
     pub version_number: u32,
+    /// When the note happened: when it was written, or for an imported note when its
+    /// file was last modified.
+    pub occurred_at: Timestamp,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
 }
@@ -51,6 +54,7 @@ impl NotePayload {
             title: source.title.clone(),
             body: version.and_then(|v| v.body.clone()).unwrap_or_default(),
             version_number: version.map_or(0, |v| v.number),
+            occurred_at: source.occurred_at,
             created_at: source.created_at,
             updated_at: source.updated_at,
         }

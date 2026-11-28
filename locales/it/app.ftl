@@ -161,6 +161,7 @@ note-stats = { $count ->
    *[other] { $count } parole
 } · { $minutes } min di lettura
 note-stats-empty = Ancora nessuna parola
+note-front-matter = Proprietà
 note-link-failed = Impossibile aprire questo collegamento.
 note-load-failed-title = Impossibile aprire questa nota
 note-load-failed-body = Potrebbe essere stata spostata nel cestino.
