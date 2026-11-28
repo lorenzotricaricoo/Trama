@@ -4,6 +4,7 @@
 //! belongs to the core library (principle A1).
 
 mod jobs;
+mod models;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -149,10 +150,16 @@ pub fn run() {
             app_locale,
             jobs::active_jobs,
             jobs::retry_job,
-            jobs::cancel_job
+            jobs::cancel_job,
+            models::model_status,
+            models::download_model,
+            models::cancel_model_download,
+            models::verify_model,
+            models::remove_model
         ])
         .setup(move |app| {
             app.manage(start_core(app.handle())?);
+            app.manage(models::start(app.handle())?);
             let menu = app_menu(app.handle(), &l10n)?;
             app.set_menu(menu)?;
             if let Some(window) = app.get_webview_window("main") {
@@ -163,11 +170,15 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building the Trama desktop app")
         .run(|app, event| {
-            if let RunEvent::Exit = event
-                && let Some(core) = app.try_state::<jobs::Core>()
-            {
-                // Unfinished jobs stay queued and resume at the next start.
-                core.runner.stop();
+            if let RunEvent::Exit = event {
+                if let Some(core) = app.try_state::<jobs::Core>() {
+                    // Unfinished jobs stay queued and resume at the next start.
+                    core.runner.stop();
+                }
+                if let Some(models) = app.try_state::<models::Models>() {
+                    // A partial download stays on disk and resumes when asked again.
+                    models.transcription.shutdown();
+                }
             }
         });
 }

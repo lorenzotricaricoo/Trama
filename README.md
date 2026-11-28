@@ -64,6 +64,9 @@ try another language, set `TRAMA_LOCALE`, for example `TRAMA_LOCALE=en npm run t
 The app keeps its data in `~/Library/Application Support/io.github.lorenzotricaricoo.trama/Library`.
 To keep development data apart, set `TRAMA_LIBRARY` to another folder, for example
 `TRAMA_LIBRARY=/tmp/trama-dev npm run tauri dev`.
+The transcription model (about 2.5 GB) is downloaded into `Models`, next to the library;
+`TRAMA_MODELS` points development builds at another folder, so they can share one
+download ([downloaded models](docs/architecture/models.md)).
 
 ## Documentation
 
@@ -72,6 +75,7 @@ To keep development data apart, set `TRAMA_LIBRARY` to another folder, for examp
 - [Visual direction](docs/design/visual-direction.md) — look, colours, type, motion and design tokens
 - [Data model](docs/architecture/data-model.md) — how sources, meetings and notes are stored, versioned and searched
 - [Audio capture](docs/architecture/audio-capture.md) — how a meeting is recorded on two aligned tracks ([manual checks](docs/development/audio-capture.md))
+- [Downloaded models](docs/architecture/models.md) — the pinned transcription model, where it lives and how it is downloaded
 - [Principles](docs/principles.md) — rules for process and architecture
 - [Architecture Decision Records](docs/adr/) — decisions and their reasons
 
