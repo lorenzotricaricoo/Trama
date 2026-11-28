@@ -11,6 +11,7 @@ mod meetings;
 mod menu;
 mod models;
 mod notes;
+mod onboarding;
 mod providers;
 mod quit;
 mod recording;
@@ -117,10 +118,12 @@ fn library_dir(config: &AppConfig, default: &Path) -> (PathBuf, bool) {
 }
 
 /// Reads the app configuration from the app data folder. A file that can't be read is set
-/// aside (or, failing that, never overwritten) and reported as a startup notice.
-fn load_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<settings::Settings> {
+/// aside (or, failing that, never overwritten) and reported as a startup notice. Also says
+/// whether the file existed, which tells a new install apart (see `onboarding.rs`).
+fn load_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<(settings::Settings, bool)> {
     let data_dir = app.path().app_data_dir()?;
     let path = data_dir.join(CONFIG_FILE);
+    let existed = path.exists();
     let loaded = AppConfig::load(&path);
     let notices = loaded
         .notice
@@ -129,7 +132,7 @@ fn load_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<settings::Sett
         .collect();
     let default_library = data_dir.join(LIBRARY_DIR);
     let (open_library, library_overridden) = library_dir(&loaded.config, &default_library);
-    Ok(settings::Settings {
+    let settings = settings::Settings {
         path,
         config: Mutex::new(loaded.config),
         open_library,
@@ -138,7 +141,8 @@ fn load_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<settings::Sett
         home: app.path().home_dir().ok(),
         save_blocked: loaded.save_blocked,
         notices,
-    })
+    };
+    Ok((settings, existed))
 }
 
 /// What opening the library at start gave.
@@ -358,6 +362,12 @@ pub fn run() {
             menu::set_menu_state,
             background::open_at_login,
             background::set_open_at_login,
+            onboarding::onboarding_state,
+            onboarding::set_onboarding_step,
+            onboarding::microphone_permission,
+            onboarding::request_microphone_permission,
+            onboarding::check_system_audio_permission,
+            onboarding::open_privacy_settings,
             quit::quit_ready,
             quit::quit_cancelled
         ])
@@ -388,7 +398,9 @@ pub fn run() {
             }
         })
         .setup(move |app| {
-            let mut settings = load_settings(app.handle())?;
+            let (mut settings, config_existed) = load_settings(app.handle())?;
+            // Before the library is opened, which creates its database.
+            onboarding::prepare(&settings, config_existed);
             // The vibrancy follows the app's appearance, so it must match the chosen theme.
             let theme = settings::native_theme(&settings.config().theme);
             app.set_theme(theme);
@@ -412,6 +424,7 @@ pub fn run() {
                 app.manage(core);
             }
             app.manage(models::start(app.handle())?);
+            app.manage(onboarding::Permissions::from_env());
             let shortcut = app
                 .state::<settings::Settings>()
                 .config()

@@ -1,6 +1,9 @@
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
 import { useState } from 'react';
 import { useI18n } from './i18n/I18nProvider';
+import { Onboarding } from './onboarding/Onboarding';
+import type { Step } from './onboarding/steps';
+import { useModelStatus } from './settings/TranscriptionSection';
 import { useJobs } from './jobs/useJobs';
 import { duration, ease } from './motion';
 import { Screen } from './screens/screens';
@@ -32,6 +35,7 @@ import {
   NotePencilIcon,
   RecordIcon,
   SidebarSimpleIcon,
+  WrenchIcon,
 } from './ui/icons';
 import { useAppearance } from './appearance';
 import { useThemeClasses } from './useThemeClasses';
@@ -47,7 +51,19 @@ const stage: Variants = {
   }),
 };
 
-export function App() {
+/**
+ * The window: the onboarding at first launch (or when reopened), otherwise the shell.
+ * `onboarding` is the step it starts at, read before the first render.
+ */
+export function App({ onboarding: initial = null }: { onboarding?: Step | null }) {
+  const [onboarding, setOnboarding] = useState<Step | null>(initial);
+  if (onboarding !== null) {
+    return <Onboarding initialStep={onboarding} onFinish={() => setOnboarding(null)} />;
+  }
+  return <Shell onSetup={setOnboarding} />;
+}
+
+function Shell({ onSetup }: { onSetup: (step: Step) => void }) {
   const { t } = useI18n();
   useThemeClasses();
   const { reduceMotion } = useAppearance();
@@ -65,6 +81,7 @@ export function App() {
   const recording = useRecordingState((meetingId) => nav.navigate('meeting', meetingId));
   const elapsed = useElapsed(recording.status, recording.receivedAt);
   const [busy, setBusy] = useState(false);
+  const model = useModelStatus().status;
   const failed = (error: unknown) => {
     const code = errorCode(error);
     notice.show(t(recordingErrorMessage(code), { code }));
@@ -74,7 +91,12 @@ export function App() {
     setBusy(true);
     const action = recording.status
       ? stopRecording().then(() => undefined)
-      : startRecording().then(recording.set);
+      : startRecording().then((status) => {
+          recording.set(status);
+          // A missing prerequisite is explained where it matters: recording works, the
+          // transcription waits for the model.
+          if (model && model.state !== 'ready') notice.show(t('onboarding-record-without-model'));
+        });
     action.catch(failed).finally(() => setBusy(false));
   };
   // The menu bar item and the global shortcut act without the window; it shows what failed
@@ -180,6 +202,16 @@ export function App() {
       run: record,
     },
     {
+      id: 'setup',
+      group: 'actions',
+      label: t('onboarding-command'),
+      icon: WrenchIcon,
+      run: () => {
+        bar.close();
+        onSetup('welcome');
+      },
+    },
+    {
       id: 'toggle-sidebar',
       group: 'actions',
       label: sidebarLabel,
@@ -259,6 +291,7 @@ export function App() {
                   jobs={jobs}
                   onNotice={notice.show}
                   revision={revision}
+                  onSetup={onSetup}
                 />
               </motion.div>
             </AnimatePresence>

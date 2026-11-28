@@ -345,9 +345,12 @@ overwritten (`settings_unreadable`).
 | `accent` | One of the accents of the [visual direction](../design/visual-direction.md#accent) | `lime` |
 | `microphone` | Input device id | the system default |
 | `globalShortcut` | Shortcut to start and stop recording, as modifiers (`Control`, `Alt`, `Shift`, `Super`) and a `KeyboardEvent.code`, for example `Alt+Super+KeyR` | `Alt+Super+KeyR` (⌥⌘R) |
+| `onboarding` | Where the [first launch](../design/information-architecture.md#first-launch) stands: the step to resume at, or `done`. Written as `welcome` only for a new install (no `settings.json` and no library database) | absent: done |
 
 `TRAMA_LIBRARY` and `TRAMA_LOCALE` still override the library location and the language
-in development.
+in development. Debug builds also read `TRAMA_FAKE_PERMISSIONS=<microphone>,<system audio>`
+(for example `not_determined,unknown`), so the onboarding can be tried without touching
+the real macOS permissions.
 
 A chosen library that can't be opened at start (a disconnected disk, no permission, a
 newer version of Trama, another copy of Trama using it) never stops Trama: it opens the

@@ -2,9 +2,11 @@ import { FluentBundle, FluentResource, type FluentVariable } from '@fluent/bundl
 import { negotiateLanguages } from '@fluent/langneg';
 // Catalogs are shared with the Rust side; see locales/ at the repository root.
 import enApp from '../../../../locales/en/app.ftl?raw';
+import enOnboarding from '../../../../locales/en/onboarding.ftl?raw';
 import enProviders from '../../../../locales/en/providers.ftl?raw';
 import enSettings from '../../../../locales/en/settings.ftl?raw';
 import itApp from '../../../../locales/it/app.ftl?raw';
+import itOnboarding from '../../../../locales/it/onboarding.ftl?raw';
 import itProviders from '../../../../locales/it/providers.ftl?raw';
 import itSettings from '../../../../locales/it/settings.ftl?raw';
 
@@ -14,8 +16,8 @@ export const DEFAULT_LOCALE: Locale = 'en';
 
 /** The catalogs of each locale; the provider error codes are shared with the core. */
 const SOURCES: Record<Locale, readonly string[]> = {
-  en: [enApp, enSettings, enProviders],
-  it: [itApp, itSettings, itProviders],
+  en: [enApp, enSettings, enProviders, enOnboarding],
+  it: [itApp, itSettings, itProviders, itOnboarding],
 };
 
 export type MessageArgs = Record<string, FluentVariable>;

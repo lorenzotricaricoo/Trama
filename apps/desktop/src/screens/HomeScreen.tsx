@@ -6,6 +6,8 @@ import { useI18n } from '../i18n/I18nProvider';
 import type { Job } from '../jobs/useJobs';
 import { duration, ease } from '../motion';
 import { listSources, type SourceRow } from '../notes/api';
+import { SetupTile } from '../onboarding/SetupTile';
+import type { Step } from '../onboarding/steps';
 import { SHORTCUTS } from '../shell/shortcuts';
 import { HouseIcon, NotePencilIcon } from '../ui/icons';
 import { useSourceFormat } from './sources';
@@ -18,6 +20,8 @@ interface HomeScreenProps {
   onOpenMeeting: (meetingId: string) => void;
   onSources: () => void;
   onNewNote: () => void;
+  /** Opens the onboarding at a step it left for later. */
+  onSetup?: (step: Step) => void;
 }
 
 /** Rows in each tile. */
@@ -45,6 +49,7 @@ export function HomeScreen({
   onOpenMeeting,
   onSources,
   onNewNote,
+  onSetup,
 }: HomeScreenProps) {
   const { t, locale } = useI18n();
   const format = useSourceFormat();
@@ -122,6 +127,8 @@ export function HomeScreen({
           </div>
         )}
       </motion.header>
+
+      {onSetup && <SetupTile onOpen={onSetup} />}
 
       {empty ? (
         <motion.section className="empty" variants={rise} aria-label={t('home-empty-title')}>

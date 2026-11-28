@@ -1,0 +1,493 @@
+/* ---------- Onboarding (flow F1): the steps on the glass frame, each step on the sheet */
+
+.onb-rail {
+  padding-bottom: 10px;
+}
+
+.onb-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 8px 18px;
+  color: var(--fink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.onb-brand-mark {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  /* The Dock image has room around the squircle, as macOS icons do. */
+  margin: -2px;
+  object-fit: contain;
+}
+
+.onb-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onb-step {
+  width: 100%;
+  border: 0;
+  background: none;
+}
+
+.onb-step[aria-current='step'] {
+  color: var(--fink);
+}
+
+.onb-step-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 13px;
+  transition:
+    background-color var(--d2),
+    color var(--d2);
+}
+
+.onb-step[data-done] .onb-step-mark {
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-size: 11px;
+}
+
+.onb-step-meta {
+  margin-left: auto;
+  color: var(--fmute);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.onb-skip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 8px;
+}
+
+.onb-skip-btn {
+  align-self: flex-start;
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--fmute);
+  font-size: 12.5px;
+  font-weight: 500;
+  transition: color var(--d2);
+}
+
+.onb-skip-btn[data-hovered] {
+  color: var(--fink);
+  text-decoration: underline;
+}
+
+.onb-skip-hint {
+  margin: 0;
+  color: var(--fmute);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+/* The sheet: the step scrolls, the buttons stay at the bottom. */
+.onb-sheet {
+  min-height: 0;
+}
+
+.onb-stage {
+  overflow: hidden auto;
+}
+
+.onb-page {
+  min-height: 100%;
+}
+
+.onb-content {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 620px;
+  padding: 44px 40px 32px;
+}
+
+.onb-head {
+  display: flex;
+  flex-direction: column;
+}
+
+.onb-hero {
+  width: 76px;
+  height: 76px;
+  margin: -8px 0 10px -8px;
+}
+
+.onb-kicker {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.onb-desc {
+  max-width: 540px;
+  margin: 8px 0 0;
+  color: var(--mute);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.onb-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* In the onboarding the groups are sections of one step, not separated by lines. */
+.onb-body .set-group {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.onb-load {
+  color: var(--mute);
+}
+
+.onb-foot {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+
+.onb-foot-end {
+  display: flex;
+  gap: 8px;
+}
+
+.onb-next {
+  height: 30px;
+  padding: 0 12px 0 14px;
+  font-size: 13px;
+}
+
+.onb-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 560px;
+  margin: 0;
+  color: var(--mute);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.onb-note svg {
+  flex: none;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--faint);
+}
+
+/* Welcome */
+
+.onb-points {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onb-point {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.onb-point-ic {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--acc-soft);
+  color: var(--acc-t);
+  font-size: 17px;
+}
+
+.onb-point-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--mute);
+}
+
+.onb-point-text b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Permissions */
+
+.onb-perms {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.onb-perm-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.onb-perm-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.onb-perm-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.onb-perm-desc {
+  margin: 2px 0 0;
+  color: var(--mute);
+  font-size: 12px;
+}
+
+.onb-perm-action {
+  display: flex;
+  flex: none;
+  align-items: center;
+}
+
+.onb-perm-problem {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.onb-perm-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.onb-perm-foot {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+
+/* Menu bar: a picture of the menu bar item and its menu, not a control. */
+
+.onb-menubar {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--wall);
+}
+
+.onb-menubar-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  height: 26px;
+  padding: 0 14px;
+  background: oklch(1 0 0 / 0.42);
+  color: oklch(0.2 0.01 270);
+  font-size: 12px;
+  font-weight: 500;
+  backdrop-filter: blur(20px);
+}
+
+.t-dark .onb-menubar-strip {
+  background: oklch(0.18 0.01 270 / 0.55);
+  color: oklch(0.96 0.004 270);
+}
+
+/* The template image of the menu bar, drawn in the menu bar's own colour. */
+.onb-menubar-tray {
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: 18px 18px;
+}
+
+.onb-menubar-clock {
+  font-variant-numeric: tabular-nums;
+}
+
+.onb-menubar-menu {
+  width: 230px;
+  margin: 6px 14px 14px auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--pop);
+  box-shadow: 0 10px 30px oklch(0 0 0 / 0.18);
+  list-style: none;
+}
+
+.onb-menubar-menu li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 9px;
+  border-radius: 6px;
+  color: var(--ink);
+  font-size: 12.5px;
+}
+
+.onb-menubar-menu li:first-child {
+  background: var(--acc);
+  color: var(--acc-ink);
+}
+
+.onb-menubar-menu li:first-child .kbd {
+  background: oklch(0.2 0.02 270 / 0.16);
+  color: inherit;
+}
+
+.onb-menubar-menu svg {
+  font-size: 15px;
+}
+
+.onb-menubar-menu .kbd {
+  margin-left: auto;
+}
+
+/* Ready */
+
+.onb-checks {
+  gap: 0;
+  margin: 0;
+  padding: 4px 16px;
+  list-style: none;
+}
+
+.onb-check {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.onb-check:last-child {
+  border-bottom: 0;
+}
+
+.onb-check-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px var(--faint);
+  font-size: 10px;
+}
+
+.onb-check[data-ok] .onb-check-mark {
+  background: var(--acc);
+  box-shadow: none;
+  color: var(--acc-ink);
+}
+
+.onb-check-label {
+  flex: 1;
+  font-weight: 500;
+}
+
+.onb-check-value {
+  color: var(--mute);
+}
+
+.onb-check-value[data-mono] {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+.onb-check .set-link {
+  align-self: center;
+}
+
+/* ---------- Home: what the onboarding left for later */
+
+.setup-tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 18px 28px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--acc-soft);
+}
+
+.setup-tile-ic {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-size: 17px;
+}
+
+.setup-tile-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.setup-tile-title {
+  margin: 0 0 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.setup-tile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--mute);
+  font-size: 12.5px;
+}
+
+.setup-tile-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+}
