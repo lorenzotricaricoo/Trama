@@ -209,6 +209,22 @@ settings-retention-30_days-desc = Kept for a month after the transcription.
 settings-retention-always = Always
 settings-retention-always-desc = Kept until you delete the meeting. Uses the most space.
 settings-retention-note = Without audio a meeting can't be transcribed again with a better engine. Trama always asks before deleting audio you already have.
+settings-retention-held = { $count ->
+    [one] One recording from before this update still has its audio: Trama keeps it until you confirm that the setting applies to it too.
+   *[other] { $count } recordings from before this update still have their audio: Trama keeps it until you confirm that the setting applies to them too.
+}
+settings-retention-held-apply = Apply the setting to them
+settings-retention-confirm-title = Delete audio you already have?
+settings-retention-confirm-now = { $count ->
+    [one] The audio of 1 recording will be deleted now.
+   *[other] The audio of { $count } recordings will be deleted now.
+}
+settings-retention-confirm-later = { $count ->
+    [one] The audio of 1 recording will be deleted { $days } days after its transcription.
+   *[other] The audio of { $count } recordings will be deleted { $days } days after their transcription.
+}
+settings-retention-confirm-undo = Transcripts and notes stay. Deleted audio can't be recovered: this can't be undone.
+settings-retention-confirm = Delete audio
 settings-group-leaves = What leaves the Mac
 settings-leaves-desc = Trama sends out only the text a task needs, and only to the provider you chose.
 settings-leaves-audio = Audio
@@ -235,6 +251,7 @@ settings-warning-library-exists = This folder already holds a Trama library: it 
 settings-error-internal = Something went wrong. Try again.
 settings-error-storage = Trama couldn't read or save the settings in the library.
 settings-error-invalid-setting = This value can't be saved.
+settings-error-audio-deletion-unconfirmed = Confirm first that the audio you already have can be deleted.
 settings-error-config-write = Trama couldn't save the settings on this Mac.
 settings-error-name-required = Give the provider a name.
 settings-error-url-scheme = The address must start with https:// (or http:// for a local server).

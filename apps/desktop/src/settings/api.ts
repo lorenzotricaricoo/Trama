@@ -39,6 +39,23 @@ export interface LibrarySettings {
   enforceBudget: boolean;
 }
 
+/** What a retention setting would delete of the audio that exists now. */
+export interface RetentionImpact {
+  /** Recordings whose audio would be deleted right away. */
+  deleteNow: number;
+  /** Recordings whose audio would be deleted when their period ends. */
+  deleteLater: number;
+  /** Days the setting keeps audio after the transcription; `null` for "always". */
+  days: number | null;
+}
+
+/** Audio recorded before audio retention existed, kept until the user confirms. */
+export interface HeldAudio {
+  count: number;
+  /** What the current setting would delete of it. */
+  impact: RetentionImpact;
+}
+
 export interface Budget {
   periodStart: number;
   requests: number;
@@ -153,8 +170,16 @@ export const api = {
   revealLibrary: () => invoke<void>('reveal_library'),
   startupNotices: () => invoke<StartupNotice[]>('startup_notices'),
   librarySettings: () => invoke<LibrarySettings>('library_settings'),
-  setLibrarySettings: (settings: LibrarySettings) =>
-    invoke<LibrarySettings>('set_library_settings', { settings }),
+  /** `confirmAudioDeletion`: the user confirmed that existing audio may be deleted. */
+  setLibrarySettings: (settings: LibrarySettings, confirmAudioDeletion = false) =>
+    invoke<LibrarySettings>(
+      'set_library_settings',
+      confirmAudioDeletion ? { settings, confirmAudioDeletion } : { settings },
+    ),
+  audioRetentionImpact: (retention: Retention) =>
+    invoke<RetentionImpact>('audio_retention_impact', { retention }),
+  heldAudio: () => invoke<HeldAudio>('held_audio'),
+  applyRetentionToHeldAudio: () => invoke<HeldAudio>('apply_retention_to_held_audio'),
   budgetStatus: () => invoke<Budget>('budget_status'),
   listProviders: () => invoke<Provider[]>('list_providers'),
   addProvider: (input: ProviderInput) => invoke<Provider>('add_provider', { input }),
