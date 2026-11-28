@@ -30,6 +30,7 @@ pub use jobs::*;
 pub use migrations::SCHEMA_VERSION;
 pub use model::*;
 pub use providers::*;
+pub use search::HITS_PER_SOURCE;
 pub use settings::*;
 pub use usage::*;
 

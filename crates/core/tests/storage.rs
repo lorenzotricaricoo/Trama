@@ -795,3 +795,110 @@ fn unknown_ids_are_reported() {
 fn rusqlite_connection(path: &std::path::Path) -> rusqlite::Connection {
     rusqlite::Connection::open(path).unwrap()
 }
+
+#[test]
+fn list_items_carry_meeting_status_and_length_and_counts() {
+    let (_dir, clock, mut library) = library();
+    let note = library.create_note("Idee", "testo").unwrap();
+    clock.advance(MINUTE);
+    let meeting = library.create_meeting("it", clock.now()).unwrap();
+    library
+        .set_meeting_status(meeting.id, MeetingStatus::Processing, Some(48 * MINUTE))
+        .unwrap();
+
+    let items = library.list_source_items(None, None, 10).unwrap();
+    assert_eq!(
+        items[0].meeting,
+        Some(MeetingBrief {
+            status: MeetingStatus::Processing,
+            duration_ms: Some(48 * MINUTE)
+        })
+    );
+    assert_eq!(items[1].source.id, note.id);
+    assert_eq!(items[1].meeting, None);
+
+    assert_eq!(
+        library.source_counts().unwrap(),
+        SourceCounts {
+            meetings: 1,
+            notes: 1
+        }
+    );
+    library.trash(note.id).unwrap();
+    assert_eq!(library.source_counts().unwrap().notes, 0);
+    assert_eq!(
+        library
+            .source_items(&[note.id, meeting.id])
+            .unwrap()
+            .iter()
+            .map(|item| item.source.id)
+            .collect::<Vec<_>>(),
+        [meeting.id],
+        "sources in the trash are left out"
+    );
+}
+
+#[test]
+fn search_sources_groups_hits_with_their_moment() {
+    let (_dir, clock, mut library) = library();
+    let (meeting, _) = recorded_meeting(
+        &mut library,
+        &[
+            segment(Role::Me, 0, "Parliamo del budget"),
+            segment(Role::Others, 65_000, "Il budget è approvato"),
+            segment(Role::Me, 90_000, "Budget per il Q3"),
+            segment(Role::Others, 120_000, "Ancora il budget"),
+        ],
+    );
+    library
+        .add_recording_note(meeting.id, 30_000, "budget da rivedere")
+        .unwrap();
+    clock.advance(MINUTE);
+    let titled = library
+        .create_note("Budget 2027", "nessuna parola utile")
+        .unwrap();
+    let other = library.create_note("", "il budget del marketing").unwrap();
+
+    let results = library.search_sources("budget", None, 10).unwrap();
+    assert_eq!(
+        results[0].item.source.id, titled.id,
+        "a matching title comes first"
+    );
+    assert_eq!(results[0].hits[0].target, HitTarget::Title);
+    assert_eq!(
+        results[0].hits[0].excerpt,
+        format!("{HIGHLIGHT_START}Budget{HIGHLIGHT_END} 2027")
+    );
+
+    let found = results
+        .iter()
+        .find(|r| r.item.source.id == meeting.id)
+        .unwrap();
+    assert_eq!(found.hits.len(), HITS_PER_SOURCE);
+    assert!(found.hits.iter().all(|hit| hit.at_ms.is_some()));
+    assert!(found.item.meeting.is_some());
+    let all_moments: Vec<i64> = library
+        .search("budget", 50)
+        .unwrap()
+        .iter()
+        .filter(|hit| hit.source_id == meeting.id)
+        .filter_map(|hit| hit.at_ms)
+        .collect();
+    assert!(all_moments.contains(&65_000));
+    assert!(
+        all_moments.contains(&30_000),
+        "a recording note has its moment"
+    );
+    assert!(results.iter().any(|r| r.item.source.id == other.id));
+
+    let notes = library
+        .search_sources("budget", Some(SourceKind::Note), 10)
+        .unwrap();
+    assert!(notes.iter().all(|r| r.item.source.kind == SourceKind::Note));
+    assert_eq!(notes.len(), 2);
+    assert_eq!(library.search_sources("budget", None, 1).unwrap().len(), 1);
+    assert!(library.search_sources("  ", None, 10).unwrap().is_empty());
+
+    library.trash(titled.id).unwrap();
+    assert!(library.search_sources("2027", None, 10).unwrap().is_empty());
+}

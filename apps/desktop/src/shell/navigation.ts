@@ -49,15 +49,17 @@ export interface Navigation {
   noteId: string | undefined;
   /** The meeting shown by the meeting screen. */
   meetingId: string | undefined;
+  /** The moment the meeting screen opens at, in milliseconds from the start. */
+  meetingAt: number | undefined;
   /** Changes at every navigation, even between two notes: a key for the screen transition. */
   entry: number;
   direction: Direction;
   canGoBack: boolean;
   /**
    * Goes to a screen; for the note screen, to a note or (without an id) to a new one; for
-   * the meeting screen, to a meeting.
+   * the meeting screen, to a meeting, optionally at a moment (`at`, in milliseconds).
    */
-  navigate: (screen: ScreenId, id?: string) => void;
+  navigate: (screen: ScreenId, id?: string, at?: number) => void;
   back: () => void;
   /**
    * Records the id of a new note once it is saved, in the navigation entry that created it
@@ -72,6 +74,8 @@ interface Route {
   screen: ScreenId;
   /** The source shown by the note or meeting screen. */
   id?: string;
+  /** The moment a meeting opens at. */
+  at?: number;
   entry: number;
 }
 
@@ -96,17 +100,20 @@ export function useNavigation(initial: ScreenId = 'home'): Navigation {
     direction: 'down',
   }));
 
-  const navigate = useCallback((screen: ScreenId, id?: string) => {
+  const navigate = useCallback((screen: ScreenId, id?: string, at?: number) => {
     setState((current) => {
-      if (current.screen === screen && current.id === id) return current;
+      // The same source again only moves to a new moment.
+      if (current.screen === screen && current.id === id && at === undefined) return current;
       const route: Route = {
         screen: current.screen,
         id: current.id,
+        at: current.at,
         entry: current.entry,
       };
       return {
         screen,
         id,
+        at,
         entry: nextEntry(),
         history: [...current.history, route].slice(-MAX_HISTORY),
         direction: towards(current.screen, screen),
@@ -137,6 +144,7 @@ export function useNavigation(initial: ScreenId = 'home'): Navigation {
     screen: state.screen,
     noteId: state.screen === 'note' ? state.id : undefined,
     meetingId: state.screen === 'meeting' ? state.id : undefined,
+    meetingAt: state.screen === 'meeting' ? state.at : undefined,
     entry: state.entry,
     direction: state.direction,
     canGoBack: state.history.length > 0,

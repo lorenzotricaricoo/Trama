@@ -5,10 +5,10 @@ use std::path::PathBuf;
 use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use super::{
-    Id, KeyPoint, LIST_TEXT_CHARS, Library, NOTE_VERSION_PAUSE_MS, NewSummary, Purged, Result,
-    Source, SourceCursor, SourceKind, SourceListItem, StorageError, Summary, Timestamp,
-    TitleOrigin, USER_SUMMARY_MODEL, Version, VersionOrigin, enum_column, id_column, new_id,
-    parse_id,
+    Id, KeyPoint, LIST_TEXT_CHARS, Library, MeetingBrief, NOTE_VERSION_PAUSE_MS, NewSummary,
+    Purged, Result, Source, SourceCounts, SourceCursor, SourceKind, SourceListItem, StorageError,
+    Summary, Timestamp, TitleOrigin, USER_SUMMARY_MODEL, Version, VersionOrigin, enum_column,
+    id_column, new_id, parse_id,
 };
 
 const SOURCE_COLUMNS: &str =
@@ -19,6 +19,32 @@ const VERSION_COLUMNS: &str =
 
 const SUMMARY_COLUMNS: &str =
     "id, version_id, title, body, key_points, language, model, prompt_version, created_at";
+
+/// The start of the queries for list items: the source, the start of its current text
+/// (`?5` characters) and, for a meeting, its status and length.
+const ITEM_SELECT: &str = "SELECT s.id, s.kind, s.title, s.title_origin, s.language, s.occurred_at,
+        s.created_at, s.updated_at, s.deleted_at, substr(v.body, 1, ?5), m.status, m.duration_ms
+     FROM source s
+     LEFT JOIN source_version v ON v.source_id = s.id
+         AND v.number = (SELECT MAX(number) FROM source_version WHERE source_id = s.id)
+     LEFT JOIN meeting m ON m.source_id = s.id";
+
+fn item_row(row: &Row<'_>) -> rusqlite::Result<SourceListItem> {
+    let text_start: Option<String> = row.get(9)?;
+    let status: Option<String> = row.get(10)?;
+    let meeting = match status {
+        Some(_) => Some(MeetingBrief {
+            status: enum_column(row, 10)?,
+            duration_ms: row.get(11)?,
+        }),
+        None => None,
+    };
+    Ok(SourceListItem {
+        source: source_row(row)?,
+        text_start: text_start.filter(|text| !text.is_empty()),
+        meeting,
+    })
+}
 
 pub(super) fn source_row(row: &Row<'_>) -> rusqlite::Result<Source> {
     Ok(Source {
@@ -175,22 +201,16 @@ impl Library {
     }
 
     /// Like [`Library::list_sources`], with the start of each note's current text (up to
-    /// [`LIST_TEXT_CHARS`] characters), read in the same query.
+    /// [`LIST_TEXT_CHARS`] characters) and each meeting's status and length, read in the
+    /// same query.
     pub fn list_source_items(
         &self,
         kind: Option<SourceKind>,
         before: Option<SourceCursor>,
         limit: u32,
     ) -> Result<Vec<SourceListItem>> {
-        let columns = SOURCE_COLUMNS
-            .split(", ")
-            .map(|column| format!("s.{column}"))
-            .collect::<Vec<_>>()
-            .join(", ");
         let mut stmt = self.conn.prepare_cached(&format!(
-            "SELECT {columns}, substr(v.body, 1, ?5) FROM source s
-             LEFT JOIN source_version v ON v.source_id = s.id
-                 AND v.number = (SELECT MAX(number) FROM source_version WHERE source_id = s.id)
+            "{ITEM_SELECT}
              WHERE s.deleted_at IS NULL
                AND (?1 IS NULL OR s.kind = ?1)
                AND (?2 IS NULL OR (s.occurred_at, s.id) < (?2, ?3))
@@ -205,15 +225,50 @@ impl Library {
                 limit,
                 LIST_TEXT_CHARS
             ],
-            |row| {
-                let text_start: Option<String> = row.get(9)?;
-                Ok(SourceListItem {
-                    source: source_row(row)?,
-                    text_start: text_start.filter(|text| !text.is_empty()),
-                })
-            },
+            item_row,
         )?;
         Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// The list items of these sources, in the same order; sources in the trash or
+    /// missing are left out.
+    pub fn source_items(&self, ids: &[Id]) -> Result<Vec<SourceListItem>> {
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "{ITEM_SELECT}
+             WHERE s.id = ?1 AND s.deleted_at IS NULL"
+        ))?;
+        let mut items = Vec::with_capacity(ids.len());
+        for id in ids {
+            // The shared query reads the text length from ?5; ?2–?4 are unused here.
+            let unused: Option<i64> = None;
+            let item = stmt
+                .query_row(
+                    params![id.to_string(), unused, unused, unused, LIST_TEXT_CHARS],
+                    item_row,
+                )
+                .optional()?;
+            items.extend(item);
+        }
+        Ok(items)
+    }
+
+    /// How many meetings and notes are not in the trash.
+    pub fn source_counts(&self) -> Result<SourceCounts> {
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT kind, COUNT(*) FROM source WHERE deleted_at IS NULL GROUP BY kind",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, u32>(1)?))
+        })?;
+        let mut counts = SourceCounts::default();
+        for row in rows {
+            match row? {
+                (kind, count) if kind == SourceKind::Meeting.as_str() => counts.meetings = count,
+                (kind, count) if kind == SourceKind::Note.as_str() => counts.notes = count,
+                _ => {}
+            }
+        }
+        Ok(counts)
     }
 
     /// Sets the title. An automatic title never replaces one written by the user.

@@ -44,7 +44,7 @@ describe('App shell', () => {
 
   it('starts on Home', async () => {
     renderApp();
-    expect(await title('Welcome to Trama')).toBeInTheDocument();
+    expect(await title('Overview')).toBeInTheDocument();
     expect(link('Home')).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: 'Back' })).toHaveAttribute('aria-disabled', 'true');
   });
@@ -62,7 +62,7 @@ describe('App shell', () => {
     await user.click(screen.getByRole('button', { name: 'Back' }));
     expect(await title('Sources')).toBeInTheDocument();
     await user.keyboard('{Meta>}[[{/Meta}');
-    expect(await title('Welcome to Trama')).toBeInTheDocument();
+    expect(await title('Overview')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toHaveAttribute('aria-disabled', 'true');
   });
 
@@ -110,12 +110,12 @@ describe('App shell', () => {
     const back = screen.getByRole('button', { name: 'Back' });
     back.focus();
     await user.keyboard('{Enter}');
-    expect(await title('Welcome to Trama')).toBeInTheDocument();
+    expect(await title('Overview')).toBeInTheDocument();
     expect(back).toHaveAttribute('aria-disabled', 'true');
     expect(back).toHaveFocus();
     // Pressing it again does nothing.
     await user.keyboard('{Enter}');
-    expect(await title('Welcome to Trama')).toBeInTheDocument();
+    expect(await title('Overview')).toBeInTheDocument();
   });
 
   it('goes back with ⌘ and the [ key of layouts where [ needs ⌥', async () => {
@@ -124,7 +124,7 @@ describe('App shell', () => {
     await title('Sources');
     // Italian layout: the physical [ key types è.
     fireEvent.keyDown(document.body, { key: 'è', code: 'BracketLeft', metaKey: true });
-    expect(await title('Welcome to Trama')).toBeInTheDocument();
+    expect(await title('Overview')).toBeInTheDocument();
   });
 
   it('leaves Ctrl shortcuts to text editing on macOS', () => {
@@ -255,7 +255,7 @@ describe('App shell', () => {
 
   it('speaks Italian', async () => {
     renderApp('it');
-    expect(await title('Benvenuto in Trama')).toBeInTheDocument();
+    expect(await title('Panoramica')).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'Principale' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Fonti' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chiudi la barra laterale' })).toBeInTheDocument();

@@ -372,6 +372,8 @@ pub fn run() {
             notes::set_note_title,
             notes::open_link,
             notes::list_sources,
+            notes::search_sources,
+            notes::source_counts,
             meetings::get_meeting,
             recording::start_recording,
             recording::stop_recording,
