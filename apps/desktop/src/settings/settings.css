@@ -965,6 +965,11 @@
   color: var(--mute);
 }
 
+/* Audio recorded before retention existed, waiting for a confirmation */
+.set-held p {
+  margin: 0 0 4px;
+}
+
 .set-ok svg {
   color: var(--acc-t);
 }

@@ -209,6 +209,22 @@ settings-retention-30_days-desc = Conservato per un mese dopo la trascrizione.
 settings-retention-always = Sempre
 settings-retention-always-desc = Conservato finché non cancelli la riunione. Occupa più spazio.
 settings-retention-note = Senza audio una riunione non può essere trascritta di nuovo con un motore migliore. Trama chiede sempre prima di cancellare l'audio che hai già.
+settings-retention-held = { $count ->
+    [one] Una registrazione precedente a questo aggiornamento ha ancora l'audio: Trama lo conserva finché non confermi che l'impostazione vale anche per lei.
+   *[other] { $count } registrazioni precedenti a questo aggiornamento hanno ancora l'audio: Trama lo conserva finché non confermi che l'impostazione vale anche per loro.
+}
+settings-retention-held-apply = Applica l'impostazione anche a queste
+settings-retention-confirm-title = Cancellare l'audio che hai già?
+settings-retention-confirm-now = { $count ->
+    [one] L'audio di 1 registrazione verrà cancellato subito.
+   *[other] L'audio di { $count } registrazioni verrà cancellato subito.
+}
+settings-retention-confirm-later = { $count ->
+    [one] L'audio di 1 registrazione verrà cancellato { $days } giorni dopo la trascrizione.
+   *[other] L'audio di { $count } registrazioni verrà cancellato { $days } giorni dopo la trascrizione.
+}
+settings-retention-confirm-undo = Trascrizioni e note restano. L'audio cancellato non si può recuperare: l'operazione non si può annullare.
+settings-retention-confirm = Cancella l'audio
 settings-group-leaves = Cosa esce dal Mac
 settings-leaves-desc = Trama manda fuori solo il testo che serve a un compito, e solo al provider che hai scelto.
 settings-leaves-audio = Audio
@@ -235,6 +251,7 @@ settings-warning-library-exists = Questa cartella contiene già una libreria di 
 settings-error-internal = Qualcosa è andato storto. Riprova.
 settings-error-storage = Trama non è riuscita a leggere o salvare le impostazioni nella libreria.
 settings-error-invalid-setting = Questo valore non può essere salvato.
+settings-error-audio-deletion-unconfirmed = Prima conferma che l'audio che hai già può essere cancellato.
 settings-error-config-write = Trama non è riuscita a salvare le impostazioni su questo Mac.
 settings-error-name-required = Dai un nome al provider.
 settings-error-url-scheme = L'indirizzo deve iniziare con https:// (o http:// per un server locale).
