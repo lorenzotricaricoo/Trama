@@ -79,6 +79,7 @@ onboarding-ready-title = { $state ->
 }
 onboarding-ready-desc = Record the first meeting with { $shortcut }, with the button at the top of the sidebar or from the menu bar.
 onboarding-ready-later = What's missing is explained where it's needed, and Home keeps a reminder until it's set up.
+onboarding-ready-import = Already have notes in Markdown? Drop the files on the window, or use File › Import Notes… ({ $shortcut }).
 onboarding-checks = Setup
 onboarding-check-language = Meeting language
 onboarding-check-microphone = Microphone

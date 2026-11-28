@@ -249,6 +249,8 @@ describe('Onboarding', () => {
     expect(row('System audio')).toHaveTextContent('Not checked');
     expect(row('Transcription model')).toHaveTextContent('Not downloaded');
     expect(row('Recording shortcut')).toHaveTextContent('⌥⌘R');
+    // Notes kept elsewhere can come in through the Markdown import.
+    expect(screen.getByText(/Import Notes… \(⌘O\)/)).toBeInTheDocument();
 
     await user.click(within(row('Transcription model')!).getByRole('button', { name: 'Set up' }));
     expect(await heading('Download the transcription model')).toBeInTheDocument();

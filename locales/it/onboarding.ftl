@@ -79,6 +79,7 @@ onboarding-ready-title = { $state ->
 }
 onboarding-ready-desc = Registra il primo meeting con { $shortcut }, con il pulsante in cima alla barra laterale o dalla barra dei menu.
 onboarding-ready-later = Quello che manca viene spiegato dove serve, e la Home lo ricorda finché non è configurato.
+onboarding-ready-import = Hai già delle note in Markdown? Trascina i file sulla finestra, oppure usa File › Importa note… ({ $shortcut }).
 onboarding-checks = Configurazione
 onboarding-check-language = Lingua dei meeting
 onboarding-check-microphone = Microfono

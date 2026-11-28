@@ -33,6 +33,7 @@ import {
   WaveformIcon,
   type Icon,
 } from '../ui/icons';
+import { SHORTCUTS } from '../shell/shortcuts';
 import { useThemeClasses } from '../useThemeClasses';
 import { onboardingApi, type Permission, type PrivacyPane } from './api';
 import './onboarding.css';
@@ -792,6 +793,7 @@ function ReadyStep({
         ))}
       </ul>
       {missing && <Note>{t('onboarding-ready-later')}</Note>}
+      <Note>{t('onboarding-ready-import', { shortcut: SHORTCUTS.importNotes.label })}</Note>
     </>
   );
 }
