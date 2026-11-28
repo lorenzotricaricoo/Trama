@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use super::{JobContext, JobError, JobHandler};
-use crate::storage::{Id, Job, JobKind, JobState, MeetingStatus};
+use crate::storage::{Id, Job, JobKind, JobState, MeetingStatus, StorageError};
 use crate::transcription::{
     self, EngineLoader, MemoryMonitor, TrackAudio, TranscriptionError, error_code,
     is_supported_language,
@@ -20,6 +20,13 @@ const MEMORY_SAMPLING: Duration = Duration::from_millis(200);
 /// failed attempt, marks it `failed` with the error code; a cancelled transcription marks
 /// it `failed` with [`error_code::CANCELLED`]. When the app stops, the job goes back in
 /// the queue and the meeting stays `processing` until it runs again.
+///
+/// The transcript and the `ready` status are written in one transaction
+/// ([`crate::storage::Library::complete_transcription`]), so a retry never stores a
+/// second version. If the meeting goes to the trash while the job runs, the job fails
+/// with [`error_code::MEETING_DELETED`] and writes nothing to the meeting, not even the
+/// failure; restoring the meeting marks it `failed` with that code
+/// ([`crate::storage::Library::restore`]).
 ///
 /// The model is loaded for each transcription and dropped afterwards, so its memory
 /// (about 2.8 GB at peak) is held only while it runs; the peak is measured and logged.
@@ -58,8 +65,12 @@ impl Transcribe {
     ) -> Result<TranscriptionReport, TranscriptionError> {
         let started = Instant::now();
         let id = job.target_id;
-        let storage = |err: crate::storage::StorageError| {
-            TranscriptionError::retryable(super::error_code::STORAGE, err)
+        let storage = |err: StorageError| match err {
+            // The meeting went to the trash: retrying cannot help, and nothing is written.
+            StorageError::NotFound { .. } => {
+                TranscriptionError::permanent(error_code::MEETING_DELETED, err)
+            }
+            err => TranscriptionError::retryable(super::error_code::STORAGE, err),
         };
         let (tracks, audio) = {
             let mut library = ctx.library();
@@ -127,14 +138,10 @@ impl Transcribe {
         let peak_memory_bytes = memory.finish();
         let (engine, segments) = segments;
 
-        let mut library = ctx.library();
-        library
-            .add_transcription(id, &engine, &segments)
+        // One transaction, which checks first that the meeting is not in the trash.
+        ctx.library()
+            .complete_transcription(id, &engine, &segments)
             .map_err(storage)?;
-        library
-            .set_meeting_status(id, MeetingStatus::Ready, None)
-            .map_err(storage)?;
-        drop(library);
         ctx.progress(1.0);
         Ok(TranscriptionReport {
             segments: segments.len(),
@@ -165,8 +172,11 @@ impl Transcribe {
         } else {
             err.code
         };
-        ctx.library().set_meeting_failed(id, code)?;
-        Ok(())
+        match ctx.library().set_meeting_failed(id, code) {
+            // In the trash: nothing to write; restoring it settles the status.
+            Ok(_) | Err(StorageError::NotFound { .. }) => Ok(()),
+            Err(err) => Err(err.into()),
+        }
     }
 }
 

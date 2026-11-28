@@ -82,6 +82,9 @@ pub mod error_code {
     pub const STILL_RECORDING: &str = "still_recording";
     /// The user cancelled the transcription (stored on the meeting).
     pub const CANCELLED: &str = "transcription_cancelled";
+    /// The meeting went to the trash while it was being transcribed, so nothing was
+    /// stored. Restoring it marks it `failed` with this code, ready to transcribe again.
+    pub const MEETING_DELETED: &str = "meeting_deleted";
     /// The work stopped because it was asked to; same code as
     /// [`crate::jobs::JobError::stopped`].
     pub const STOPPED: &str = "stopped";

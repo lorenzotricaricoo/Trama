@@ -331,14 +331,34 @@ impl Library {
     }
 
     /// Takes a source out of the trash.
+    ///
+    /// A transcription that ends while its meeting is in the trash stores nothing, not
+    /// even its failure (see [`crate::jobs::Transcribe`]). A restored meeting still
+    /// `processing` with no transcription job left to settle it would stay that way for
+    /// good, so it comes back `failed` with
+    /// [`crate::transcription::error_code::MEETING_DELETED`], ready to transcribe again.
     pub fn restore(&mut self, id: Id) -> Result<()> {
-        let changed = self.conn.execute(
+        let tx = self.conn.transaction()?;
+        let changed = tx.execute(
             "UPDATE source SET deleted_at = NULL WHERE id = ?1",
             [id.to_string()],
         )?;
         if changed == 0 {
             return Err(StorageError::not_found("source", id));
         }
+        tx.execute(
+            "UPDATE meeting SET status = 'failed', error_code = ?2
+             WHERE source_id = ?1 AND status = 'processing'
+               AND NOT EXISTS (
+                   SELECT 1 FROM job
+                   WHERE target_id = ?1 AND kind = 'transcribe'
+                     AND state IN ('queued', 'running'))",
+            params![
+                id.to_string(),
+                crate::transcription::error_code::MEETING_DELETED
+            ],
+        )?;
+        tx.commit()?;
         Ok(())
     }
 

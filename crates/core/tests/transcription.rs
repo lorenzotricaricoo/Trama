@@ -829,3 +829,91 @@ fn cancelling_a_running_transcription_marks_the_meeting() {
     );
     assert!(lock(&library).current_version(id).unwrap().is_none());
 }
+
+#[test]
+fn a_meeting_trashed_while_it_is_transcribed_gets_nothing_and_fails_on_restore() {
+    let gate = Arc::new(AtomicBool::new(false));
+    let (_dir, library, runner, events) = start(FakeLoader {
+        error: None,
+        gate: Some(Arc::clone(&gate)),
+    });
+    let id = recorded_meeting(&mut lock(&library), "it");
+    runner.enqueue(JobKind::Transcribe, id).unwrap();
+    events.wait_for(|e| e.job.state == JobState::Running);
+    lock(&library).trash(id).unwrap();
+    gate.store(true, Ordering::SeqCst);
+
+    let last = events.wait_for(finished).pop().unwrap();
+    assert_eq!(last.job.state, JobState::Failed, "{:?}", last.job);
+    assert_eq!(last.job.attempts, 1, "not retried");
+    assert_eq!(
+        last.job.error_code.as_deref(),
+        Some(error_code::MEETING_DELETED)
+    );
+    {
+        let library = lock(&library);
+        assert!(library.current_version(id).unwrap().is_none());
+        // Nothing written to the meeting in the trash, not even the failure.
+        assert_eq!(
+            library.meeting(id).unwrap().status,
+            MeetingStatus::Processing
+        );
+    }
+
+    // No job is left to settle it: restoring it marks it failed, to transcribe again.
+    lock(&library).restore(id).unwrap();
+    let meeting = lock(&library).meeting(id).unwrap();
+    assert_eq!(meeting.status, MeetingStatus::Failed);
+    assert_eq!(
+        meeting.error_code.as_deref(),
+        Some(error_code::MEETING_DELETED)
+    );
+}
+
+#[test]
+fn a_meeting_restored_with_its_transcription_queued_stays_processing() {
+    let (_dir, _clock, mut library) = library();
+    let id = recorded_meeting(&mut library, "it");
+    library.enqueue_job(JobKind::Transcribe, id).unwrap();
+    library.trash(id).unwrap();
+    library.restore(id).unwrap();
+    let meeting = library.meeting(id).unwrap();
+    assert_eq!(meeting.status, MeetingStatus::Processing);
+    assert_eq!(meeting.error_code, None);
+}
+
+#[test]
+fn a_track_cut_short_by_a_crash_is_transcribed_up_to_where_it_ends() {
+    let (_dir, library, runner, events) = start(FakeLoader::default());
+    let id = recorded_meeting(&mut lock(&library), "it");
+    // The "others" track loses its last two seconds (silence) and ends inside a
+    // sample; its header still declares all of it.
+    let path = lock(&library)
+        .root()
+        .join(Library::meeting_audio_dir(id))
+        .join("others.wav");
+    let len = std::fs::metadata(&path).unwrap().len();
+    let file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+    file.set_len(len - 2 * 48_000 * 4 - 3).unwrap();
+    drop(file);
+
+    runner.enqueue(JobKind::Transcribe, id).unwrap();
+    let last = events.wait_for(finished).pop().unwrap();
+    assert_eq!(last.job.state, JobState::Done, "{:?}", last.job);
+    let library = lock(&library);
+    assert_eq!(library.meeting(id).unwrap().status, MeetingStatus::Ready);
+    let version = library.current_version(id).unwrap().unwrap();
+    let texts: Vec<_> = library
+        .segments(version.id)
+        .unwrap()
+        .into_iter()
+        .map(|s| (s.role, s.text))
+        .collect();
+    assert_eq!(
+        texts,
+        [
+            (Role::Me, "uno".to_owned()),
+            (Role::Others, "due".to_owned())
+        ]
+    );
+}

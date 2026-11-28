@@ -191,6 +191,39 @@ fn a_new_transcription_becomes_the_current_version() {
 }
 
 #[test]
+fn completing_a_transcription_stores_it_and_marks_the_meeting_ready_together() {
+    let (_dir, _, mut library) = library();
+    let meeting = library.create_meeting("it", ManualClock::START).unwrap();
+    library
+        .set_meeting_failed(meeting.id, "model_missing")
+        .unwrap();
+    let version = library
+        .complete_transcription(meeting.id, "engine", &[segment(Role::Me, 0, "fatto")])
+        .unwrap();
+    assert!(version.is_sealed());
+    assert_eq!(library.segments(version.id).unwrap()[0].text, "fatto");
+    let state = library.meeting(meeting.id).unwrap();
+    assert_eq!(state.status, MeetingStatus::Ready);
+    assert_eq!(state.error_code, None);
+
+    // In the trash, nothing at all is written.
+    let trashed = library.create_meeting("it", ManualClock::START).unwrap();
+    library
+        .set_meeting_status(trashed.id, MeetingStatus::Processing, None)
+        .unwrap();
+    library.trash(trashed.id).unwrap();
+    assert!(matches!(
+        library.complete_transcription(trashed.id, "engine", &[segment(Role::Me, 0, "no")]),
+        Err(StorageError::NotFound { .. })
+    ));
+    assert!(library.versions(trashed.id).unwrap().is_empty());
+    assert_eq!(
+        library.meeting(trashed.id).unwrap().status,
+        MeetingStatus::Processing
+    );
+}
+
+#[test]
 fn note_autosave_coalesces_edits_into_versions() {
     let (_dir, clock, mut library) = library();
     let note = library.create_note("", "Prima").unwrap();
