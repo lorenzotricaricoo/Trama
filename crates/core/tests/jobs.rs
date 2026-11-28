@@ -503,6 +503,9 @@ fn delete_audio_removes_files_and_keeps_the_transcript() {
             }],
         )
         .unwrap();
+    library
+        .set_meeting_status(target, MeetingStatus::Ready, None)
+        .unwrap();
 
     let library = Arc::new(Mutex::new(library));
     let (sink, events) = Events::sink();

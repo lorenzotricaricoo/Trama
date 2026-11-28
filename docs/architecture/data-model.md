@@ -126,6 +126,7 @@ The recording side of a meeting source.
 | `status` | `recording`, `processing` (transcription and summary), `ready` or `failed` |
 | `duration_ms` | Length of the recording |
 | `audio_deleted_at` | When the audio was removed by the retention rule; empty while it exists |
+| `audio_on_hold` | Audio recorded before audio retention existed: the setting leaves it alone until the user confirms that it applies to it too ([trash and audio](#trash-and-audio)) |
 | `error_code` | Why the meeting failed, as a code the interface translates; for example `recording_interrupted` when the app stopped during a recording, or `model_missing` when it could not be transcribed ([transcription](transcription.md#the-background-job)) |
 
 ### Track
@@ -238,6 +239,10 @@ so they survive a restart, and run one at a time.
 - Jobs on a source in the trash wait until it is restored, and are removed with it.
 - Progress (for example "transcribing 62%") is not stored: the core sends it to the
   interface as an event, together with every state change.
+- Some jobs fall due with time instead of being asked for, like `delete_audio`: the
+  runner asks each job kind which sources are due when it starts, every 15 minutes, and
+  right after the retention setting changes, and queues a job for each. A deletion that
+  failed or was cancelled is not queued again on its own; the user can retry it.
 
 ### Provider
 
@@ -366,8 +371,21 @@ records the embedding model of each vector ([ADR 0003](../adr/0003-hybrid-ai-pro
 - **Audio retention** ([information architecture](../design/information-architecture.md#audio-retention)):
   the audio of a meeting is removed according to the setting (`audio.retention`), and
   `audio_deleted_at` records it. The transcript is the source, so removing audio loses nothing the curator
-  needs. When the user changes the setting, it also applies to existing meetings, after
-  a confirmation that says how many recordings will be removed.
+  needs.
+  - Audio is removed only after a **successful transcription** (the meeting is `ready`
+    with a sealed transcription version), once the chosen period has passed since that
+    transcription: right away for "never", after 7 or 30 days, never for "always".
+  - The removal is a `delete_audio` job, queued by the runner when it falls due. The job
+    checks the rule again before removing anything, and every removal is logged.
+  - When the user changes the setting, it also applies to existing meetings, counted
+    from their transcription. If the change would remove audio the user already has
+    (now, or later where it would otherwise have been kept), the interface first asks
+    for a confirmation that says how many recordings are affected and that it cannot be
+    undone.
+  - Audio recorded before audio retention existed (`audio_on_hold`, set by migration 5)
+    is kept until the user confirms, in Settings › Data, that the setting applies to it
+    too, or changes the setting (which asks the same confirmation). Updating the app
+    never removes audio on its own.
 
 ## Schema changes
 

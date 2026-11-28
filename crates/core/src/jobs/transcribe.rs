@@ -148,6 +148,10 @@ impl Transcribe {
         if let Err(err) = crate::summary::enqueue_after_transcription(ctx, id) {
             eprintln!("trama: cannot queue the summary of meeting {id}: {err}");
         }
+        // Same for the audio: the runner's next sweep queues its deletion anyway.
+        if let Err(err) = super::delete_audio::enqueue_if_due(ctx, id) {
+            eprintln!("trama: cannot queue the audio deletion of meeting {id}: {err}");
+        }
         ctx.progress(1.0);
         Ok(TranscriptionReport {
             segments: segments.len(),

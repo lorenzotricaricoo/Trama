@@ -77,6 +77,10 @@ function mockShell(overrides: Record<string, (args: Record<string, unknown>) => 
         return librarySettings;
       case 'set_library_settings':
         return args.settings;
+      case 'audio_retention_impact':
+        return { deleteNow: 0, deleteLater: 0, days: null };
+      case 'held_audio':
+        return { count: 0, impact: { deleteNow: 0, deleteLater: 0, days: 0 } };
       case 'budget_status':
         return budget;
       case 'list_providers':
@@ -168,6 +172,132 @@ describe('SettingsScreen', () => {
         args: { settings: { ...librarySettings, audioRetention: '30_days' } },
       }),
     );
+  });
+
+  it('asks before a retention change deletes existing audio, and Cancel keeps it', async () => {
+    const calls = mockShell({
+      audio_retention_impact: () => ({ deleteNow: 3, deleteLater: 1, days: 7 }),
+    });
+    const user = renderSettings();
+    await sections();
+
+    await user.click(screen.getByRole('tab', { name: 'Data and privacy' }));
+    await user.click(await screen.findByRole('radio', { name: /^7 days/ }));
+    const dialog = await screen.findByRole('alertdialog', {
+      name: 'Delete audio you already have?',
+    });
+    expect(calls).toContainEqual({ cmd: 'audio_retention_impact', args: { retention: '7_days' } });
+    expect(
+      within(dialog).getByText('The audio of 3 recordings will be deleted now.'),
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(
+        'The audio of 1 recording will be deleted 7 days after its transcription.',
+      ),
+    ).toBeVisible();
+    expect(within(dialog).getByText(/this can't be undone/)).toBeVisible();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(calls.some((call) => call.cmd === 'set_library_settings')).toBe(false);
+    expect(screen.getByRole('radio', { name: /^Never/ })).toBeChecked();
+  });
+
+  it('saves a retention change that deletes audio once confirmed', async () => {
+    const calls = mockShell({
+      library_settings: () => ({ ...librarySettings, audioRetention: 'always' }),
+      audio_retention_impact: () => ({ deleteNow: 2, deleteLater: 0, days: 0 }),
+    });
+    const user = renderSettings();
+    await sections();
+
+    await user.click(screen.getByRole('tab', { name: 'Data and privacy' }));
+    await user.click(await screen.findByRole('radio', { name: /^Never/ }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(
+      within(dialog).getByText('The audio of 2 recordings will be deleted now.'),
+    ).toBeVisible();
+    await user.click(within(dialog).getByRole('button', { name: 'Delete audio' }));
+
+    await waitFor(() =>
+      expect(calls).toContainEqual({
+        cmd: 'set_library_settings',
+        args: {
+          settings: { ...librarySettings, audioRetention: 'never' },
+          confirmAudioDeletion: true,
+        },
+      }),
+    );
+    expect(screen.getByRole('radio', { name: /^Never/ })).toBeChecked();
+  });
+
+  it('saves a retention change that deletes nothing without asking', async () => {
+    const calls = mockShell();
+    const user = renderSettings();
+    await sections();
+
+    await user.click(screen.getByRole('tab', { name: 'Data and privacy' }));
+    await user.click(await screen.findByRole('radio', { name: /^Always/ }));
+    await waitFor(() =>
+      expect(calls).toContainEqual({
+        cmd: 'set_library_settings',
+        args: { settings: { ...librarySettings, audioRetention: 'always' } },
+      }),
+    );
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('keeps audio from before the update until the user applies the setting to it', async () => {
+    let held = 4;
+    const calls = mockShell({
+      held_audio: () => ({
+        count: held,
+        impact: { deleteNow: held, deleteLater: 0, days: 0 },
+      }),
+      apply_retention_to_held_audio: () => {
+        held = 0;
+        return { count: 0, impact: { deleteNow: 0, deleteLater: 0, days: 0 } };
+      },
+    });
+    const user = renderSettings();
+    await sections();
+
+    await user.click(screen.getByRole('tab', { name: 'Data and privacy' }));
+    expect(
+      await screen.findByText(/^4 recordings from before this update still have their audio/),
+    ).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Apply the setting to them' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(
+      within(dialog).getByText('The audio of 4 recordings will be deleted now.'),
+    ).toBeVisible();
+
+    // Cancel: nothing is applied.
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+    expect(calls.some((call) => call.cmd === 'apply_retention_to_held_audio')).toBe(false);
+
+    await user.click(screen.getByRole('button', { name: 'Apply the setting to them' }));
+    await user.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete audio' }),
+    );
+    await waitFor(() =>
+      expect(calls).toContainEqual({ cmd: 'apply_retention_to_held_audio', args: {} }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByText(/recordings from before this update/)).not.toBeInTheDocument(),
+    );
+  });
+
+  it('says nothing about audio from before the update that the setting keeps', async () => {
+    mockShell({
+      held_audio: () => ({ count: 2, impact: { deleteNow: 0, deleteLater: 0, days: null } }),
+    });
+    const user = renderSettings();
+    await sections();
+    await user.click(screen.getByRole('tab', { name: 'Data and privacy' }));
+    await screen.findByRole('radiogroup', { name: 'Keep meeting audio' });
+    expect(screen.queryByText(/from before this update/)).not.toBeInTheDocument();
   });
 
   it('saves Reduce transparency and makes the window opaque', async () => {
@@ -418,6 +548,7 @@ const SETTINGS_CODES = [
   'capture_no_input_device',
   'capture_device_open_failed',
   'library_not_writable',
+  'audio_deletion_unconfirmed',
 ];
 const WARNINGS = ['library_maybe_synced', 'library_exists'];
 const NOTICES = ['settings_reset', 'settings_unreadable', 'library_unavailable', 'library_failed'];

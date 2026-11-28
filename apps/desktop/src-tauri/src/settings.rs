@@ -10,13 +10,17 @@ use tauri::{AppHandle, Manager, Runtime, State};
 use trama_core::config::{AppConfig, config_error, resolve_path};
 use trama_core::jobs::lock;
 use trama_core::storage::{
-    AudioRetention, BudgetStatus, LibrarySettings, StorageError, UsageSettings,
+    AudioRetention, BudgetStatus, HeldAudio, Library, LibrarySettings, RetentionImpact,
+    StorageError, UsageSettings,
 };
 
 /// Code of a library that could not be read or written.
 pub const STORAGE_ERROR: &str = "storage";
 /// Code of a setting the core refused.
 pub const INVALID_SETTING: &str = "invalid_setting";
+/// Code of a change of audio retention that would delete existing audio and that the
+/// user has not confirmed.
+pub const AUDIO_DELETION_UNCONFIRMED: &str = "audio_deletion_unconfirmed";
 /// Code of a command whose work did not finish (a panic): a bug.
 pub const INTERNAL_ERROR: &str = "internal";
 
@@ -490,18 +494,159 @@ pub async fn library_settings(app: AppHandle) -> Result<LibrarySettingsPayload, 
 }
 
 /// Stores the settings kept in the library and returns them as stored.
+///
+/// A change of audio retention that would delete audio the user already has is refused
+/// with [`AUDIO_DELETION_UNCONFIRMED`] unless `confirm_audio_deletion` says the user
+/// confirmed it. Once a new retention is stored it applies to every meeting, including
+/// the audio on hold, and the runner looks for audio to delete right away.
 #[tauri::command]
 pub async fn set_library_settings(
     app: AppHandle,
     settings: LibrarySettingsPayload,
+    confirm_audio_deletion: Option<bool>,
 ) -> Result<LibrarySettingsPayload, String> {
     blocking(app, move |app| {
         let settings = LibrarySettings::try_from(settings)?;
         let core = crate::jobs::core_state(app)?;
-        let stored = lock(&core.library)
-            .set_library_settings(&settings)
-            .map_err(storage_code)?;
+        let (stored, retention_changed) = store_library_settings(
+            &mut lock(&core.library),
+            &settings,
+            confirm_audio_deletion.unwrap_or(false),
+        )?;
+        if retention_changed {
+            core.runner.request_sweep();
+        }
         Ok(stored.into())
+    })
+    .await
+}
+
+/// Stores the library settings, applying the audio retention rules above. Returns the
+/// settings as stored, and whether the retention changed.
+fn store_library_settings(
+    library: &mut Library,
+    settings: &LibrarySettings,
+    confirmed: bool,
+) -> Result<(LibrarySettings, bool), String> {
+    let current = library
+        .library_settings()
+        .map_err(storage_code)?
+        .audio_retention;
+    let changed = current != settings.audio_retention;
+    if changed
+        && !confirmed
+        && !library
+            .audio_retention_impact(settings.audio_retention)
+            .map_err(storage_code)?
+            .is_empty()
+    {
+        return Err(AUDIO_DELETION_UNCONFIRMED.to_owned());
+    }
+    let stored = library
+        .set_library_settings(settings)
+        .map_err(storage_code)?;
+    if changed {
+        let released = library.release_audio_holds().map_err(storage_code)?;
+        eprintln!(
+            "trama: audio retention changed from {} to {}{}",
+            current.as_str(),
+            stored.audio_retention.as_str(),
+            if released > 0 {
+                format!("; it now applies to {released} meetings recorded before")
+            } else {
+                String::new()
+            }
+        );
+    }
+    Ok((stored, changed))
+}
+
+/// What a retention setting would delete of the audio that exists now.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RetentionImpactPayload {
+    /// Recordings whose audio would be deleted right away.
+    pub delete_now: u32,
+    /// Recordings whose audio would be deleted when their period ends.
+    pub delete_later: u32,
+    /// Days the setting keeps audio after the transcription; absent for "always".
+    pub days: Option<u32>,
+}
+
+impl RetentionImpactPayload {
+    fn new(impact: RetentionImpact, retention: AudioRetention) -> Self {
+        Self {
+            delete_now: impact.delete_now,
+            delete_later: impact.delete_later,
+            days: retention.days(),
+        }
+    }
+}
+
+/// What changing the audio retention to `retention` would delete, so the interface can
+/// ask before.
+#[tauri::command]
+pub async fn audio_retention_impact(
+    app: AppHandle,
+    retention: String,
+) -> Result<RetentionImpactPayload, String> {
+    blocking(app, move |app| {
+        let retention: AudioRetention =
+            retention.parse().map_err(|_| INVALID_SETTING.to_owned())?;
+        let core = crate::jobs::core_state(app)?;
+        let impact = lock(&core.library)
+            .audio_retention_impact(retention)
+            .map_err(storage_code)?;
+        Ok(RetentionImpactPayload::new(impact, retention))
+    })
+    .await
+}
+
+/// Audio recorded before audio retention existed, kept until the user confirms.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HeldAudioPayload {
+    pub count: u32,
+    /// What the current setting would delete of it.
+    pub impact: RetentionImpactPayload,
+}
+
+fn held_payload(library: &Library) -> Result<HeldAudioPayload, String> {
+    let HeldAudio { count, impact } = library.held_audio().map_err(storage_code)?;
+    let retention = library
+        .library_settings()
+        .map_err(storage_code)?
+        .audio_retention;
+    Ok(HeldAudioPayload {
+        count,
+        impact: RetentionImpactPayload::new(impact, retention),
+    })
+}
+
+/// The audio on hold, and what the current setting would delete of it.
+#[tauri::command]
+pub async fn held_audio(app: AppHandle) -> Result<HeldAudioPayload, String> {
+    blocking(app, |app| {
+        let core = crate::jobs::core_state(app)?;
+        held_payload(&lock(&core.library))
+    })
+    .await
+}
+
+/// Applies the audio retention to the audio on hold, after the user confirmed; returns
+/// what is left on hold (nothing).
+#[tauri::command]
+pub async fn apply_retention_to_held_audio(app: AppHandle) -> Result<HeldAudioPayload, String> {
+    blocking(app, |app| {
+        let core = crate::jobs::core_state(app)?;
+        let held = {
+            let mut library = lock(&core.library);
+            let released = library.release_audio_holds().map_err(storage_code)?;
+            eprintln!("trama: audio retention now applies to {released} meetings recorded before");
+            held_payload(&library)?
+        };
+        core.runner.request_sweep();
+        Ok(held)
     })
     .await
 }
@@ -668,5 +813,92 @@ mod tests {
             ..LibrarySettings::default().into()
         };
         assert_eq!(LibrarySettings::try_from(bad).unwrap_err(), INVALID_SETTING);
+
+        let impact = RetentionImpactPayload::new(
+            RetentionImpact {
+                delete_now: 2,
+                delete_later: 1,
+            },
+            AudioRetention::Days7,
+        );
+        let json = serde_json::to_value(&impact).unwrap();
+        assert_eq!(json["deleteNow"], 2);
+        assert_eq!(json["deleteLater"], 1);
+        assert_eq!(json["days"], 7);
+    }
+
+    /// A library with one transcribed meeting that still has its audio.
+    fn library_with_audio(dir: &Path) -> Library {
+        use trama_core::storage::{MeetingStatus, NewSegment, NewTrack, Role};
+        let mut library = Library::open(dir).unwrap();
+        let mut settings = library.library_settings().unwrap();
+        settings.audio_retention = AudioRetention::Always;
+        library.set_library_settings(&settings).unwrap();
+        let id = library.create_meeting("it", 0).unwrap().id;
+        library
+            .add_track(
+                id,
+                &NewTrack {
+                    role: Role::Me,
+                    audio_path: Library::meeting_audio_dir(id).join("me.wav"),
+                    timing_path: None,
+                    device: None,
+                },
+            )
+            .unwrap();
+        library
+            .set_meeting_status(id, MeetingStatus::Processing, None)
+            .unwrap();
+        library
+            .complete_transcription(
+                id,
+                "engine",
+                &[NewSegment {
+                    role: Role::Me,
+                    start_ms: 0,
+                    end_ms: 1,
+                    text: "ciao".into(),
+                }],
+            )
+            .unwrap();
+        library
+    }
+
+    #[test]
+    fn deleting_existing_audio_needs_a_confirmation() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut library = library_with_audio(dir.path());
+        let mut never = library.library_settings().unwrap();
+        never.audio_retention = AudioRetention::Never;
+
+        assert_eq!(
+            store_library_settings(&mut library, &never, false).unwrap_err(),
+            AUDIO_DELETION_UNCONFIRMED
+        );
+        assert_eq!(
+            library.library_settings().unwrap().audio_retention,
+            AudioRetention::Always
+        );
+
+        // Other settings save as usual while the retention stays.
+        let mut currency = library.library_settings().unwrap();
+        currency.usage.currency = "EUR".into();
+        let (_, changed) = store_library_settings(&mut library, &currency, false).unwrap();
+        assert!(!changed);
+
+        let never = LibrarySettings {
+            audio_retention: AudioRetention::Never,
+            ..library.library_settings().unwrap()
+        };
+        let (stored, changed) = store_library_settings(&mut library, &never, true).unwrap();
+        assert!(changed);
+        assert_eq!(stored.audio_retention, AudioRetention::Never);
+        assert_eq!(stored.usage.currency, "EUR");
+        assert_eq!(library.audio_due_for_deletion().unwrap().len(), 1);
+
+        // Keeping more deletes nothing: no confirmation needed.
+        let mut always = stored.clone();
+        always.audio_retention = AudioRetention::Always;
+        assert!(store_library_settings(&mut library, &always, false).is_ok());
     }
 }

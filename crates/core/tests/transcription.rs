@@ -723,6 +723,34 @@ fn a_completed_transcription_queues_the_summary() {
 }
 
 #[test]
+fn a_completed_transcription_queues_the_audio_deletion_only_when_due() {
+    // "Never" (the default): the audio goes as soon as the transcript is stored.
+    let (_dir, library, runner, events) = start(FakeLoader::default());
+    let id = recorded_meeting(&mut lock(&library), "it");
+    let transcribe = runner.enqueue(JobKind::Transcribe, id).unwrap();
+    let seen = events.wait_for(|e| e.job.id == transcribe.id && finished(e));
+    let queued = seen
+        .iter()
+        .find(|e| e.job.kind == JobKind::DeleteAudio)
+        .expect("no event for the audio deletion");
+    assert_eq!(queued.job.target_id, id);
+    drop(runner);
+
+    // "7 days": nothing is queued yet.
+    let (_dir, library, runner, events) = start(FakeLoader::default());
+    {
+        let mut library = lock(&library);
+        let mut settings = library.library_settings().unwrap();
+        settings.audio_retention = AudioRetention::Days7;
+        library.set_library_settings(&settings).unwrap();
+    }
+    let id = recorded_meeting(&mut lock(&library), "it");
+    let transcribe = runner.enqueue(JobKind::Transcribe, id).unwrap();
+    let seen = events.wait_for(|e| e.job.id == transcribe.id && finished(e));
+    assert!(seen.iter().all(|e| e.job.kind != JobKind::DeleteAudio));
+}
+
+#[test]
 fn a_failed_transcription_queues_no_summary() {
     let (_dir, library, runner, events) = start(FakeLoader {
         error: Some(TranscriptionError::permanent(
