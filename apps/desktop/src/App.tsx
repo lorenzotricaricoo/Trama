@@ -149,7 +149,7 @@ export function App() {
                 animate="center"
                 exit="exit"
               >
-                <Screen id={nav.screen} nav={nav} />
+                <Screen id={nav.screen} nav={nav} onNotice={notice.show} />
               </motion.div>
             </AnimatePresence>
           </div>

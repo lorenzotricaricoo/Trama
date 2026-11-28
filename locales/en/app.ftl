@@ -65,6 +65,30 @@ note-status-saving = Saving…
 note-status-saved = Saved
 note-status-error = Not saved yet: trying again.
 note-untitled = Untitled note
+note-title-label = Note title
+note-title-placeholder = Untitled
+note-status-saved-at = Saved at { $time }
+note-mode-label = View
+note-mode-write = Write
+note-mode-split = Side by side
+note-mode-read = Preview
+note-format-label = Formatting
+note-format-heading = Heading
+note-format-bold = Bold
+note-format-italic = Italic
+note-format-bullets = Bulleted list
+note-format-numbers = Numbered list
+note-format-todo = To-do
+note-format-quote = Quote
+note-format-code = Code
+note-format-link = Link
+note-preview-empty = Nothing to preview yet. Switch to Write to start.
+note-stats = { $count ->
+    [one] 1 word
+   *[other] { $count } words
+} · { $minutes } min read
+note-stats-empty = No words yet
+note-link-failed = This link can't be opened.
 note-load-failed-title = This note can't be opened
 note-load-failed-body = It may have been moved to the trash.
 sources-list-label = Sources

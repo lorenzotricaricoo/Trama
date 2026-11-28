@@ -62,6 +62,8 @@ vi.mock('@tauri-apps/api/core', () => ({
           core.notes.set(id, { ...noteOf(id), body: String(args.body) });
           return { versionNumber: 1, savedAt: 0 };
         });
+      case 'set_note_title':
+        return write().then(() => String(args.title).trim());
       case 'get_note':
         return Promise.resolve(noteOf(String(args.id)));
       case 'list_sources': {
@@ -141,8 +143,8 @@ describe('Notes (flow F3)', () => {
 
     await type('# Weekly sync');
     await waitFor(() => expect(commands('create_note')).toHaveLength(1));
-    expect(commands('create_note')[0]?.args).toEqual({ body: '# Weekly sync' });
-    expect(await screen.findByText('Saved')).toBeInTheDocument();
+    expect(commands('create_note')[0]?.args).toEqual({ title: '', body: '# Weekly sync' });
+    expect(await screen.findByText(/^Saved at /)).toBeInTheDocument();
 
     await type('\n\nperché no');
     await waitFor(() =>
@@ -158,12 +160,50 @@ describe('Notes (flow F3)', () => {
     const list = await screen.findByRole('grid', { name: 'Sources' });
     const row = within(list).getByRole('row', { name: /Weekly sync/ });
     await user.click(row);
+    // A note with text opens as it reads: Markdown rendered.
+    expect(await screen.findByRole('heading', { level: 1, name: 'Weekly sync' })).toBeVisible();
+    expect(screen.getByText('perché no', { selector: 'p' })).toBeVisible();
+    expect(screen.getByRole('radio', { name: 'Preview' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'Write' }));
     await waitFor(async () => {
       const view = EditorView.findFromDOM(await editor());
       expect(view?.state.doc.toString()).toBe('# Weekly sync\n\nperché no');
     });
     // Opening a note does not write it again.
     expect(commands('save_note')).toHaveLength(1);
+  });
+
+  it('names a note with its title, and formats from the toolbar', async () => {
+    const user = renderApp();
+    await user.keyboard('{Meta>}n{/Meta}');
+    const title = await screen.findByRole('textbox', { name: 'Note title' });
+    await waitFor(() => expect(title).toBeEnabled());
+    await user.type(title, 'Piano Q1');
+    await waitFor(() =>
+      expect(commands('create_note').at(-1)?.args).toEqual({ title: 'Piano Q1', body: '' }),
+    );
+    // Enter moves to the text.
+    await user.type(title, '{Enter}');
+    await waitFor(async () => expect(await editor()).toHaveFocus());
+    await type('idea');
+    const view = EditorView.findFromDOM(await editor());
+    act(() => view?.dispatch({ selection: { anchor: 0, head: 4 } }));
+    await user.click(screen.getByRole('button', { name: 'Bold' }));
+    expect(view?.state.doc.toString()).toBe('**idea**');
+    await waitFor(() =>
+      expect(commands('save_note').at(-1)?.args).toEqual({ id: 'note-1', body: '**idea**' }),
+    );
+    await user.type(title, ' bis');
+    await waitFor(() =>
+      expect(commands('set_note_title').at(-1)?.args).toEqual({
+        id: 'note-1',
+        title: 'Piano Q1 bis',
+      }),
+    );
+    // Side by side: the text and its preview.
+    await user.click(screen.getByRole('radio', { name: 'Side by side' }));
+    expect(await editor()).toBeVisible();
+    expect(screen.getByText('idea', { selector: 'strong' })).toBeVisible();
   });
 
   it('writes at once when the editor loses focus, without waiting for the pause', async () => {
@@ -241,6 +281,8 @@ describe('Notes (flow F3)', () => {
     // Still creating: the screen waits instead of offering an empty new note.
     expect(screen.queryByRole('textbox', { name: 'Note text' })).not.toBeInTheDocument();
     act(() => open());
+    // A note with text opens as it reads; Write shows the text again.
+    await user.click(await screen.findByRole('radio', { name: 'Write' }));
     await waitFor(async () => {
       const view = EditorView.findFromDOM(await editor());
       expect(view?.state.doc.toString()).toBe('Slow start');

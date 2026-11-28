@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use trama_core::jobs::lock;
 use trama_core::storage::{
-    Id, Source, SourceCursor, SourceKind, SourceListItem, Timestamp, Version,
+    Id, Library, Source, SourceCursor, SourceKind, SourceListItem, Timestamp, TitleOrigin, Version,
 };
 
 use crate::jobs::Core;
@@ -16,6 +16,9 @@ const PREVIEW_CHARS: usize = 120;
 
 /// Most sources returned by one call to [`list_sources`].
 const MAX_SOURCES: u32 = 500;
+
+/// Longest title a note keeps, in characters.
+const MAX_TITLE_CHARS: usize = 200;
 
 /// A note as the editor sees it: its current text.
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -116,12 +119,25 @@ fn parse_id(id: &str) -> Result<Id, String> {
     Id::parse_str(id).map_err(|_| format!("invalid note id {id:?}"))
 }
 
-/// Creates a note with its first text, typed before the note existed.
+/// A title as the user typed it, on one line, without surrounding spaces and at most
+/// [`MAX_TITLE_CHARS`] long.
+pub fn clean_title(title: &str) -> String {
+    let line = title.split_whitespace().collect::<Vec<_>>().join(" ");
+    line.chars().take(MAX_TITLE_CHARS).collect()
+}
+
+/// Creates a note with its first title and text, typed before the note existed. An empty
+/// title is left to the summary.
 #[tauri::command]
-pub fn create_note(core: State<'_, Core>, body: String) -> Result<NotePayload, String> {
+pub fn create_note(
+    core: State<'_, Core>,
+    title: Option<String>,
+    body: String,
+) -> Result<NotePayload, String> {
     let mut library = lock(&core.library);
+    let title = clean_title(title.as_deref().unwrap_or_default());
     let source = library
-        .create_note("", &body)
+        .create_note(&title, &body)
         .map_err(|err| err.to_string())?;
     let version = library
         .current_version(source.id)
@@ -139,6 +155,55 @@ pub fn save_note(core: State<'_, Core>, id: String, body: String) -> Result<Save
         version_number: version.number,
         saved_at: version.edited_at,
     })
+}
+
+/// Renames a note. An empty title gives the title back to the summary.
+pub fn rename_note(library: &mut Library, id: Id, title: &str) -> Result<Source, String> {
+    let source = library.source(id).map_err(|err| err.to_string())?;
+    if source.kind != SourceKind::Note || source.deleted_at.is_some() {
+        return Err(format!("note {id} not found"));
+    }
+    let title = clean_title(title);
+    let renamed = if title.is_empty() {
+        library.reset_title(id)
+    } else {
+        library.set_title(id, &title, TitleOrigin::User)
+    };
+    renamed.map_err(|err| err.to_string())
+}
+
+/// Sets the title of a note, as typed above its text; returns the title kept.
+#[tauri::command]
+pub fn set_note_title(core: State<'_, Core>, id: String, title: String) -> Result<String, String> {
+    let id = parse_id(&id)?;
+    rename_note(&mut lock(&core.library), id, &title).map(|source| source.title)
+}
+
+/// Opens a link of a note's preview in the default browser or mail app. Only web and mail
+/// links: anything else could start a program.
+#[tauri::command]
+pub fn open_link(url: String) -> Result<(), String> {
+    let allowed = ["https://", "http://", "mailto:"]
+        .iter()
+        .any(|scheme| url.len() > scheme.len() && url[..scheme.len()].eq_ignore_ascii_case(scheme));
+    if !allowed || url.chars().any(char::is_control) {
+        return Err("unsupported_link".to_owned());
+    }
+    #[cfg(target_os = "macos")]
+    let opened = std::process::Command::new("/usr/bin/open")
+        .arg("--")
+        .arg(&url)
+        .status();
+    #[cfg(not(target_os = "macos"))]
+    let opened: std::io::Result<std::process::ExitStatus> =
+        Err(std::io::Error::other("not supported on this platform yet"));
+    match opened {
+        Ok(status) if status.success() => Ok(()),
+        other => {
+            eprintln!("trama: cannot open a link: {other:?}");
+            Err("link_not_opened".to_owned())
+        }
+    }
 }
 
 /// A note with the text of its current version.
@@ -198,7 +263,43 @@ fn page(items: &[SourceListItem], limit: u32) -> SourcePagePayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use trama_core::storage::Library;
+
+    #[test]
+    fn titles_are_kept_on_one_short_line() {
+        assert_eq!(clean_title("  Weekly\n sync\t "), "Weekly sync");
+        assert_eq!(clean_title("   "), "");
+        assert_eq!(
+            clean_title(&"è".repeat(300)).chars().count(),
+            MAX_TITLE_CHARS
+        );
+    }
+
+    #[test]
+    fn renaming_a_note_and_clearing_the_title() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let mut library = Library::open(dir.path()).unwrap();
+        let note = library.create_note("", "text").unwrap();
+        let renamed = rename_note(&mut library, note.id, "  Piano Q1 ").unwrap();
+        assert_eq!(renamed.title, "Piano Q1");
+        assert_eq!(renamed.title_origin, TitleOrigin::User);
+        let cleared = rename_note(&mut library, note.id, " ").unwrap();
+        assert_eq!(cleared.title, "");
+        assert_eq!(cleared.title_origin, TitleOrigin::Auto);
+        assert!(rename_note(&mut library, Id::now_v7(), "x").is_err());
+    }
+
+    #[test]
+    fn only_web_and_mail_links_open() {
+        for url in [
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+            "https://",
+            "ssh://h",
+            "x",
+        ] {
+            assert_eq!(open_link(url.into()).unwrap_err(), "unsupported_link");
+        }
+    }
 
     #[test]
     fn preview_is_the_first_line_with_text() {

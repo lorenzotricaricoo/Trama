@@ -42,8 +42,16 @@ export interface SourcePage {
   next: SourceCursor | null;
 }
 
-/** Creates a note with the text typed so far. */
-export const createNote = (body: string) => invoke<Note>('create_note', { body });
+/** Creates a note with the title and text typed so far; an empty title is left to the summary. */
+export const createNote = (title: string, body: string) =>
+  invoke<Note>('create_note', { title, body });
+
+/** Renames a note; an empty title goes back to the summary. Resolves to the title kept. */
+export const setNoteTitle = (id: string, title: string) =>
+  invoke<string>('set_note_title', { id, title });
+
+/** Opens a web or mail link of the preview in the default app. */
+export const openLink = (url: string) => invoke<void>('open_link', { url });
 
 /** Saves the text of a note; resolves once the core has committed it. */
 export const saveNote = (id: string, body: string) => invoke<Saved>('save_note', { id, body });

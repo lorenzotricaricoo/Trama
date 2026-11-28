@@ -44,7 +44,15 @@ function SettingsScreen() {
   );
 }
 
-export function Screen({ id, nav }: { id: ScreenId; nav: Navigation }) {
+export function Screen({
+  id,
+  nav,
+  onNotice,
+}: {
+  id: ScreenId;
+  nav: Navigation;
+  onNotice: (message: string) => void;
+}) {
   switch (id) {
     case 'home':
       return <HomeScreen />;
@@ -60,7 +68,12 @@ export function Screen({ id, nav }: { id: ScreenId; nav: Navigation }) {
     case 'note':
       return (
         <Suspense fallback={null}>
-          <NoteScreen noteId={nav.noteId} entry={nav.entry} onCreated={nav.setNoteId} />
+          <NoteScreen
+            noteId={nav.noteId}
+            entry={nav.entry}
+            onCreated={nav.setNoteId}
+            onNotice={onNotice}
+          />
         </Suspense>
       );
   }

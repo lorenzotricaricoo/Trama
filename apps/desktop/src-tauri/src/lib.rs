@@ -182,6 +182,8 @@ pub fn run() {
             notes::create_note,
             notes::save_note,
             notes::get_note,
+            notes::set_note_title,
+            notes::open_link,
             notes::list_sources,
             quit::quit_ready,
             quit::quit_cancelled
