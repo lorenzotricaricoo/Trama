@@ -71,6 +71,33 @@ impl ModelLimits {
     }
 }
 
+/// Prices of a model, set by the user to track what calls cost. Per million tokens, in
+/// millionths of the currency unit (see [`crate::storage::UsageSettings::currency`]): 3
+/// dollars per million tokens is `3_000_000`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ModelPrices {
+    /// Price of a million prompt tokens.
+    pub input_micros: Option<u64>,
+    /// Price of a million reply tokens.
+    pub output_micros: Option<u64>,
+}
+
+impl ModelPrices {
+    /// What a call costs, in millionths of the currency unit, rounded to the nearest; `None`
+    /// if a price it needs is unknown.
+    pub fn cost_micros(self, input_tokens: u64, output_tokens: u64) -> Option<u64> {
+        let part = |tokens: u64, price: Option<u64>| match (tokens, price) {
+            (0, _) => Some(0u128),
+            (tokens, Some(price)) => Some(u128::from(tokens) * u128::from(price)),
+            (_, None) => None,
+        };
+        let total = part(input_tokens, self.input_micros)?
+            .saturating_add(part(output_tokens, self.output_micros)?)
+            .saturating_add(500_000);
+        Some(u64::try_from(total / 1_000_000).unwrap_or(u64::MAX))
+    }
+}
+
 /// A model offered by a provider.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderModel {
@@ -84,6 +111,8 @@ pub struct ProviderModel {
     pub catalog: ModelLimits,
     /// Limits set by the user, for providers that don't expose them or expose wrong ones.
     pub overrides: ModelLimits,
+    /// Prices set by the user.
+    pub prices: ModelPrices,
     pub updated_at: Timestamp,
 }
 
@@ -114,7 +143,8 @@ const PROVIDER_COLUMNS: &str =
     "id, name, base_url, key_ref, catalog_fetched_at, created_at, updated_at";
 
 const MODEL_COLUMNS: &str = "provider_id, model_id, listed, context_tokens, max_output_tokens, \
-     context_tokens_override, max_output_tokens_override, updated_at";
+     context_tokens_override, max_output_tokens_override, updated_at, input_price_micros, \
+     output_price_micros";
 
 fn provider_row(row: &Row<'_>) -> rusqlite::Result<Provider> {
     Ok(Provider {
@@ -126,6 +156,13 @@ fn provider_row(row: &Row<'_>) -> rusqlite::Result<Provider> {
         created_at: row.get(5)?,
         updated_at: row.get(6)?,
     })
+}
+
+/// A price column; the schema keeps prices non-negative.
+fn price_column(row: &Row<'_>, index: usize) -> rusqlite::Result<Option<u64>> {
+    Ok(row
+        .get::<_, Option<i64>>(index)?
+        .map(|price| u64::try_from(price).unwrap_or(0)))
 }
 
 fn model_row(row: &Row<'_>) -> rusqlite::Result<ProviderModel> {
@@ -141,6 +178,10 @@ fn model_row(row: &Row<'_>) -> rusqlite::Result<ProviderModel> {
             context_tokens: row.get(5)?,
             max_output_tokens: row.get(6)?,
         },
+        prices: ModelPrices {
+            input_micros: price_column(row, 8)?,
+            output_micros: price_column(row, 9)?,
+        },
         updated_at: row.get(7)?,
     })
 }
@@ -152,6 +193,30 @@ fn task_model_row(row: &Row<'_>) -> rusqlite::Result<TaskModel> {
         model_id: row.get(2)?,
         updated_at: row.get(3)?,
     })
+}
+
+/// Why a provider's name or URL is refused, as a stable code the interface translates.
+pub mod provider_input_error {
+    /// The name is empty.
+    pub const NAME_REQUIRED: &str = "name_required";
+    /// The URL doesn't start with `http://` or `https://`.
+    pub const URL_SCHEME: &str = "url_scheme";
+    /// The URL has no host, or has credentials or spaces in it.
+    pub const URL_INVALID: &str = "url_invalid";
+    /// Plain `http://` to a host that isn't local.
+    pub const URL_INSECURE: &str = "url_insecure";
+
+    /// Every code, for the translation tests.
+    pub const ALL: &[&str] = &[NAME_REQUIRED, URL_SCHEME, URL_INVALID, URL_INSECURE];
+}
+
+/// Checks a provider's name and URL as [`Library::add_provider`] does, and says what is
+/// wrong as a [`provider_input_error`] code; `None` when both are acceptable.
+pub fn check_provider_input(name: &str, base_url: &str) -> Option<&'static str> {
+    if name.trim().is_empty() {
+        return Some(provider_input_error::NAME_REQUIRED);
+    }
+    base_url_error(base_url).err()
 }
 
 /// Trims a provider name and refuses an empty one.
@@ -168,24 +233,35 @@ fn clean_name(name: &str) -> Result<String> {
 /// Studio, a gateway on the local network): loopback, private and link-local addresses,
 /// `localhost` and `.local` names. Every other host needs `https://`.
 fn clean_base_url(url: &str) -> Result<String> {
+    base_url_error(url).map_err(|code| {
+        StorageError::Invalid(match code {
+            provider_input_error::URL_SCHEME => {
+                "a provider URL must start with http:// or https://"
+            }
+            provider_input_error::URL_INSECURE => {
+                "plain http:// is allowed only for local servers; use https://"
+            }
+            _ => "invalid provider URL",
+        })
+    })
+}
+
+/// The cleaned base URL, or the [`provider_input_error`] code that refuses it.
+fn base_url_error(url: &str) -> std::result::Result<String, &'static str> {
     let url = url.trim().trim_end_matches('/');
     let (secure, rest) = if let Some(rest) = url.strip_prefix("https://") {
         (true, rest)
     } else if let Some(rest) = url.strip_prefix("http://") {
         (false, rest)
     } else {
-        return Err(StorageError::Invalid(
-            "a provider URL must start with http:// or https://",
-        ));
+        return Err(provider_input_error::URL_SCHEME);
     };
     let authority = rest.split(['/', '?', '#']).next().unwrap_or_default();
     if authority.is_empty() || authority.contains('@') || rest.chars().any(char::is_whitespace) {
-        return Err(StorageError::Invalid("invalid provider URL"));
+        return Err(provider_input_error::URL_INVALID);
     }
     if !secure && !is_local_host(host_of(authority)) {
-        return Err(StorageError::Invalid(
-            "plain http:// is allowed only for local servers; use https://",
-        ));
+        return Err(provider_input_error::URL_INSECURE);
     }
     Ok(url.to_owned())
 }
@@ -243,6 +319,27 @@ fn load_model(conn: &Connection, provider_id: Id, model_id: &str) -> Result<Prov
     )
     .optional()?
     .ok_or_else(|| StorageError::not_found("model", format!("{provider_id}/{model_id}")))
+}
+
+/// The prices of a model, `None` if the library doesn't know the model.
+pub(super) fn load_model_prices(
+    conn: &Connection,
+    provider_id: Id,
+    model_id: &str,
+) -> Result<Option<ModelPrices>> {
+    Ok(conn
+        .query_row(
+            "SELECT input_price_micros, output_price_micros FROM provider_model
+             WHERE provider_id = ?1 AND model_id = ?2",
+            params![provider_id.to_string(), model_id],
+            |row| {
+                Ok(ModelPrices {
+                    input_micros: price_column(row, 0)?,
+                    output_micros: price_column(row, 1)?,
+                })
+            },
+        )
+        .optional()?)
 }
 
 impl Library {
@@ -407,6 +504,44 @@ impl Library {
         Ok(model)
     }
 
+    /// Sets the user's prices for a model (`None` clears one). A model the catalogue doesn't
+    /// list is added, as [`Library::set_model_overrides`] does. Usage already recorded keeps
+    /// the cost computed when it happened.
+    pub fn set_model_prices(
+        &mut self,
+        provider_id: Id,
+        model_id: &str,
+        prices: ModelPrices,
+    ) -> Result<ProviderModel> {
+        let model_id = model_id.trim();
+        if model_id.is_empty() {
+            return Err(StorageError::Invalid("a model needs an id"));
+        }
+        let to_sql = |price: Option<u64>| {
+            price
+                .map(i64::try_from)
+                .transpose()
+                .map_err(|_| StorageError::Invalid("price too large"))
+        };
+        let (input, output) = (to_sql(prices.input_micros)?, to_sql(prices.output_micros)?);
+        let now = self.now();
+        let tx = self.conn.transaction()?;
+        load_provider(&tx, provider_id)?;
+        tx.execute(
+            "INSERT INTO provider_model (provider_id, model_id, listed,
+                 input_price_micros, output_price_micros, updated_at)
+             VALUES (?1, ?2, 0, ?3, ?4, ?5)
+             ON CONFLICT (provider_id, model_id) DO UPDATE SET
+                 input_price_micros = excluded.input_price_micros,
+                 output_price_micros = excluded.output_price_micros,
+                 updated_at = excluded.updated_at",
+            params![provider_id.to_string(), model_id, input, output, now],
+        )?;
+        let model = load_model(&tx, provider_id, model_id)?;
+        tx.commit()?;
+        Ok(model)
+    }
+
     /// Chooses the model for a task. The model must be known (read from the catalogue or
     /// added with [`Library::set_model_overrides`]).
     pub fn set_task_model(
@@ -541,6 +676,7 @@ mod tests {
                 context_tokens: None,
                 max_output_tokens: Some(20),
             },
+            prices: ModelPrices::default(),
             updated_at: 0,
         };
         assert_eq!(
@@ -550,6 +686,52 @@ mod tests {
                 max_output_tokens: Some(20),
             }
         );
+    }
+
+    #[test]
+    fn input_errors_have_codes() {
+        use provider_input_error::*;
+        assert_eq!(
+            check_provider_input(" ", "https://x.example.com"),
+            Some(NAME_REQUIRED)
+        );
+        assert_eq!(check_provider_input("X", "x.example.com"), Some(URL_SCHEME));
+        assert_eq!(
+            check_provider_input("X", "https://exa mple.com"),
+            Some(URL_INVALID)
+        );
+        assert_eq!(
+            check_provider_input("X", "http://api.example.com"),
+            Some(URL_INSECURE)
+        );
+        assert_eq!(check_provider_input("X", "http://localhost:1234/v1"), None);
+    }
+
+    #[test]
+    fn costs_are_computed_from_prices_per_million_tokens() {
+        let prices = ModelPrices {
+            input_micros: Some(3_000_000),
+            output_micros: Some(15_000_000),
+        };
+        // 1000 prompt tokens at 3 per million and 500 reply tokens at 15 per million.
+        assert_eq!(prices.cost_micros(1000, 500), Some(3000 + 7500));
+        assert_eq!(prices.cost_micros(0, 0), Some(0));
+        let free = ModelPrices {
+            input_micros: Some(0),
+            output_micros: Some(0),
+        };
+        assert_eq!(free.cost_micros(1_000_000, 1_000_000), Some(0));
+        let input_only = ModelPrices {
+            input_micros: Some(1_000_000),
+            output_micros: None,
+        };
+        assert_eq!(input_only.cost_micros(10, 0), Some(10));
+        assert_eq!(input_only.cost_micros(10, 1), None);
+        let huge = ModelPrices {
+            input_micros: Some(u64::MAX),
+            output_micros: Some(u64::MAX),
+        };
+        assert_eq!(huge.cost_micros(u64::MAX, u64::MAX), Some(u64::MAX));
     }
 
     #[test]

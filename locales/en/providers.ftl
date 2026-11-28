@@ -21,3 +21,4 @@ provider-error-no-model-for-task = No model is chosen for this task. Choose one 
 provider-error-missing-key = The provider's API key is missing. Add it in Settings.
 provider-error-keychain = Trama couldn't access the API key in the Keychain.
 provider-error-storage = Trama couldn't read or save the provider settings.
+provider-error-budget-exceeded = This month's budget for language models is used up. Raise it or turn off the limit in Settings.

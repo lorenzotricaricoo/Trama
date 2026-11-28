@@ -7,6 +7,9 @@
 //! - The model catalogue is read from the provider (`GET /models`) with the limits it
 //!   exposes; the user can override them ([`crate::storage::ModelLimits`]).
 //! - Each task uses the model the user chose for it ([`crate::storage::ModelTask`]).
+//! - The tokens of every reply can be recorded with their cost
+//!   ([`TaskModelClient::recording_usage`]); a task is refused with `budget_exceeded` when
+//!   the user chose to enforce a monthly budget and the month's spend reached it.
 //! - Calls are robust (principle A4): timeouts, retries with backoff, `Retry-After`,
 //!   and checks for truncated, filtered, empty and degenerate replies, all surfaced as
 //!   coded errors ([`ProviderError`]).
@@ -20,7 +23,7 @@ pub mod structured;
 pub use catalog::parse_catalog;
 pub use client::{
     ChatReply, ChatRequest, Client, ClientConfig, JsonSchema, Message, MessageRole, RetryPolicy,
-    StructuredReply, estimate_prompt_tokens, estimate_tokens,
+    StructuredReply, TokenUsage, UsageHook, estimate_prompt_tokens, estimate_tokens,
 };
 pub use error::{ErrorKind, ProviderError, error_code};
 pub use secrets::{Keychain, MemorySecrets, Secret, SecretStore};
@@ -29,6 +32,7 @@ use crate::i18n::Catalog;
 use crate::jobs::{SharedLibrary, lock};
 use crate::storage::{
     Id, Library, ModelLimits, ModelTask, NewProvider, Provider, ProviderModel, StorageError,
+    UsageRecord,
 };
 
 /// Messages for the provider error codes, one catalog per supported locale.
@@ -137,6 +141,30 @@ pub struct TaskModelClient {
 }
 
 impl TaskModelClient {
+    /// Records the tokens of every reply in `library`, with their cost, so the month's
+    /// spend can be compared with the budget. The library is locked briefly after each
+    /// reply: don't hold its lock while calling the model.
+    pub fn recording_usage(mut self, library: SharedLibrary) -> Self {
+        let provider_id = self.provider.id;
+        let model_id = self.model.model_id.clone();
+        let task = self.task;
+        let hook: UsageHook = std::sync::Arc::new(move |usage: TokenUsage| {
+            let record = UsageRecord {
+                provider_id,
+                model_id: model_id.clone(),
+                task: Some(task),
+                input_tokens: usage.input_tokens,
+                output_tokens: usage.output_tokens,
+            };
+            if let Err(err) = lock(&library).record_usage(&record) {
+                // Losing one usage row must not fail a reply that was already paid for.
+                eprintln!("trama: cannot record model usage: {err}");
+            }
+        });
+        self.client = self.client.with_usage_hook(hook);
+        self
+    }
+
     /// The limits in effect for the task's model.
     pub fn limits(&self) -> ModelLimits {
         self.model.limits()
@@ -178,7 +206,8 @@ impl TaskModelClient {
 
 /// The client for the model chosen for `task`. Fails with `no_model_for_task` if none is
 /// chosen, `limits_unknown` if its context window is unknown, `missing_key` if the key
-/// is not in the Keychain.
+/// is not in the Keychain, `budget_exceeded` if the user enforces a monthly budget and
+/// the month's spend reached it.
 pub fn task_client(
     library: &Library,
     secrets: &dyn SecretStore,
@@ -197,6 +226,17 @@ pub fn task_client(
             format!(
                 "context window of {} unknown: set it by hand",
                 model.model_id
+            ),
+        ));
+    }
+    let budget = library.budget_status()?;
+    if budget.blocks_calls() {
+        return Err(ProviderError::new(
+            ErrorKind::BudgetExceeded,
+            format!(
+                "spent {} of a monthly budget of {} (millionths)",
+                budget.totals.cost_micros,
+                budget.budget_micros.unwrap_or_default()
             ),
         ));
     }

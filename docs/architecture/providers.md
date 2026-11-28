@@ -25,6 +25,21 @@ described in the [data model](data-model.md#provider). The code is in
   enough for the curator; the recommended default is `claude-haiku-5-5`, where the
   provider offers it.
 
+## Usage, cost and budget
+
+- **Prices.** The user can set, per model, the price of a million prompt and reply tokens
+  (in the currency chosen in Settings). Providers don't expose prices in `GET /models`, so
+  they are never guessed.
+- **Usage.** `TaskModelClient::recording_usage` records the tokens of every reply the
+  provider sends (the `usage` object), with its cost, in the library
+  ([model usage](data-model.md#model-usage)). Retried and refused replies are recorded
+  too, since they are billed. Every job that calls a model wraps its client with it.
+- **Budget.** A monthly budget (UTC calendar month) with a warning threshold, 80% by
+  default. Settings shows the month's spend and warns from the threshold on. If the user
+  turns on the limit, `task_client` refuses a task once the spend reaches the budget,
+  with `budget_exceeded` (not retried: the user raises the budget or turns the limit
+  off). A call already running is never cut off.
+
 ## Robust calls
 
 Provider calls run inside [background jobs](data-model.md#job), so the client is
@@ -47,6 +62,7 @@ translates (`locales/<locale>/providers.ftl`).
 | Structured reply that matches the schema but is empty or placeholder text | Asks again | `degenerate_output` | yes |
 | Prompt too long for the context window | Refuses before sending | `context_exceeded` | no |
 | Unknown context window, no model for the task, missing key | Refuses before sending | `limits_unknown`, `no_model_for_task`, `missing_key` | no |
+| The month's spend reached an enforced budget | Refuses before sending | `budget_exceeded` | no |
 
 - **Backoff**: 1 s before the first retry, doubling up to 30 s, with up to 25% jitter;
   4 attempts per request. A reply with bad content is asked for up to 3 times.

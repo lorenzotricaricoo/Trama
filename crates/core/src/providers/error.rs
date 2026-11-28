@@ -49,6 +49,8 @@ pub mod error_code {
     pub const KEYCHAIN: &str = "keychain";
     /// The library could not be read or written.
     pub const STORAGE: &str = "storage";
+    /// The month's spend reached the budget and the user chose to refuse calls past it.
+    pub const BUDGET_EXCEEDED: &str = "budget_exceeded";
 
     /// Every code, for the translation tests.
     pub const ALL: &[&str] = &[
@@ -72,6 +74,7 @@ pub mod error_code {
         MISSING_KEY,
         KEYCHAIN,
         STORAGE,
+        BUDGET_EXCEEDED,
     ];
 }
 
@@ -106,6 +109,7 @@ pub enum ErrorKind {
     MissingKey,
     Keychain,
     Storage,
+    BudgetExceeded,
 }
 
 /// A failed provider call (principle A4: surfaced with a code, never silent).
@@ -149,6 +153,7 @@ impl ProviderError {
             ErrorKind::MissingKey => MISSING_KEY,
             ErrorKind::Keychain => KEYCHAIN,
             ErrorKind::Storage => STORAGE,
+            ErrorKind::BudgetExceeded => BUDGET_EXCEEDED,
         }
     }
 

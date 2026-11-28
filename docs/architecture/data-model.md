@@ -24,7 +24,9 @@ Library/
   SQLite database. Time Machine backs it up.
 - **Moving the library** (with the [settings](https://github.com/lorenzotricaricoo/Trama/issues/36)):
   the location is stored in a small configuration file next to the default location,
-  never inside the database, so the app can find the library before opening it.
+  never inside the database, so the app can find the library before opening it (see
+  [App configuration](#app-configuration)). A new location applies at the next start;
+  the open library is never moved or copied behind the user's back.
 - **One owner** ([A2](../principles.md#a2--one-owner-of-the-data)): opening a library takes
   an exclusive lock on `trama.lock`. A second process (a second copy of the app, a
   CLI opening the file directly) is refused; the MCP server and the CLI go through the
@@ -67,6 +69,7 @@ erDiagram
     SOURCE_VERSION ||--o{ SUMMARY : "is summarized by"
     PROVIDER ||--o{ PROVIDER_MODEL : "offers"
     PROVIDER_MODEL ||--o{ TASK_MODEL : "is chosen for"
+    PROVIDER_MODEL ||..o{ MODEL_USAGE : "is billed in"
 ```
 
 ### Source
@@ -182,9 +185,23 @@ model, a better prompt) adds a summary; the newest one is shown.
 
 ### Settings
 
-A key/value table for preferences that belong to the library: meeting language, audio
-retention, and so on. Each key is documented where it is used. Secrets are never stored
-here: provider keys live in the macOS Keychain and the database keeps only a reference.
+A key/value table for preferences that belong to the library, read and written as one
+typed set (`LibrarySettings`). A value that can't be read gives its default, so a damaged
+row never stops the app. Secrets are never stored here: provider keys live in the macOS
+Keychain and the database keeps only a reference.
+
+| Key | Value | Default |
+|-----|-------|---------|
+| `meeting.language` | Language of new meetings and of their summaries (BCP 47, for example `it`) | `en` |
+| `audio.retention` | How long audio is kept after a successful transcription: `never`, `7_days`, `30_days` or `always` ([audio retention](#trash-and-audio)) | `never` |
+| `usage.currency` | Currency of model prices and of the budget (ISO 4217), for display only: nothing is converted | `USD` |
+| `budget.monthly_micros` | Monthly budget for language models, in millionths of the currency unit; absent for no budget | absent |
+| `budget.warn_percent` | Share of the budget (1–100) from which the interface warns | `80` |
+| `budget.enforce` | `true` to refuse model calls once the month's spend reaches the budget | `false` |
+
+Preferences of the app on one Mac (interface language, theme, microphone, global
+shortcut, library location) are not library settings: they live in the
+[app configuration](#app-configuration).
 
 ### Job
 
@@ -244,6 +261,7 @@ A model offered by a provider, read from its catalogue (`GET /models`) or added 
 | `listed` | Listed at the last catalogue read. A model that disappears is kept, with its overrides, so a task that uses it fails with a clear error |
 | `context_tokens`, `max_output_tokens` | Limits read from the catalogue, when the provider exposes them |
 | `context_tokens_override`, `max_output_tokens_override` | Limits set by the user; they win over the catalogue |
+| `input_price_micros`, `output_price_micros` | Prices set by the user, per million prompt and reply tokens, in millionths of the currency unit (3 dollars per million tokens is `3000000`); empty when unknown. Reading the catalogue again never touches them |
 | `updated_at` | Bookkeeping |
 
 Limits are never hard-coded ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)):
@@ -264,6 +282,47 @@ The model chosen for each task.
 | `updated_at` | Bookkeeping |
 
 A task without a model fails with `no_model_for_task`, which the interface translates.
+
+### Model usage
+
+One row per reply a provider sent, with the tokens it reported, so the user can follow
+what language models cost against a monthly budget.
+
+| Field | Meaning |
+|-------|---------|
+| `id` | Integer |
+| `at` | When the reply arrived |
+| `provider_id`, `model_id` | The model that answered. Not foreign keys: usage stays when the provider or the model is removed, so the month's spend stays right |
+| `task` | The task the call was made for, if any |
+| `input_tokens`, `output_tokens` | Tokens reported by the provider (`usage.prompt_tokens` and `usage.completion_tokens`, or `input_tokens` and `output_tokens`) |
+| `cost_micros` | Cost from the model's prices at the time of the call, in millionths of the currency unit; empty when a price was unknown |
+
+- Every reply is recorded, retried and refused ones included, since they are billed too.
+  A reply without a `usage` object is not recorded.
+- The **month** runs from midnight UTC on the first day. The spend is the sum of
+  `cost_micros` since then; calls of unpriced models are counted apart, so the interface
+  can say the real spend is higher.
+- Changing a price does not change the cost of calls already recorded.
+
+## App configuration
+
+What belongs to one Mac rather than to the library lives in `settings.json`, next to the
+default library location (`~/Library/Application Support/io.github.lorenzotricaricoo.trama/`),
+because some of it is needed before the library is opened. The file is JSON, written
+atomically; a value that can't be read gives its default, and keys written by a newer
+version are kept.
+
+| Key | Value | Default |
+|-----|-------|---------|
+| `libraryDir` | Absolute path of the library; it must be empty, new or an existing library, and not inside iCloud Drive or another synced folder | the default location |
+| `interfaceLanguage` | `en` or `it` | follows macOS |
+| `theme` | `system`, `light` or `dark` | `system` |
+| `accent` | One of the accents of the [visual direction](../design/visual-direction.md#accent) | `lime` |
+| `microphone` | Input device id | the system default |
+| `globalShortcut` | Shortcut to start and stop recording, as modifiers (`Control`, `Alt`, `Shift`, `Super`) and a `KeyboardEvent.code`, for example `Alt+Super+KeyR` | `Alt+Super+KeyR` (⌥⌘R) |
+
+`TRAMA_LIBRARY` and `TRAMA_LOCALE` still override the library location and the language
+in development.
 
 ## Search
 
@@ -288,8 +347,8 @@ records the embedding model of each vector ([ADR 0003](../adr/0003-hybrid-ai-pro
   30 days. After that it is removed with its versions, segments, summaries, notes and
   tracks; the core returns the audio files to delete.
 - **Audio retention** ([information architecture](../design/information-architecture.md#audio-retention)):
-  the audio of a meeting is removed according to the setting, and `audio_deleted_at`
-  records it. The transcript is the source, so removing audio loses nothing the curator
+  the audio of a meeting is removed according to the setting (`audio.retention`), and
+  `audio_deleted_at` records it. The transcript is the source, so removing audio loses nothing the curator
   needs. When the user changes the setting, it also applies to existing meetings, after
   a confirmation that says how many recordings will be removed.
 

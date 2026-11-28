@@ -5,12 +5,15 @@
 
 mod jobs;
 mod models;
+mod providers;
+mod settings;
 
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
+use trama_core::config::{AppConfig, CONFIG_FILE};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
 use trama_core::jobs::{DeleteAudio, JobHandler, Runner};
 use trama_core::storage::Library;
@@ -41,29 +44,89 @@ const LIBRARY_DIR: &str = "Library";
 
 /// State shared with Tauri commands.
 struct AppState {
-    locale: String,
+    /// The interface locale; it changes when the user picks another language.
+    locale: Mutex<String>,
 }
 
-/// Locales to negotiate: the override if set, otherwise the system preferences.
-fn requested_locales() -> Vec<String> {
+/// Locales to negotiate: the override if set, then the language chosen in Settings,
+/// otherwise the system preferences.
+fn requested_locales(config: &AppConfig) -> Vec<String> {
     match std::env::var(LOCALE_OVERRIDE_ENV) {
         Ok(locale) if !locale.trim().is_empty() => vec![locale],
-        _ => system_locales(),
+        _ => match &config.interface_language {
+            Some(language) => vec![language.clone()],
+            None => system_locales(),
+        },
     }
 }
 
-/// The library folder: the override if set, otherwise inside the app data folder
-/// (`~/Library/Application Support/<identifier>/Library` on macOS).
-fn library_dir<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<PathBuf> {
+/// The library folder: the override if set, then the location chosen in Settings,
+/// otherwise inside the app data folder
+/// (`~/Library/Application Support/<identifier>/Library` on macOS). Returns the folder
+/// and whether the override decided it.
+fn library_dir(config: &AppConfig, default: &Path) -> (PathBuf, bool) {
     match std::env::var_os(LIBRARY_OVERRIDE_ENV) {
-        Some(dir) if !dir.is_empty() => Ok(PathBuf::from(dir)),
-        _ => Ok(app.path().app_data_dir()?.join(LIBRARY_DIR)),
+        Some(dir) if !dir.is_empty() => (PathBuf::from(dir), true),
+        _ => (
+            config
+                .library_dir
+                .clone()
+                .unwrap_or_else(|| default.to_path_buf()),
+            false,
+        ),
     }
+}
+
+/// Reads the app configuration from the app data folder.
+fn load_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<settings::Settings> {
+    let data_dir = app.path().app_data_dir()?;
+    let path = data_dir.join(CONFIG_FILE);
+    let config = AppConfig::load(&path).unwrap_or_else(|err| {
+        eprintln!(
+            "trama: cannot read {}: {err}; using the defaults",
+            path.display()
+        );
+        AppConfig::default()
+    });
+    let default_library = data_dir.join(LIBRARY_DIR);
+    let (open_library, library_overridden) = library_dir(&config, &default_library);
+    Ok(settings::Settings {
+        path,
+        config: Mutex::new(config),
+        open_library,
+        default_library,
+        library_overridden,
+        home: app.path().home_dir().ok(),
+    })
+}
+
+/// Negotiates the interface locale from the configuration and translates the native
+/// menus with it. Returns the locale.
+fn apply_locale<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<String> {
+    let config = app.state::<settings::Settings>().config().clone();
+    let l10n = Localizer::new(&requested_locales(&config), CATALOGS)
+        .expect("the embedded menu catalogs are valid (checked by tests)");
+    let locale = l10n.locale().to_string();
+    app.set_menu(app_menu(app, &l10n)?)?;
+    match app.try_state::<AppState>() {
+        Some(state) => {
+            *state.locale.lock().unwrap_or_else(PoisonError::into_inner) = locale.clone();
+        }
+        None => {
+            app.manage(AppState {
+                locale: Mutex::new(locale.clone()),
+            });
+        }
+    }
+    Ok(locale)
 }
 
 /// Opens the library and starts the job runner with the handlers available so far.
-fn start_core<R: Runtime>(app: &AppHandle<R>) -> Result<jobs::Core, Box<dyn std::error::Error>> {
-    let library = Library::open(library_dir(app)?)?;
+fn start_core<R: Runtime>(
+    app: &AppHandle<R>,
+    library_dir: &Path,
+) -> Result<jobs::Core, Box<dyn std::error::Error>> {
+    let library = Library::open(library_dir)?;
     let recovery = library.recovery();
     if !recovery.is_empty() {
         eprintln!("trama: recovered after an unclean stop: {recovery:?}");
@@ -81,7 +144,11 @@ fn start_core<R: Runtime>(app: &AppHandle<R>) -> Result<jobs::Core, Box<dyn std:
 /// The interface locale negotiated by the core, so the shell and the frontend agree.
 #[tauri::command]
 fn app_locale(state: State<'_, AppState>) -> String {
-    state.locale.clone()
+    state
+        .locale
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .clone()
 }
 
 /// The native menu, with every label taken from the catalogs.
@@ -140,12 +207,8 @@ fn app_menu<R: Runtime>(app: &AppHandle<R>, l10n: &Localizer) -> tauri::Result<M
 
 /// Starts the desktop app.
 pub fn run() {
-    let l10n = Localizer::new(&requested_locales(), CATALOGS)
-        .expect("the embedded menu catalogs are valid (checked by tests)");
-    let locale = l10n.locale().to_string();
-
     tauri::Builder::default()
-        .manage(AppState { locale })
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             app_locale,
             jobs::active_jobs,
@@ -155,13 +218,35 @@ pub fn run() {
             models::download_model,
             models::cancel_model_download,
             models::verify_model,
-            models::remove_model
+            models::remove_model,
+            settings::app_settings,
+            settings::set_interface_language,
+            settings::set_appearance,
+            settings::set_microphone,
+            settings::set_global_shortcut,
+            settings::input_devices,
+            settings::choose_library_folder,
+            settings::set_library_location,
+            settings::reveal_library,
+            settings::library_settings,
+            settings::set_library_settings,
+            settings::budget_status,
+            providers::list_providers,
+            providers::add_provider,
+            providers::update_provider,
+            providers::remove_provider,
+            providers::test_provider,
+            providers::set_model_settings,
+            providers::task_models,
+            providers::set_task_model
         ])
         .setup(move |app| {
-            app.manage(start_core(app.handle())?);
+            let settings = load_settings(app.handle())?;
+            let library_dir = settings.open_library.clone();
+            app.manage(settings);
+            apply_locale(app.handle())?;
+            app.manage(start_core(app.handle(), &library_dir)?);
             app.manage(models::start(app.handle())?);
-            let menu = app_menu(app.handle(), &l10n)?;
-            app.set_menu(menu)?;
             if let Some(window) = app.get_webview_window("main") {
                 window.set_title(&app.package_info().name)?;
             }

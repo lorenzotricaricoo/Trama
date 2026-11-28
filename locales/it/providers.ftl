@@ -21,3 +21,4 @@ provider-error-no-model-for-task = Nessun modello scelto per questa attività. S
 provider-error-missing-key = Manca la chiave API del provider. Aggiungila nelle Impostazioni.
 provider-error-keychain = Trama non è riuscita ad accedere alla chiave API nel Portachiavi.
 provider-error-storage = Trama non è riuscita a leggere o salvare le impostazioni dei provider.
+provider-error-budget-exceeded = Il budget di questo mese per i modelli linguistici è esaurito. Aumentalo o disattiva il limite nelle Impostazioni.
