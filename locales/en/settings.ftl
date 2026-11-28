@@ -19,6 +19,9 @@ settings-edit = Edit
 settings-interface-language = Interface language
 settings-interface-language-desc = The language of menus, buttons and messages.
 settings-language-system = Same as macOS
+settings-group-startup = Startup
+settings-open-at-login = Open at login
+settings-open-at-login-desc = Trama starts in the menu bar, without opening the window, so the shortcut and the menu bar item are ready.
 settings-meeting-language = Meeting language
 settings-meeting-language-desc = The language your meetings are held in. Transcripts and summaries use it; it is never guessed.
 settings-theme = Theme
@@ -192,7 +195,6 @@ settings-shortcut-stop = Cancel
 settings-shortcut-press = Press the keys…
 settings-shortcut-recording = Press the new shortcut, with at least ⌘, ⌥ or ⌃. Press Escape to cancel.
 settings-shortcut-reset = Restore default
-settings-shortcut-note = Trama listens for this shortcut once it can run from the menu bar.
 settings-key-space = Space
 
 ## Data and privacy
@@ -260,6 +262,9 @@ settings-error-url-insecure = Plain http:// works only for servers on this Mac o
 settings-error-unsupported-language = This language isn't available.
 settings-error-unknown-appearance = This appearance isn't available.
 settings-error-invalid-shortcut = Use a key with at least ⌘, ⌥ or ⌃, for example ⌥⌘R.
+settings-error-shortcut-reserved = macOS or Trama already uses this shortcut. Choose another, for example with ⌥ or ⌃.
+settings-error-shortcut-taken = Trama can't listen for this shortcut: another app may be using it. Choose another.
+settings-error-login-item-failed = Couldn't change opening at login. Try again, or check System Settings › General › Login Items.
 settings-error-library-not-absolute = Choose a folder on a disk.
 settings-error-library-not-a-folder = This isn't a folder.
 settings-error-library-folder-not-empty = This folder has other files in it. Choose an empty folder or one that already holds a Trama library.

@@ -14,9 +14,12 @@ name = "trama_desktop"
 tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
+fluent-bundle = "0.16"
 serde = { version = "1", features = ["derive"] }
-tauri = { version = "2.12.7", features = ["protocol-asset"] }
+tauri = { version = "2.12.7", features = ["image-png", "protocol-asset", "tray-icon"] }
+tauri-plugin-autostart = "2.7.0"
 tauri-plugin-dialog = "2.8.4"
+tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-notification = "2.8.1"
 trama-core.workspace = true
 
@@ -30,5 +33,6 @@ objc2-foundation = { version = "0.3.2", default-features = false, features = ["s
 workspace = true
 
 [dev-dependencies]
+muda = { version = "0.20", default-features = false }
 serde_json = "1"
 tempfile = "3"

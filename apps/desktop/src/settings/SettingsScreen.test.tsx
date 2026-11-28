@@ -20,6 +20,7 @@ const appSettings: AppSettings = {
   microphone: null,
   globalShortcut: 'Alt+Super+KeyR',
   defaultGlobalShortcut: 'Alt+Super+KeyR',
+  globalShortcutError: null,
   library: {
     current: '/Users/test/Library/Application Support/Trama',
     next: '/Users/test/Library/Application Support/Trama',
@@ -93,6 +94,8 @@ function mockShell(overrides: Record<string, (args: Record<string, unknown>) => 
         return [];
       case 'input_devices':
         return { devices: [{ id: 'mic-1', name: 'Built-in Microphone' }], defaultId: 'mic-1' };
+      case 'open_at_login':
+        return false;
       case 'plugin:event|listen':
         return 1;
       default:
@@ -493,6 +496,70 @@ describe('SettingsScreen safeguards', () => {
   });
 });
 
+describe('global shortcut and startup', () => {
+  it('says when the stored shortcut is not listening, until another is saved', async () => {
+    const calls = mockShell({
+      app_settings: () => ({ ...appSettings, globalShortcutError: 'shortcut_taken' }),
+    });
+    const user = renderSettings();
+    await user.click(await screen.findByRole('tab', { name: 'Recording' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(/another app may be using it/);
+    await user.click(screen.getByRole('button', { name: /^Change shortcut/ }));
+    await user.keyboard('{Control>}{Alt>}m{/Alt}{/Control}');
+    await waitFor(() =>
+      expect(calls.find((call) => call.cmd === 'set_global_shortcut')?.args).toEqual({
+        shortcut: 'Control+Alt+KeyM',
+      }),
+    );
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^Change shortcut: ⌃⌥M/ })).toBeInTheDocument();
+  });
+
+  it('keeps the shortcut when macOS or Trama already uses the new one', async () => {
+    mockShell({
+      // Commands reject with a code.
+      set_global_shortcut: () => {
+        throw 'shortcut_reserved';
+      },
+    });
+    const user = renderSettings();
+    await user.click(await screen.findByRole('tab', { name: 'Recording' }));
+    await user.click(await screen.findByRole('button', { name: /^Change shortcut/ }));
+    await user.keyboard('{Meta>}n{/Meta}');
+    expect(await screen.findByRole('alert')).toHaveTextContent(/already uses this shortcut/);
+    expect(screen.getByRole('button', { name: /^Change shortcut: ⌥⌘R/ })).toBeInTheDocument();
+  });
+
+  it('turns opening at login on and off', async () => {
+    const calls = mockShell();
+    const user = renderSettings();
+    await user.click(await screen.findByRole('tab', { name: 'General' }));
+    const toggle = await screen.findByRole('switch', { name: /Open at login/ });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    await waitFor(() => expect(toggle).toBeChecked());
+    expect(calls.find((call) => call.cmd === 'set_open_at_login')?.args).toEqual({
+      enabled: true,
+    });
+  });
+
+  it('says when opening at login cannot change', async () => {
+    mockShell({
+      set_open_at_login: () => {
+        throw 'login_item_failed';
+      },
+    });
+    const user = renderSettings();
+    await user.click(await screen.findByRole('tab', { name: 'General' }));
+    const toggle = await screen.findByRole('switch', { name: /Open at login/ });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    await user.click(toggle);
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Login Items/);
+    expect(toggle).not.toBeChecked();
+  });
+});
+
 describe('global shortcut', () => {
   const key = (code: string, mods: Partial<KeyboardEventInit> = {}) =>
     new KeyboardEvent('keydown', { code, ...mods });
@@ -529,6 +596,9 @@ const SETTINGS_CODES = [
   'unsupported_language',
   'unknown_appearance',
   'invalid_shortcut',
+  'shortcut_reserved',
+  'shortcut_taken',
+  'login_item_failed',
   'library_not_absolute',
   'library_not_a_folder',
   'library_folder_not_empty',

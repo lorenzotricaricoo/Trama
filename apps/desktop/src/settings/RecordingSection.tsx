@@ -90,7 +90,7 @@ export function RecordingSection({ app, onApp }: Props) {
       setShortcutError(null);
       try {
         await api.setGlobalShortcut(shortcut);
-        onApp({ ...app, globalShortcut: shortcut });
+        onApp({ ...app, globalShortcut: shortcut, globalShortcutError: null });
       } catch (err) {
         setShortcutError(errorCode(err));
       }
@@ -214,8 +214,8 @@ export function RecordingSection({ app, onApp }: Props) {
         <div role="status" className="set-recording-hint">
           {recording && <p className="set-row-desc">{t('settings-shortcut-recording')}</p>}
         </div>
-        <ErrorText code={shortcutError} />
-        <p className="set-row-desc set-note">{t('settings-shortcut-note')}</p>
+        {/* A change that failed, or else the stored shortcut that is not listening. */}
+        <ErrorText code={shortcutError ?? app.globalShortcutError} />
       </Group>
     </>
   );

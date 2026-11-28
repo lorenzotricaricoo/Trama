@@ -127,6 +127,18 @@ different sources woven into one base. It follows the macOS grid (824 px squircl
 - `python3 scripts/app-icon.py` (from `apps/desktop`, needs `rsvg-convert`) renders the
   bundle sizes with `tauri icon` and the Dock icons from the source, both plain and badged.
 
+### Menu bar icon
+
+The Ordito weave reduced to its threads, three by three, as a **template image**: black
+on transparent, so macOS draws it in the menu bar's own colour, light or dark. While a
+meeting is transcribed its progress shows next to it ("62%"). **While recording** it
+becomes the record dot in the recording red, the only time it has a colour.
+
+- The sources are `icons/source/tray.svg` and `icons/source/tray-recording.svg`; the
+  images in `icons/tray/` are 18 pt at 2x, rendered from `apps/desktop/src-tauri` with
+  `rsvg-convert -w 36 -h 36 icons/source/tray.svg -o icons/tray/tray.png` (the same for
+  `tray-recording`).
+
 ## Motion
 
 Motion explains what happened: where a screen came from, where a doubt went, where

@@ -3,6 +3,8 @@
 //! The shell owns windows, menus and the bridge to the frontend. Everything else
 //! belongs to the core library (principle A1).
 
+mod activity;
+mod background;
 mod dock_icon;
 mod jobs;
 mod meetings;
@@ -13,7 +15,9 @@ mod providers;
 mod quit;
 mod recording;
 mod settings;
+mod shortcut;
 mod summary;
+mod tray;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -63,9 +67,24 @@ const LIBRARY_OVERRIDE_ENV: &str = "TRAMA_LIBRARY";
 const LIBRARY_DIR: &str = "Library";
 
 /// State shared with Tauri commands.
-struct AppState {
+pub(crate) struct AppState {
     /// The interface locale; it changes when the user picks another language.
     locale: Mutex<String>,
+}
+
+impl AppState {
+    pub(crate) fn locale(&self) -> String {
+        self.locale
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+}
+
+/// The shell's texts in the interface locale, once it is known.
+pub(crate) fn localizer<R: Runtime>(app: &AppHandle<R>) -> Option<Localizer> {
+    let locale = app.try_state::<AppState>()?.locale();
+    Localizer::new(&[locale], CATALOGS).ok()
 }
 
 /// Locales to negotiate: the override if set, then the language chosen in Settings,
@@ -207,6 +226,7 @@ fn apply_locale<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<String> {
             });
         }
     }
+    tray::refresh(app);
     Ok(locale)
 }
 
@@ -242,11 +262,7 @@ fn start_core<R: Runtime>(
 /// The interface locale negotiated by the core, so the shell and the frontend agree.
 #[tauri::command]
 fn app_locale(state: State<'_, AppState>) -> String {
-    state
-        .locale
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .clone()
+    state.locale()
 }
 
 /// Texts of the recording panel and its notifications.
@@ -266,7 +282,16 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .app_name(background::LOGIN_ITEM_NAME)
+                .args([background::BACKGROUND_ARG])
+                .build(),
+        )
         .manage(quit::Quit::default())
+        .manage(activity::Activity::default())
+        .manage(shortcut::GlobalShortcut::default())
         .manage(recording::Recorder::default())
         .manage(menu::ShellMenu::<tauri::Wry>::default())
         .invoke_handler(tauri::generate_handler![
@@ -329,13 +354,15 @@ pub fn run() {
             recording::delete_recording_note,
             recording::recording_notes,
             menu::set_menu_state,
+            background::open_at_login,
+            background::set_open_at_login,
             quit::quit_ready,
             quit::quit_cancelled
         ])
         .on_menu_event(|app, event| {
             if event.id() == quit::QUIT_MENU_ID {
                 quit::request(app);
-            } else {
+            } else if !tray::handle_event(app, event.id().as_ref()) {
                 menu::handle_event(app, event.id().as_ref());
             }
         })
@@ -352,8 +379,9 @@ pub fn run() {
                         eprintln!("trama: cannot hide the recording panel: {err}");
                     }
                 } else {
-                    // Closing the main window quits the app: let the editor save first.
-                    quit::request(window.app_handle());
+                    // Closing the main window keeps Trama in the menu bar, with recording
+                    // and processing going on, until the user quits.
+                    background::hide_main(window.app_handle());
                 }
             }
         })
@@ -375,18 +403,41 @@ pub fn run() {
             app.manage(settings);
             apply_locale(app.handle())?;
             if let Some(core) = opening.core {
+                match trama_core::jobs::lock(&core.library).active_jobs() {
+                    Ok(jobs) => activity::seed(app.handle(), &jobs),
+                    Err(err) => eprintln!("trama: cannot read the queued jobs: {err}"),
+                }
                 app.manage(core);
             }
             app.manage(models::start(app.handle())?);
-            if let Some(window) = app.get_webview_window("main") {
+            let shortcut = app
+                .state::<settings::Settings>()
+                .config()
+                .global_shortcut
+                .clone();
+            shortcut::start(app.handle(), &shortcut);
+            tray::install(app.handle())?;
+            if let Some(window) = app.get_webview_window(background::MAIN_WINDOW) {
                 window.set_title(&app.package_info().name)?;
+            }
+            // The window starts hidden: the login item opens Trama in the menu bar only.
+            if background::started_in_background() {
+                background::hide_main(app.handle());
+            } else {
+                background::show_main(app.handle());
             }
             Ok(())
         })
         .build(tauri::generate_context!())
         .expect("error while building the Trama desktop app")
         .run(|app, event| {
+            // Opening Trama again (Finder, Spotlight, the Dock) shows the window.
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen { .. } = event {
+                background::show_main(app);
+            }
             if let RunEvent::Exit = event {
+                activity::stop(app);
                 // Before the runner stops, so the transcription is queued for next time.
                 recording::stop_on_exit(app);
                 if let Some(core) = app.try_state::<jobs::Core>() {
