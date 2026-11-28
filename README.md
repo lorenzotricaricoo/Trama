@@ -23,14 +23,23 @@ Desktop app for meetings, transcription and dictation — macOS & Windows.
 ## Install
 
 Trama is signed but not notarized by Apple
-([ADR 0008](docs/adr/0008-distribution-without-notarization.md)), so macOS asks for
-confirmation the first time:
+([ADR 0008](docs/adr/0008-distribution-without-notarization.md)), so macOS blocks the
+downloaded `.dmg` the first time, and may block the app once more. Each block is lifted
+the same way:
 
 1. Download the `.dmg` from the [latest release](https://github.com/lorenzotricaricoo/Trama/releases).
-2. Open it and drag **Trama** to **Applications**.
-3. Open Trama. macOS says it cannot verify the app: click **Done**.
-4. Open **System Settings → Privacy & Security**, scroll to *Security* and click
-   **Open Anyway** next to the message about Trama, then confirm.
+2. Open it. macOS says it cannot verify the file: click **Done**, not *Move to Trash*.
+3. Open **System Settings → Privacy & Security**, scroll to *Security*, click
+   **Open Anyway** next to the message about the `.dmg` and confirm.
+4. In the window that opens, drag **Trama** to **Applications**.
+5. Open Trama. If macOS shows the same message for Trama, repeat step 3 for it.
+
+If you trust the file you downloaded, you can instead remove the quarantine flag macOS
+puts on downloads, so neither the `.dmg` nor the app is blocked:
+
+```sh
+xattr -d com.apple.quarantine ~/Downloads/Trama_<version>_aarch64.dmg
+```
 
 From then on Trama opens normally. Before the first meeting, in Trama's settings:
 download the transcription model (**Transcription**) and add an AI provider with a
@@ -38,8 +47,10 @@ model for the summary (**Providers**). The first recording asks for the micropho
 the system audio.
 
 Your data stays on your Mac, in
-`~/Library/Application Support/io.github.lorenzotricaricoo.trama`; a new version keeps
-it.
+`~/Library/Application Support/io.github.lorenzotricaricoo.trama`.
+
+To update, download the new `.dmg` the same way and replace Trama in Applications; your
+data and settings stay.
 
 ## Development
 

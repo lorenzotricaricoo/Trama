@@ -48,7 +48,7 @@ The version is written in three places, and `npm run bundle` stops if they diffe
      ../../target/release/bundle/dmg/Trama_0.1.0-alpha.1_aarch64.dmg
    ```
 
-   The notes are the version's section of the changelog, the [first launch](../../README.md#install)
+   The notes are the version's section of the changelog, the [install](../../README.md#install)
    steps and the SHA-256. Drop `--prerelease` for a final version.
 7. Download the `.dmg` from the release page and open it once more: the download is
    quarantined, so this is the path users take, Gatekeeper step included.
@@ -61,7 +61,8 @@ does not have yet is skipped.
 
 **F1 · First launch**
 
-- [ ] The app opens after **Privacy & Security → Open Anyway** (downloaded copy only).
+- [ ] Downloaded copy only: the `.dmg`, and then the app if macOS blocks it again, open
+      after **Privacy & Security → Open Anyway**.
 - [ ] Settings → Transcription: the model downloads, resumes after a pause and is
       reported ready.
 - [ ] Settings → Providers: a provider is added, its key is saved, the connection test
