@@ -3,6 +3,7 @@ import { listen } from '@tauri-apps/api/event';
 import { AnimatePresence, MotionConfig, motion } from 'motion/react';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Button } from 'react-aria-components';
+import { useAppearance } from '../appearance';
 import { useI18n } from '../i18n/I18nProvider';
 import { duration, ease } from '../motion';
 import { SHORTCUTS, useShortcuts } from '../shell/shortcuts';
@@ -55,6 +56,7 @@ type Warnings = Partial<Record<TrackSource, string>>;
 export function RecordingPanel() {
   const { t } = useI18n();
   useThemeClasses();
+  const { reduceMotion } = useAppearance();
   const { status, receivedAt } = useRecordingState();
   const elapsed = useElapsed(status, receivedAt);
   const [compact, setCompact] = useState(false);
@@ -180,7 +182,7 @@ export function RecordingPanel() {
 
   if (compact) {
     return (
-      <MotionConfig reducedMotion="user">
+      <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
         <div className="rec-pill" data-tauri-drag-region>
           <span className="rec-live" aria-hidden />
           <span className="rec-pill-clock" role="timer" data-tauri-drag-region>
@@ -212,7 +214,7 @@ export function RecordingPanel() {
   }
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
       <section className="rec" aria-label={t('record-panel-label')} data-tauri-drag-region>
         <div className="rec-head" data-tauri-drag-region>
           <span className="rec-live" aria-hidden />

@@ -1,16 +1,41 @@
-import { createContext, use, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, use, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { I18nProvider as AriaI18nProvider } from 'react-aria-components';
 import { createBundle, createTranslate, type Locale, type Translate } from './catalogs';
 
 interface I18nValue {
   locale: Locale;
   t: Translate;
+  /** Whether the catalogs have a message, to pick between codes without logging gaps. */
+  has: (id: string) => boolean;
+  /** Switches the interface to another locale (Settings › General). */
+  setLocale: (locale: Locale) => void;
 }
 
 const I18nContext = createContext<I18nValue | null>(null);
 
-export function I18nProvider({ locale, children }: { locale: Locale; children: ReactNode }) {
-  const value = useMemo(() => ({ locale, t: createTranslate(createBundle(locale)) }), [locale]);
+export function I18nProvider({
+  locale: initial,
+  children,
+}: {
+  locale: Locale;
+  children: ReactNode;
+}) {
+  const [locale, setLocale] = useState(initial);
+  // A new locale from the parent wins over the one chosen here.
+  const [prevInitial, setPrevInitial] = useState(initial);
+  if (initial !== prevInitial) {
+    setPrevInitial(initial);
+    setLocale(initial);
+  }
+  const value = useMemo(() => {
+    const bundle = createBundle(locale);
+    return {
+      locale,
+      t: createTranslate(bundle),
+      has: (id: string) => bundle.hasMessage(id),
+      setLocale,
+    };
+  }, [locale]);
 
   useEffect(() => {
     document.documentElement.lang = locale;

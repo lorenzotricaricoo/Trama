@@ -212,10 +212,12 @@ impl JobHandler for Summarize {
 
 impl Summarize {
     fn attempt(&self, job: &Job, ctx: &JobContext) -> Result<(), JobError> {
-        let prepared = {
+        let mut prepared = {
             let library = ctx.library();
             self.prepare(&library, job.target_id)?
         };
+        // Each call counts towards the month's spend and is checked against the budget.
+        prepared.model = prepared.model.recording_usage(ctx.shared_library());
         // The library stays free during the provider calls.
         let summary = generate(&prepared, &|f| ctx.progress(f), &|| ctx.should_stop())?;
         let mut library = ctx.library();

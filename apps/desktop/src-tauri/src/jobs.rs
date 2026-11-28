@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Runtime, State};
+use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use trama_core::jobs::{JobEvent, Runner, SharedLibrary, lock};
 use trama_core::storage::{Id, Job};
 
@@ -15,6 +15,15 @@ pub const JOB_EVENT: &str = "job";
 pub struct Core {
     pub library: SharedLibrary,
     pub runner: Runner,
+}
+
+/// Code of a command that needs the library when none could be opened at start.
+pub const NO_LIBRARY: &str = "storage";
+
+/// The library and the runner; `storage` if no library could be opened at start, so a
+/// command fails with a code instead of a panic.
+pub fn core_state<R: Runtime>(app: &AppHandle<R>) -> Result<State<'_, Core>, String> {
+    app.try_state::<Core>().ok_or_else(|| NO_LIBRARY.to_owned())
 }
 
 /// A job as the frontend sees it.

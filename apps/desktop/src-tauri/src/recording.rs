@@ -123,16 +123,31 @@ pub struct Recorder {
     phase: Mutex<Phase>,
     /// Meetings stopped while the app was open whose notification is still due.
     awaiting: Mutex<HashSet<Id>>,
-    texts: Texts,
+    /// In the interface language, which can change while the app runs.
+    texts: Mutex<Texts>,
 }
 
-impl Recorder {
-    pub fn new(texts: Texts) -> Self {
+impl Default for Recorder {
+    fn default() -> Self {
         Self {
             phase: Mutex::new(Phase::Idle),
             awaiting: Mutex::new(HashSet::new()),
-            texts,
+            texts: Mutex::new(Texts::default()),
         }
+    }
+}
+
+impl Recorder {
+    /// Sets the texts in the interface language.
+    pub fn set_texts(&self, texts: Texts) {
+        *self.texts.lock().unwrap_or_else(PoisonError::into_inner) = texts;
+    }
+
+    fn texts(&self) -> Texts {
+        self.texts
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
     }
 
     fn phase(&self) -> MutexGuard<'_, Phase> {
@@ -284,10 +299,10 @@ fn open_panel<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
         window.show()?;
         return window.set_focus();
     }
-    let title = &app.state::<Recorder>().texts.panel_title;
+    let title = app.state::<Recorder>().texts().panel_title;
     let mut builder =
         WebviewWindowBuilder::new(app, RECORDING_WINDOW, WebviewUrl::App("index.html".into()))
-            .title(title)
+            .title(&title)
             .inner_size(PANEL_SIZE.0, PANEL_SIZE.1)
             .resizable(false)
             .maximizable(false)
@@ -377,7 +392,10 @@ pub async fn start_recording<R: Runtime>(app: AppHandle<R>) -> Result<RecordingS
 
 async fn start<R: Runtime>(app: &AppHandle<R>) -> Result<Active, String> {
     let backend = backend()?;
-    let core = app.state::<Core>();
+    // Without a library (it could not be opened at start) there is nowhere to record.
+    let core = app
+        .try_state::<Core>()
+        .ok_or_else(|| error_code::STORAGE_FAILED.to_owned())?;
     let (meeting_id, started_at, root) = {
         let mut library = lock(&core.library);
         let language = library.meeting_language().map_err(storage_error)?;
@@ -658,7 +676,7 @@ pub fn on_job<R: Runtime>(app: &AppHandle<R>, job: &Job) {
     // Job events may arrive while the runner holds the library: read it from another
     // thread.
     std::thread::spawn(move || {
-        let texts = &app.state::<Recorder>().texts;
+        let texts = app.state::<Recorder>().texts();
         let (title, body) = match outcome {
             Outcome::Ready => {
                 let name = app.try_state::<Core>().and_then(|core| {

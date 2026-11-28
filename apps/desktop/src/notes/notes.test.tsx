@@ -221,9 +221,10 @@ describe('Notes (flow F3)', () => {
     await type('Last words');
     await quit();
     await waitFor(() => expect(commands('quit_ready')).toHaveLength(1), { timeout: 150 });
+    // Only the note and quit commands matter here, not what the shell loads at start.
     const order = core.calls
       .map((call) => call.cmd)
-      .filter((cmd) => cmd !== 'active_jobs' && cmd !== 'recording_status');
+      .filter((cmd) => cmd === 'create_note' || cmd === 'save_note' || cmd.startsWith('quit_'));
     expect(order).toEqual(['create_note', 'quit_ready']);
   });
 

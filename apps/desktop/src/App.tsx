@@ -4,6 +4,7 @@ import { useI18n } from './i18n/I18nProvider';
 import { useJobs } from './jobs/useJobs';
 import { duration, ease } from './motion';
 import { Screen } from './screens/screens';
+import { useStartupNotices } from './settings/useStartupNotices';
 import { CommandBar, useCommandBar, type Command } from './shell/CommandBar';
 import { NAV_ITEMS, navItemOf, useNavigation, type Direction } from './shell/navigation';
 import { useFlushBeforeQuit } from './notes/flush';
@@ -17,6 +18,7 @@ import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
 import { ArrowBendUpLeftIcon, NotePencilIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
+import { useAppearance } from './appearance';
 import { useThemeClasses } from './useThemeClasses';
 
 const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings', 'newNote'];
@@ -35,11 +37,13 @@ const stage: Variants = {
 export function App() {
   const { t } = useI18n();
   useThemeClasses();
+  const { reduceMotion } = useAppearance();
   const nav = useNavigation();
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
   const bar = useCommandBar();
   const jobs = useJobs();
   const notice = useNotice();
+  useStartupNotices(notice.show);
   // A note that could not be saved keeps the app open, with a way out.
   useFlushBeforeQuit(() => notice.show(t('quit-unsaved')));
 
@@ -145,7 +149,7 @@ export function App() {
           : '';
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
       <div className="app" data-collapsed={collapsed || undefined}>
         {/* The content extends under the transparent title bar; this strip moves the window. */}
         <div className="titlebar" data-tauri-drag-region />
