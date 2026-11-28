@@ -528,10 +528,11 @@ fn a_recorded_meeting_gets_a_two_track_transcript() {
     assert!(roles.contains(&Role::Others));
     assert_eq!(roles.last(), Some(&Role::Me));
     // Each turn lies where its clip was placed on the recording's time line (the clips
-    // have some silence of their own at both ends). Without the sidecar, the `others`
-    // turn would land 3 s early, before its window.
+    // have some silence of their own at both ends; the detector closes a stretch a few
+    // hundred milliseconds after the last word). Without the sidecar, the `others` turn
+    // would land 3 s early, before its window.
     let within = |s: &Segment, from: f32, to: f32| {
-        s.start_ms as f32 >= from * 1000.0 && s.end_ms as f32 <= to * 1000.0
+        s.start_ms as f32 >= from * 1000.0 && s.end_ms as f32 <= (to + 0.6) * 1000.0
     };
     for s in &segments {
         let ok = match s.role {

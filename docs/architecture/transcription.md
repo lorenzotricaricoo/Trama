@@ -41,7 +41,7 @@ flowchart LR
     SRC --> BUF["Buffer<br/>last ~36 s"]
     VAD --> DEC["Parakeet<br/>one stretch + padding"]
     BUF --> DEC
-    DEC --> CLK["TrackClock<br/>timing sidecar → recording time"]
+    DEC --> CLK["TrackClock<br/>capture Timeline → recording time"]
     CLK --> MERGE["merge<br/>one timeline, me / others"]
     MERGE --> DB["Library::add_transcription"]
 ```
@@ -68,23 +68,17 @@ flowchart LR
 
 ### Placing the tracks in time
 
-The recorder ([audio capture](https://github.com/lorenzotricaricoo/Trama/issues/25))
-writes a timing sidecar next to each track: JSON Lines whose `start` line gives the
-track's sample rate and the host time the recording started at, and whose `anchor` and
-`stop` lines pair a frame of the file with the host time it was captured at. Mapping
-frames through the anchors removes the late start of the system track, gaps, and clock
+The recorder ([audio capture](audio-capture.md)) writes a timing sidecar next to each
+track, and its `capture::Timeline` maps any frame of the file to recording time through
+the sidecar's anchors. That removes the late start of the system track, gaps, and clock
 drift between devices.
 
-Transcription uses this through a small trait, `TrackClock`:
+Transcription uses it through a small trait, `TrackClock`:
 
-- `SidecarClock` reads the documented sidecar format (start, anchors, stop; a torn last
-  line from a crash is ignored) and interpolates between anchors.
+- `capture::Timeline` implements it, loaded from the track's `timing_path`.
 - `NominalClock` places a track at its nominal sample rate from the start of the
   recording. It is used for a track without a sidecar, and for a sidecar that can't be
   read: the realignment is lost, not the transcript, and the problem is logged.
-
-When the recorder's own `Timeline` type is in the core, it can implement `TrackClock`
-and replace `SidecarClock`.
 
 ## The background job
 
@@ -115,11 +109,12 @@ the resident memory of the process every 200 ms (`MemoryMonitor`) and logs it wi
 speed when it finishes:
 
 ```
-trama: transcribed meeting 0193…: 42 segments, 3600 s of audio in 160 s (22.5x real time), peak memory 2.85 GB
+trama: transcribed meeting 0193…: 3 segments, 51 s of audio in 6 s (8.5x real time), peak memory 2.85 GB
 ```
 
-Measured on the FLEURS check below (M3 Pro): see the pull request of #26 for the numbers
-of the latest run.
+On the FLEURS check below (Apple Silicon, 4 threads): peak resident memory **3.02 GB**
+for the whole test process, about **20× real time** including reading and resampling;
+the model loads in 2–4 s. The speed of a short meeting includes the model load.
 
 ## Native libraries
 
@@ -152,7 +147,7 @@ the unit tests in `src/transcription/`). They use a fake detector and a fake rec
 on synthetic tones (the recognizer "reads" each tone as a word chosen by its pitch), and
 cover: stretches and padding, splitting of long speech without decoding audio twice,
 silence (no decoding at all), stopping, progress, WAV reading and resampling, the
-sidecar clock (late start, drift, torn line), merging two tracks, the real loader without
+placement through the recorder's timing sidecar (late start, damaged sidecar), merging two tracks, the real loader without
 a model, and the job: success, missing model, temporary failures, deleted audio,
 unsupported language, a meeting still recording, cancellation.
 
