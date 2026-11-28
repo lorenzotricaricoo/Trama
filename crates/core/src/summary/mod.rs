@@ -5,14 +5,18 @@
 //!   ([`Library::meeting_language`]); it is never detected.
 //! - A transcript too long for the model's context window is split into parts that fit;
 //!   notes on each part are then merged into one summary, in more rounds if the notes
-//!   don't fit one request either. Nothing is truncated: if even that is impossible the
-//!   job fails with `context_exceeded`.
+//!   don't fit one request either. Sizes are estimated pessimistically and a fifth of the
+//!   room is kept free; if the provider still finds a request too long, the work starts
+//!   again once with parts half the size. Nothing is truncated: if even that is
+//!   impossible the job fails (`context_exceeded`, `bad_request`).
 //! - Prompts and schemas are versioned ([`PROMPT_VERSION`]); each summary records it with
 //!   the model.
 //! - Generating again adds a summary; a title written by the user is never replaced.
 //!
 //! The work runs as a [`JobKind::Summarize`] job ([`Summarize`]): failures are job errors
-//! with a code the interface translates, retried with backoff when that may help.
+//! with a code the interface translates, retried with backoff when that may help. After
+//! the last attempt the meeting is ready anyway (the summary is optional) and the failed
+//! job stays visible for the user to retry; a cancelled job stores nothing.
 
 mod prompt;
 mod split;
@@ -30,8 +34,8 @@ use crate::providers::{
     TaskModelClient, estimate_tokens,
 };
 use crate::storage::{
-    Id, Job, JobKind, KeyPoint, Library, MeetingStatus, ModelLimits, ModelTask, NewSummary,
-    Segment, SourceKind, StorageError, Summary, VersionOrigin,
+    Id, Job, JobKind, JobState, KeyPoint, Library, MeetingStatus, ModelLimits, ModelTask,
+    NewSummary, Segment, SourceKind, StorageError, Summary, VersionOrigin,
 };
 use prompt::{Notes, PointReply};
 
@@ -80,6 +84,10 @@ pub const MIN_INPUT_TOKENS: u32 = 1024;
 /// Tokens kept free in each request for the message framing and for the instruction and
 /// schema the client adds to the prompt when a provider refuses JSON schemas.
 const PROMPT_ALLOWANCE_TOKENS: u32 = 160;
+
+/// Share of the room for text left unused, in percent: token counts are estimates, and a
+/// request that turns out too long costs a whole round of calls.
+pub const INPUT_RESERVE_PERCENT: u32 = 20;
 
 /// Queues the summary of a meeting whose transcription was just stored. The transcription
 /// job calls this once it has added the new version (`Library::add_transcription`).
@@ -183,13 +191,41 @@ impl JobHandler for Summarize {
     }
 
     fn run(&self, job: &Job, ctx: &JobContext) -> Result<(), JobError> {
+        let result = self.attempt(job, ctx);
+        if let Err(err) = &result
+            && !ctx.should_stop()
+            && (!err.retryable || job.attempts >= job.max_attempts)
+        {
+            // This was the last attempt. The transcript is complete and the summary is
+            // optional: the meeting is ready, and the failed job stays visible with its
+            // code until the user retries it.
+            if let Err(storage) = mark_ready(&mut ctx.library(), job.target_id) {
+                eprintln!(
+                    "trama: cannot mark meeting {} as ready: {storage}",
+                    job.target_id
+                );
+            }
+        }
+        result
+    }
+}
+
+impl Summarize {
+    fn attempt(&self, job: &Job, ctx: &JobContext) -> Result<(), JobError> {
         let prepared = {
             let library = ctx.library();
             self.prepare(&library, job.target_id)?
         };
         // The library stays free during the provider calls.
         let summary = generate(&prepared, &|f| ctx.progress(f), &|| ctx.should_stop())?;
-        store(&mut ctx.library(), job.target_id, &prepared, &summary)?;
+        let mut library = ctx.library();
+        // Cancelled or stopping during the last call: write nothing. The stored state
+        // covers a cancellation stored just before its flag is raised.
+        if ctx.should_stop() || library.job(job.id)?.state != JobState::Running {
+            return Err(JobError::stopped());
+        }
+        store(&mut library, job.target_id, &prepared, &summary)?;
+        drop(library);
         ctx.progress(1.0);
         Ok(())
     }
@@ -204,13 +240,20 @@ fn store(
     summary: &NewSummary,
 ) -> Result<Summary, JobError> {
     let stored = library.add_summary(prepared.version_id, summary)?;
+    mark_ready(library, source_id)?;
+    Ok(stored)
+}
+
+/// Moves a meeting waiting for its summary (`processing`) to `ready`.
+fn mark_ready(library: &mut Library, source_id: Id) -> Result<(), StorageError> {
     let source = library.source(source_id)?;
-    if source.deleted_at.is_none()
+    if source.kind == SourceKind::Meeting
+        && source.deleted_at.is_none()
         && library.meeting(source_id)?.status == MeetingStatus::Processing
     {
         library.set_meeting_status(source_id, MeetingStatus::Ready, None)?;
     }
-    Ok(stored)
+    Ok(())
 }
 
 /// Sizes of one request, in tokens.
@@ -249,7 +292,8 @@ impl Budget {
             .saturating_add(schema)
             .saturating_add(header)
             .saturating_add(PROMPT_ALLOWANCE_TOKENS);
-        let input = context.saturating_sub(output).saturating_sub(overhead);
+        let room = context.saturating_sub(output).saturating_sub(overhead);
+        let input = room - room * INPUT_RESERVE_PERCENT / 100;
         if input < MIN_INPUT_TOKENS.max(output) {
             return Err(ProviderError::new(
                 ErrorKind::ContextExceeded,
@@ -263,25 +307,69 @@ impl Budget {
         Ok(Self { output, input })
     }
 
-    /// Room for the input in characters, matching the client's token estimate.
-    fn input_chars(self) -> usize {
-        usize::try_from(self.input)
-            .unwrap_or(usize::MAX)
-            .saturating_mul(3)
+    /// Room for the input, for the splitter.
+    fn input_tokens(self) -> usize {
+        usize::try_from(self.input).unwrap_or(usize::MAX)
+    }
+
+    /// The same request with half the room for text, after the provider found a request
+    /// too long.
+    fn halved(self) -> Self {
+        Self {
+            input: (self.input / 2).max(1),
+            ..self
+        }
     }
 }
 
-/// Writes the summary: in one request if the transcript fits, otherwise part by part and
-/// then merged.
+/// Whether the provider refused a request because it was too long for the model (HTTP
+/// 413, or a 400 or 422 that says so): worth one more try with smaller parts.
+fn is_too_long(err: &JobError) -> bool {
+    if err.code != providers::error_code::BAD_REQUEST {
+        return false;
+    }
+    let detail = err.detail.to_lowercase();
+    detail.starts_with("http 413")
+        || [
+            "context",
+            "too long",
+            "too large",
+            "too many tokens",
+            "token limit",
+            "maximum",
+        ]
+        .iter()
+        .any(|hint| detail.contains(hint))
+}
+
+/// Writes the summary. If the provider finds a request too long despite the estimates,
+/// starts again once with parts half the size.
 fn generate(
     prepared: &Prepared,
     progress: &dyn Fn(f32),
     should_stop: &dyn Fn() -> bool,
 ) -> Result<NewSummary, JobError> {
+    let budget = Budget::new(prepared.model.limits(), &prepared.language)?;
+    match generate_within(prepared, budget, progress, should_stop) {
+        Err(err) if is_too_long(&err) => {
+            generate_within(prepared, budget.halved(), progress, should_stop)
+        }
+        result => result,
+    }
+}
+
+/// Writes the summary within `budget`: in one request if the transcript fits, otherwise
+/// part by part and then merged.
+fn generate_within(
+    prepared: &Prepared,
+    budget: Budget,
+    progress: &dyn Fn(f32),
+    should_stop: &dyn Fn() -> bool,
+) -> Result<NewSummary, JobError> {
     let language = prepared.language.as_str();
-    let budget = Budget::new(prepared.model.limits(), language)?;
-    let max_chars = budget.input_chars();
-    let parts = split::parts(&prepared.segments, max_chars);
+    let sizer = split::Sizer::for_language(language);
+    let max_tokens = budget.input_tokens();
+    let parts = split::parts(&prepared.segments, max_tokens, sizer);
     let points = |points: Vec<PointReply>| key_points(points, &prepared.segments);
     let stop = || {
         if should_stop() {
@@ -341,7 +429,7 @@ fn generate(
     loop {
         stop()?;
         let rendered = prompt::render_notes(&notes);
-        if rendered.chars().count() <= max_chars {
+        if split::notes_tokens(&notes, sizer) <= max_tokens {
             let reply: prompt::SummaryReply = ask(
                 &prepared.model,
                 prompt::merge_system(language),
@@ -352,7 +440,7 @@ fn generate(
             return Ok(new_summary(prepared, reply, points));
         }
         // The notes don't fit one request: combine neighbours until they do.
-        let groups = split::group_notes(&notes, max_chars);
+        let groups = split::group_notes(&notes, max_tokens, sizer);
         if groups.len() == notes.len() {
             return Err(ProviderError::new(
                 ErrorKind::ContextExceeded,
@@ -491,7 +579,13 @@ mod tests {
         };
         let big = Budget::new(limits(200_000, Some(8_000)), "it").unwrap();
         assert_eq!(big.output, SUMMARY_OUTPUT_TOKENS);
-        assert!(big.input > 190_000);
+        // A fifth of the room for text stays unused, as a margin on the estimates.
+        assert!(
+            big.input > 150_000 && big.input <= 200_000 * 4 / 5,
+            "{big:?}"
+        );
+        assert_eq!(big.halved().input, big.input / 2);
+        assert_eq!(big.halved().output, big.output);
 
         let small = Budget::new(limits(8_000, None), "it").unwrap();
         assert_eq!(small.output, 2_000);
@@ -504,5 +598,29 @@ mod tests {
         assert_eq!(err.kind, ErrorKind::ContextExceeded);
         let err = Budget::new(ModelLimits::default(), "it").unwrap_err();
         assert_eq!(err.kind, ErrorKind::LimitsUnknown);
+    }
+
+    #[test]
+    fn requests_too_long_for_the_provider_are_recognized() {
+        let bad = |detail: &str| JobError::permanent("bad_request", detail);
+        for detail in [
+            "HTTP 413: payload",
+            "HTTP 400: {\"error\":{\"message\":\"This model's maximum context length is 8192\"}}",
+            "HTTP 400: prompt is too long: 9000 tokens > 8192",
+            "HTTP 422: input exceeds the token limit",
+        ] {
+            assert!(is_too_long(&bad(detail)), "{detail}");
+        }
+        assert!(!is_too_long(&bad(
+            "HTTP 400: unknown parameter response_format"
+        )));
+        assert!(!is_too_long(&JobError::permanent(
+            "context_exceeded",
+            "notes can't be combined within the context"
+        )));
+        assert!(!is_too_long(&JobError::permanent(
+            "auth_failed",
+            "HTTP 401: too long"
+        )));
     }
 }

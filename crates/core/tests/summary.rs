@@ -3,7 +3,7 @@
 
 mod common;
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::mpsc::{Receiver, channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -623,6 +623,174 @@ fn failures_end_in_the_job_with_a_code() {
     assert_eq!(queued.state, JobState::Queued);
     assert_eq!(queued.error_code.as_deref(), Some("server_error"));
     assert_eq!(queued.run_after, clock.now() + retry_delay(1));
+    // The meeting waits for the summary while attempts are left...
+    assert_eq!(
+        lock(&library).meeting(id).unwrap().status,
+        MeetingStatus::Processing
+    );
+    let mut last = queued;
+    for attempt in 1..JOB_MAX_ATTEMPTS {
+        clock.advance(retry_delay(attempt));
+        runner.notify();
+        last = events.wait_for(summary_settles).pop().unwrap().job;
+    }
+    assert_eq!(last.state, JobState::Failed);
+    assert_eq!(last.attempts, JOB_MAX_ATTEMPTS);
+    assert_eq!(last.error_code.as_deref(), Some("server_error"));
     runner.stop();
-    assert_eq!(lock(&library).latest_summary(id).unwrap(), None);
+    // ...and is ready without it after the last one.
+    let library = lock(&library);
+    assert_eq!(library.latest_summary(id).unwrap(), None);
+    assert_eq!(library.meeting(id).unwrap().status, MeetingStatus::Ready);
+}
+
+#[test]
+fn a_meeting_without_a_summary_model_is_still_ready() {
+    let server = MockServer::start();
+    let (_dir, _clock, mut library, summarize) = configured(&server, 100_000, None);
+    library.clear_task_model(ModelTask::Summary).unwrap();
+    let (id, _) = meeting(&mut library, &short_transcript());
+    let library = Arc::new(Mutex::new(library));
+    let (sink, events) = Events::sink();
+    let runner = Runner::start(Arc::clone(&library), vec![Arc::new(summarize)], sink);
+
+    let job = summary::regenerate(&runner, id).unwrap();
+    let failed = events.wait_for(summary_settles).pop().unwrap().job;
+    runner.stop();
+    assert_eq!(failed.id, job.id);
+    assert_eq!(failed.state, JobState::Failed);
+    assert_eq!(failed.error_code.as_deref(), Some("no_model_for_task"));
+    assert_eq!(failed.attempts, 1);
+    let library = lock(&library);
+    assert_eq!(library.meeting(id).unwrap().status, MeetingStatus::Ready);
+    assert_eq!(library.source(id).unwrap().title, "");
+}
+
+#[test]
+fn a_cancelled_summary_is_not_stored() {
+    let gate = Arc::new(AtomicBool::new(false));
+    let calls = Arc::new(AtomicU32::new(0));
+    let (open, count) = (Arc::clone(&gate), Arc::clone(&calls));
+    // The first reply waits until the test has cancelled its job.
+    let server = MockServer::start_with(move |_| {
+        if count.fetch_add(1, Ordering::SeqCst) == 0 {
+            let deadline = Instant::now() + PATIENCE;
+            while !open.load(Ordering::SeqCst) && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+        }
+        summary_reply("Titolo")
+    });
+    let (_dir, _clock, mut library, summarize) = configured(&server, 100_000, None);
+    let (cancelled, _) = meeting(&mut library, &short_transcript());
+    let (next, _) = meeting(&mut library, &short_transcript());
+    let library = Arc::new(Mutex::new(library));
+    let (sink, events) = Events::sink();
+    let runner = Runner::start(Arc::clone(&library), vec![Arc::new(summarize)], sink);
+
+    let job = summary::regenerate(&runner, cancelled).unwrap();
+    events.wait_for(|e| e.job.id == job.id && e.job.state == JobState::Running);
+    while calls.load(Ordering::SeqCst) == 0 {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    runner.cancel(job.id).unwrap();
+    gate.store(true, Ordering::SeqCst);
+    // The worker takes the next job only once the cancelled one has returned.
+    let other = summary::regenerate(&runner, next).unwrap();
+    let done = events.wait_for(|e| e.job.id == other.id && summary_settles(e));
+    assert_eq!(done.last().unwrap().job.state, JobState::Done);
+    runner.stop();
+
+    let library = lock(&library);
+    assert_eq!(library.latest_summary(cancelled).unwrap(), None);
+    assert_eq!(library.source(cancelled).unwrap().title, "");
+    assert_eq!(library.job(job.id).unwrap().state, JobState::Cancelled);
+    assert!(library.latest_summary(next).unwrap().is_some());
+}
+
+#[test]
+fn a_request_the_provider_finds_too_long_is_split_again() {
+    let segments = long_transcript(40);
+    let (first, last) = (segments[0].text.clone(), segments[39].text.clone());
+    // The provider refuses any request with the whole transcript in it.
+    let server = MockServer::start_with(move |request| {
+        let user = message(request, 1);
+        if user.contains(&first) && user.contains(&last) {
+            Reply::json(
+                400,
+                r#"{"error":{"message":"This model's maximum context length is 8192 tokens"}}"#,
+            )
+        } else {
+            responder(200)(request)
+        }
+    });
+    let (_dir, _clock, mut library, summarize) = configured(&server, 8_192, None);
+    let (id, _) = meeting(&mut library, &segments);
+
+    let summary = summarize.summarize_now(&mut library, id).unwrap();
+    assert_eq!(summary.title, "Revisione del progetto Orsa");
+    let requests = server.requests();
+    // The whole transcript fitted the estimate, so it went in one request (asked in each
+    // response format before giving up), then again in smaller parts.
+    let whole = requests
+        .iter()
+        .take_while(|r| message(r, 1).contains(&segments[39].text))
+        .count();
+    assert!(whole >= 1, "{whole}");
+    let parts = requests[whole..]
+        .iter()
+        .filter(|r| message(r, 0).starts_with("You take notes on one part"))
+        .count();
+    assert!(parts >= 2, "{parts} parts");
+    assert!(message(requests.last().unwrap(), 0).starts_with("You write the summary"));
+}
+
+#[test]
+fn a_provider_that_still_finds_it_too_long_fails_the_job() {
+    let server = MockServer::start_with(|_| {
+        Reply::json(400, r#"{"error":{"message":"prompt is too long"}}"#)
+    });
+    let (_dir, _clock, mut library, summarize) = configured(&server, 100_000, None);
+    let (id, _) = meeting(&mut library, &short_transcript());
+
+    let err = summarize.summarize_now(&mut library, id).unwrap_err();
+    assert_eq!((err.code.as_str(), err.retryable), ("bad_request", false));
+    // Two rounds, each trying the three response formats: no endless loop.
+    assert_eq!(server.requests().len(), 6);
+}
+
+#[test]
+fn japanese_transcripts_are_counted_a_token_per_character() {
+    const CONTEXT: u32 = 8_192;
+    let server = MockServer::start_with(responder(100));
+    let (_dir, _clock, mut library, summarize) = configured(&server, CONTEXT, None);
+    let segments: Vec<NewSegment> = (0..160)
+        .map(|i| NewSegment {
+            role: Role::Others,
+            start_ms: i64::from(i) * 5_000,
+            end_ms: i64::from(i) * 5_000 + 4_000,
+            text: format!("第{i}章について話し合いましたが、まだ何も決めていません。"),
+        })
+        .collect();
+    let meeting_id = library.create_meeting("ja", ManualClock::START).unwrap().id;
+    library
+        .add_transcription(meeting_id, "parakeet-test", &segments)
+        .unwrap();
+
+    summarize.summarize_now(&mut library, meeting_id).unwrap();
+    let requests = server.requests();
+    let parts: Vec<&Recorded> = requests
+        .iter()
+        .filter(|r| message(r, 0).starts_with("You take notes on one part"))
+        .collect();
+    // About 5,000 characters of Japanese: one request at three characters per token, but
+    // more than one at one character per token.
+    assert!(parts.len() >= 2, "{} parts", parts.len());
+    for part in parts {
+        let body = part.json();
+        let tokens = message(part, 1).chars().count() + message(part, 0).len().div_ceil(3);
+        let reply = body["max_tokens"].as_u64().unwrap() as usize;
+        assert!(tokens + reply <= CONTEXT as usize, "{tokens} + {reply}");
+    }
+    assert!(message(&requests[0], 0).contains("Write in Japanese"));
 }

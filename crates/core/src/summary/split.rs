@@ -1,14 +1,74 @@
 //! Splitting a transcript that doesn't fit the model into parts that do.
 //!
-//! Sizes are counted in characters: the token estimate of the provider client is one
-//! token every three characters, rounded up, so `max_chars = budget * 3` keeps a part
-//! within `budget` tokens. Nothing is dropped: every segment ends up whole in one part, or
-//! in consecutive parts if it is longer than a part on its own.
+//! Sizes are counted in tokens with a [`Sizer`], more pessimistic than the provider
+//! client's estimate (three characters per token): prose of languages written with
+//! ideographs or syllabaries counts one character per token, and the dense parts of each
+//! line (the `[HH:MM:SS] Speaker: ` prefix, the headers of notes) two. Nothing is dropped:
+//! every segment ends up whole in one part, or in consecutive parts if it is longer than a
+//! part on its own.
 
 use std::ops::Range;
 
 use super::prompt::{Notes, render_note, segment_prefix};
 use crate::storage::Segment;
+
+/// Characters per token of the dense text around the words: times, speakers, headers.
+const MARKUP_CHARS_PER_TOKEN: usize = 2;
+
+/// How text is counted against a token budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Sizer {
+    /// Characters per token of the words, never more than the client's three.
+    pub chars_per_token: usize,
+}
+
+impl Sizer {
+    /// The sizer for prose in `language` (BCP 47): one character per token for Chinese,
+    /// Japanese and Korean, where tokenizers often spend a token or more per character;
+    /// three otherwise.
+    pub fn for_language(language: &str) -> Self {
+        let primary = language
+            .split(['-', '_'])
+            .next()
+            .unwrap_or(language)
+            .to_lowercase();
+        let chars_per_token = match primary.as_str() {
+            "ja" | "zh" | "ko" | "yue" => 1,
+            _ => 3,
+        };
+        Self { chars_per_token }
+    }
+
+    /// Tokens of words.
+    pub fn words(self, text: &str) -> usize {
+        text.chars()
+            .count()
+            .div_ceil(self.chars_per_token.clamp(1, 3))
+    }
+
+    /// Tokens of markup (times, speakers, headers).
+    pub fn markup(self, text: &str) -> usize {
+        text.chars().count().div_ceil(MARKUP_CHARS_PER_TOKEN)
+    }
+
+    /// Tokens of a note as [`render_note`] writes it: its texts as words, the rest as
+    /// markup.
+    pub fn note(self, note: &Notes) -> usize {
+        let rendered = render_note(note).chars().count();
+        let summary = note.summary.trim();
+        let mut words = self.words(summary);
+        let mut word_chars = summary.chars().count();
+        for (text, _) in &note.key_points {
+            let text = text.trim();
+            words += self.words(text);
+            word_chars += text.chars().count();
+        }
+        words
+            + rendered
+                .saturating_sub(word_chars)
+                .div_ceil(MARKUP_CHARS_PER_TOKEN)
+    }
+}
 
 /// A run of consecutive transcript lines.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,19 +79,18 @@ pub struct Part {
     pub text: String,
 }
 
-/// Splits the transcript into parts of at most `max_chars` characters, in order.
-pub fn parts(segments: &[Segment], max_chars: usize) -> Vec<Part> {
+/// Splits the transcript into parts of at most `max_tokens` tokens, in order.
+pub fn parts(segments: &[Segment], max_tokens: usize, sizer: Sizer) -> Vec<Part> {
     let mut parts = Vec::new();
     let mut current: Option<(Part, usize)> = None;
     for segment in segments.iter().filter(|s| !s.text.trim().is_empty()) {
-        for line in segment_lines(segment, max_chars) {
-            let len = line.chars().count();
-            if let Some((_, chars)) = &current
-                && chars + len > max_chars
+        for (line, tokens) in segment_lines(segment, max_tokens, sizer) {
+            if let Some((_, used)) = &current
+                && used + tokens > max_tokens
             {
                 parts.extend(current.take().map(|(part, _)| part));
             }
-            let (part, chars) = current.get_or_insert_with(|| {
+            let (part, used) = current.get_or_insert_with(|| {
                 (
                     Part {
                         start_ms: segment.start_ms,
@@ -43,35 +102,40 @@ pub fn parts(segments: &[Segment], max_chars: usize) -> Vec<Part> {
             });
             part.text.push_str(&line);
             part.end_ms = part.end_ms.max(segment.end_ms);
-            *chars += len;
+            *used += tokens;
         }
     }
     parts.extend(current.map(|(part, _)| part));
     parts
 }
 
-/// The lines of one segment, each ending with a newline: one line, or several if the
-/// segment alone is longer than `max_chars` (split between words, or inside a word longer
-/// than a line).
-fn segment_lines(segment: &Segment, max_chars: usize) -> Vec<String> {
+/// The lines of one segment with their tokens, each line ending with a newline: one line,
+/// or several if the segment alone is longer than `max_tokens` (split between words, or
+/// inside a word longer than a line).
+fn segment_lines(segment: &Segment, max_tokens: usize, sizer: Sizer) -> Vec<(String, usize)> {
     let prefix = segment_prefix(segment);
+    let prefix_tokens = sizer.markup(&prefix);
     let text = segment
         .text
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    let prefix_len = prefix.chars().count();
-    if prefix_len + text.chars().count() < max_chars {
-        return vec![format!("{prefix}{text}\n")];
+    // The newline counts with the words.
+    let line_tokens = |words: &str| prefix_tokens + sizer.words(words) + sizer.words("\n");
+    if line_tokens(&text) <= max_tokens {
+        return vec![(format!("{prefix}{text}\n"), line_tokens(&text))];
     }
-    // Room for text on a line, after the prefix and before the newline.
-    let room = max_chars.saturating_sub(prefix_len + 1).max(1);
+    // Characters of words that fit on a line, with the newline.
+    let room = max_tokens
+        .saturating_sub(prefix_tokens + 1)
+        .saturating_mul(sizer.chars_per_token.clamp(1, 3))
+        .max(1);
     let mut lines = Vec::new();
     let mut line = String::new();
     let mut line_len = 0;
     let mut flush = |line: &mut String, line_len: &mut usize| {
         if *line_len > 0 {
-            lines.push(format!("{prefix}{line}\n"));
+            lines.push((format!("{prefix}{line}\n"), line_tokens(line)));
             line.clear();
             *line_len = 0;
         }
@@ -100,24 +164,29 @@ fn segment_lines(segment: &Segment, max_chars: usize) -> Vec<String> {
     lines
 }
 
-/// Groups consecutive notes so the rendered notes of each group fit in `max_chars`.
-pub fn group_notes(notes: &[Notes], max_chars: usize) -> Vec<Range<usize>> {
+/// Groups consecutive notes so the notes of each group fit in `max_tokens`.
+pub fn group_notes(notes: &[Notes], max_tokens: usize, sizer: Sizer) -> Vec<Range<usize>> {
     let mut groups = Vec::new();
     let mut start = 0;
-    let mut chars = 0;
+    let mut used = 0;
     for (index, note) in notes.iter().enumerate() {
-        let len = render_note(note).chars().count();
-        if index > start && chars + len > max_chars {
+        let tokens = sizer.note(note);
+        if index > start && used + tokens > max_tokens {
             groups.push(start..index);
             start = index;
-            chars = 0;
+            used = 0;
         }
-        chars += len;
+        used += tokens;
     }
     if start < notes.len() {
         groups.push(start..notes.len());
     }
     groups
+}
+
+/// Tokens of some notes, as [`group_notes`] counts them.
+pub fn notes_tokens(notes: &[Notes], sizer: Sizer) -> usize {
+    notes.iter().map(|note| sizer.note(note)).sum()
 }
 
 /// The start of the segment nearest to `at_ms`: a key point points to where the
@@ -133,7 +202,10 @@ pub fn snap(at_ms: i64, segments: &[Segment]) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::providers::estimate_tokens;
     use crate::storage::{Id, Role};
+
+    const LATIN: Sizer = Sizer { chars_per_token: 3 };
 
     fn segment(seq: u32, start_ms: i64, text: &str) -> Segment {
         Segment {
@@ -174,9 +246,44 @@ mod tests {
     }
 
     #[test]
+    fn languages_with_ideographs_count_a_token_per_character() {
+        assert_eq!(Sizer::for_language("it"), LATIN);
+        assert_eq!(Sizer::for_language("en-GB"), LATIN);
+        for tag in ["ja", "zh-Hant", "ko_KR"] {
+            assert_eq!(Sizer::for_language(tag).chars_per_token, 1, "{tag}");
+        }
+        assert_eq!(Sizer::for_language("ja").words("会議の要約"), 5);
+        assert_eq!(LATIN.words("riunione"), 3);
+    }
+
+    #[test]
+    fn sizes_never_undercount_the_client_estimate() {
+        let segments: Vec<Segment> = (0..50)
+            .map(|i| segment(i, i64::from(i) * 7_000, "Sì."))
+            .collect();
+        for sizer in [LATIN, Sizer::for_language("ja")] {
+            for part in parts(&segments, 120, sizer) {
+                assert!(estimate_tokens(&part.text) as usize <= 120);
+            }
+        }
+    }
+
+    #[test]
+    fn the_line_prefix_counts_as_dense_text() {
+        // "[00:00:00] Me: " is 15 characters: 8 tokens, plus 1 for "Sì" and 1 for the
+        // newline.
+        let segments: Vec<Segment> = (0..40).map(|i| segment(i * 2, 0, "Sì")).collect();
+        let parts = parts(&segments, 90, LATIN);
+        let lines: Vec<usize> = parts.iter().map(|p| p.text.lines().count()).collect();
+        assert_eq!(lines, [9, 9, 9, 9, 4]);
+        // Counting the prefix like words would have put 15 lines in a part.
+        assert!(parts[0].text.chars().count().div_ceil(3) < 90 * 2 / 3);
+    }
+
+    #[test]
     fn a_short_transcript_is_one_part() {
         let segments = [segment(0, 0, "Ciao a tutti"), segment(1, 5_000, "Iniziamo")];
-        let parts = parts(&segments, 10_000);
+        let parts = parts(&segments, 10_000, LATIN);
         assert_eq!(
             parts,
             [Part {
@@ -198,10 +305,10 @@ mod tests {
                 )
             })
             .collect();
-        let parts = parts(&segments, 500);
+        let parts = parts(&segments, 170, LATIN);
         assert!(parts.len() > 10);
         for part in &parts {
-            assert!(part.text.chars().count() <= 500);
+            assert!(part.text.chars().count() <= 510);
         }
         assert_eq!(part_words(&parts), words(&segments));
         // Parts follow each other in time.
@@ -222,16 +329,17 @@ mod tests {
             segment(1, 60_000, &long),
             segment(2, 120_000, &huge_word),
         ];
-        let parts = parts(&segments, 300);
+        let parts = parts(&segments, 100, LATIN);
         for part in &parts {
-            assert!(part.text.chars().count() <= 300, "{}", part.text);
+            assert!(estimate_tokens(&part.text) <= 100, "{}", part.text);
         }
+        // A line holds (100 - 8 prefix tokens - 1 newline) * 3 characters of words.
         let mut expected = words(&segments[..2]);
         expected.extend(
             huge_word
                 .chars()
                 .collect::<Vec<_>>()
-                .chunks(300 - "[00:02:00] Me: ".len() - 1)
+                .chunks((100 - 8 - 1) * 3)
                 .map(|c| c.iter().collect::<String>()),
         );
         assert_eq!(part_words(&parts), expected);
@@ -240,7 +348,10 @@ mod tests {
     #[test]
     fn blank_segments_are_skipped() {
         let segments = [segment(0, 0, "  "), segment(1, 1_000, "Sì")];
-        assert_eq!(parts(&segments, 1_000)[0].text, "[00:00:01] Others: Sì\n");
+        assert_eq!(
+            parts(&segments, 1_000, LATIN)[0].text,
+            "[00:00:01] Others: Sì\n"
+        );
         assert_eq!(snap(0, &segments), Some(1_000));
     }
 
@@ -263,13 +374,18 @@ mod tests {
             start_ms: i * 60_000,
             end_ms: (i + 1) * 60_000,
             summary: "x".repeat(50),
-            key_points: vec![],
+            key_points: vec![("Deciso".into(), Some(i * 60_000))],
         };
         let notes: Vec<Notes> = (0..5).map(note).collect();
-        let one = render_note(&notes[0]).chars().count();
-        assert_eq!(group_notes(&notes, one * 2), [0..2, 2..4, 4..5]);
-        assert_eq!(group_notes(&notes, one * 10), vec![0..5]);
+        let one = LATIN.note(&notes[0]);
+        assert!(one >= estimate_tokens(&render_note(&notes[0])) as usize);
+        assert_eq!(notes_tokens(&notes, LATIN), one * 5);
+        assert_eq!(group_notes(&notes, one * 2, LATIN), [0..2, 2..4, 4..5]);
+        assert_eq!(group_notes(&notes, one * 10, LATIN), vec![0..5]);
         // A note too long for a group still gets one of its own.
-        assert_eq!(group_notes(&notes, 1), [0..1, 1..2, 2..3, 3..4, 4..5]);
+        assert_eq!(
+            group_notes(&notes, 1, LATIN),
+            [0..1, 1..2, 2..3, 3..4, 4..5]
+        );
     }
 }
