@@ -1,5 +1,6 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { useI18n } from '../i18n/I18nProvider';
+import type { Job } from '../jobs/useJobs';
 import type { Navigation, ScreenId } from '../shell/navigation';
 import { SettingsScreen } from '../settings/SettingsScreen';
 import { HouseIcon } from '../ui/icons';
@@ -10,6 +11,7 @@ import { SourcesScreen } from './SourcesScreen';
 
 // The editor (CodeMirror) loads with the first note, not with the app.
 const NoteScreen = lazy(() => import('../notes/NoteScreen'));
+const MeetingScreen = lazy(() => import('../meetings/MeetingScreen'));
 
 function HomeScreen() {
   const { t, locale } = useI18n();
@@ -35,10 +37,12 @@ function HomeScreen() {
 export function Screen({
   id,
   nav,
+  jobs,
   onNotice,
 }: {
   id: ScreenId;
   nav: Navigation;
+  jobs: readonly Job[];
   onNotice: (message: string) => void;
 }) {
   switch (id) {
@@ -48,6 +52,7 @@ export function Screen({
       return (
         <SourcesScreen
           onOpenNote={(noteId) => nav.navigate('note', noteId)}
+          onOpenMeeting={(meetingId) => nav.navigate('meeting', meetingId)}
           onNewNote={() => nav.navigate('note')}
         />
       );
@@ -62,6 +67,12 @@ export function Screen({
             onCreated={nav.setNoteId}
             onNotice={onNotice}
           />
+        </Suspense>
+      );
+    case 'meeting':
+      return nav.meetingId === undefined ? null : (
+        <Suspense fallback={null}>
+          <MeetingScreen meetingId={nav.meetingId} jobs={jobs} onNotice={onNotice} />
         </Suspense>
       );
   }

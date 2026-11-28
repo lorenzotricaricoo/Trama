@@ -4,10 +4,12 @@
 //! belongs to the core library (principle A1).
 
 mod jobs;
+mod meetings;
 mod models;
 mod notes;
 mod providers;
 mod quit;
+mod recording;
 mod settings;
 mod summary;
 
@@ -24,7 +26,8 @@ use trama_core::storage::Library;
 use trama_core::summary::Summarize;
 use trama_core::transcription::SherpaLoader;
 
-/// Catalogs used by the shell itself (native menus). The frontend loads its own.
+/// Catalogs used by the shell itself (native menus, notifications). The frontend loads its
+/// own.
 const CATALOGS: &[Catalog] = &[
     Catalog {
         locale: "en",
@@ -35,6 +38,16 @@ const CATALOGS: &[Catalog] = &[
         locale: "it",
         name: "menu",
         source: include_str!("../../../../locales/it/menu.ftl"),
+    },
+    Catalog {
+        locale: "en",
+        name: "shell",
+        source: include_str!("../../../../locales/en/shell.ftl"),
+    },
+    Catalog {
+        locale: "it",
+        name: "shell",
+        source: include_str!("../../../../locales/it/shell.ftl"),
     },
 ];
 
@@ -180,6 +193,9 @@ fn apply_locale<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<String> {
         .expect("the embedded menu catalogs are valid (checked by tests)");
     let locale = l10n.locale().to_string();
     app.set_menu(app_menu(app, &l10n)?)?;
+    if let Some(recorder) = app.try_state::<recording::Recorder>() {
+        recorder.set_texts(recording_texts(&l10n));
+    }
     match app.try_state::<AppState>() {
         Some(state) => {
             *state.locale.lock().unwrap_or_else(PoisonError::into_inner) = locale.clone();
@@ -227,6 +243,18 @@ fn app_locale(state: State<'_, AppState>) -> String {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .clone()
+}
+
+/// Texts of the recording panel and its notifications.
+fn recording_texts(l10n: &Localizer) -> recording::Texts {
+    let t = |id: &str| l10n.message(id, None);
+    recording::Texts {
+        panel_title: t("recording-panel-title"),
+        ready_title: t("meeting-ready-title"),
+        ready_body: t("meeting-ready-body"),
+        failed_title: t("meeting-failed-title"),
+        failed_body: t("meeting-failed-body"),
+    }
 }
 
 /// The native menu, with every label taken from the catalogs.
@@ -294,7 +322,9 @@ fn app_menu<R: Runtime>(app: &AppHandle<R>, l10n: &Localizer) -> tauri::Result<M
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(quit::Quit::default())
+        .manage(recording::Recorder::default())
         .invoke_handler(tauri::generate_handler![
             app_locale,
             jobs::active_jobs,
@@ -337,6 +367,16 @@ pub fn run() {
             notes::set_note_title,
             notes::open_link,
             notes::list_sources,
+            meetings::get_meeting,
+            recording::start_recording,
+            recording::stop_recording,
+            recording::recording_status,
+            recording::show_recording_panel,
+            recording::set_recording_panel_compact,
+            recording::add_recording_note,
+            recording::update_recording_note,
+            recording::delete_recording_note,
+            recording::recording_notes,
             quit::quit_ready,
             quit::quit_cancelled
         ])
@@ -347,9 +387,18 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                // Closing the window quits the app: let the editor save first.
-                if !window.state::<quit::Quit>().may_close() {
-                    api.prevent_close();
+                if window.state::<quit::Quit>().may_close() {
+                    return;
+                }
+                api.prevent_close();
+                if window.label() == recording::RECORDING_WINDOW {
+                    // Closing the panel only hides it: the recording goes on, and the
+                    // main window can show the panel again.
+                    if let Err(err) = window.hide() {
+                        eprintln!("trama: cannot hide the recording panel: {err}");
+                    }
+                } else {
+                    // Closing the main window quits the app: let the editor save first.
                     quit::request(window.app_handle());
                 }
             }
@@ -383,6 +432,8 @@ pub fn run() {
         .expect("error while building the Trama desktop app")
         .run(|app, event| {
             if let RunEvent::Exit = event {
+                // Before the runner stops, so the transcription is queued for next time.
+                recording::stop_on_exit(app);
                 if let Some(core) = app.try_state::<jobs::Core>() {
                     // Unfinished jobs stay queued and resume at the next start.
                     core.runner.stop();
@@ -460,6 +511,31 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Message ids used by [`recording_texts`].
+    const SHELL_IDS: &[&str] = &[
+        "recording-panel-title",
+        "meeting-ready-title",
+        "meeting-ready-body",
+        "meeting-failed-title",
+        "meeting-failed-body",
+    ];
+
+    #[test]
+    fn every_shell_text_is_translated() {
+        for locale in ["en", "it"] {
+            let l10n = Localizer::new(&[locale], CATALOGS).unwrap();
+            for id in SHELL_IDS {
+                let text = l10n.message(id, None);
+                assert_ne!(text, *id, "{id} is missing in {locale}");
+            }
+        }
+        let l10n = Localizer::new(&["it"], CATALOGS).unwrap();
+        assert_eq!(
+            l10n.message("recording-panel-title", None),
+            "Trama — Registrazione"
+        );
     }
 
     #[test]

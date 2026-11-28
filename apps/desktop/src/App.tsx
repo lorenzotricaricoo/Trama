@@ -1,5 +1,5 @@
 import { AnimatePresence, MotionConfig, motion, type Variants } from 'motion/react';
-import { useLayoutEffect } from 'react';
+import { useState } from 'react';
 import { useI18n } from './i18n/I18nProvider';
 import { useJobs } from './jobs/useJobs';
 import { duration, ease } from './motion';
@@ -8,15 +8,18 @@ import { useStartupNotices } from './settings/useStartupNotices';
 import { CommandBar, useCommandBar, type Command } from './shell/CommandBar';
 import { NAV_ITEMS, navItemOf, useNavigation, type Direction } from './shell/navigation';
 import { useFlushBeforeQuit } from './notes/flush';
+import { showRecordingPanel, startRecording, stopRecording } from './recording/api';
+import { errorCode, recordingErrorMessage } from './recording/errors';
+import { formatClock } from './recording/format';
+import { useElapsed, useRecordingState } from './recording/useRecordingState';
 import { Notice, useNotice } from './shell/Notice';
 import { SHORTCUTS, useShortcuts, type ShortcutId } from './shell/shortcuts';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
-import { useTranslucency } from './shell/useTranslucency';
 import { ArrowBendUpLeftIcon, NotePencilIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
 import { useAppearance } from './appearance';
-import { useColorScheme } from './useColorScheme';
+import { useThemeClasses } from './useThemeClasses';
 
 const COMMAND_BAR_SHORTCUTS: readonly ShortcutId[] = ['commandBar', 'settings', 'newNote'];
 
@@ -33,8 +36,7 @@ const stage: Variants = {
 
 export function App() {
   const { t } = useI18n();
-  const scheme = useColorScheme();
-  const translucent = useTranslucency();
+  useThemeClasses();
   const { reduceMotion } = useAppearance();
   const nav = useNavigation();
   const [collapsed, toggleSidebar] = useSidebarCollapsed();
@@ -45,17 +47,29 @@ export function App() {
   // A note that could not be saved keeps the app open, with a way out.
   useFlushBeforeQuit(() => notice.show(t('quit-unsaved')));
 
-  // The theme classes go on <html>, so that overlays rendered in portals get the tokens too.
-  useLayoutEffect(() => {
-    const root = document.documentElement;
-    const classes = ['t-app', `t-${scheme}`, translucent ? 't-translucent' : 't-opaque'];
-    if (reduceMotion) classes.push('t-calm');
-    root.classList.add(...classes);
-    return () => root.classList.remove(...classes);
-  }, [scheme, translucent, reduceMotion]);
-
-  // Recording arrives with the recording window (#31); until then the button explains it.
-  const record = () => notice.show(t('record-unavailable'));
+  // Flow F2: record, stop (here or in the panel), then the meeting page follows the
+  // transcription and the summary.
+  const recording = useRecordingState((meetingId) => nav.navigate('meeting', meetingId));
+  const elapsed = useElapsed(recording.status, recording.receivedAt);
+  const [busy, setBusy] = useState(false);
+  const failed = (error: unknown) => {
+    const code = errorCode(error);
+    notice.show(t(recordingErrorMessage(code), { code }));
+  };
+  const record = () => {
+    if (busy) return;
+    setBusy(true);
+    const action = recording.status
+      ? stopRecording().then(() => undefined)
+      : startRecording().then(recording.set);
+    action.catch(failed).finally(() => setBusy(false));
+  };
+  const showPanel = () => {
+    showRecordingPanel().catch((error: unknown) => {
+      console.error('Cannot show the recording panel', error);
+    });
+  };
+  const recordLabel = recording.status ? t('record-stop-meeting') : t('record-meeting');
   const sidebarLabel = collapsed ? t('sidebar-expand') : t('sidebar-collapse');
   // Flow F3: ⌘N opens an empty editor; the note exists once its first text is saved.
   const newNote = () => {
@@ -99,7 +113,7 @@ export function App() {
     {
       id: 'record',
       group: 'actions',
-      label: t('record-meeting'),
+      label: recordLabel,
       icon: RecordIcon,
       shortcut: SHORTCUTS.record.label,
       run: record,
@@ -125,7 +139,14 @@ export function App() {
   }
 
   const current = NAV_ITEMS.find((item) => item.id === nav.screen);
-  const title = nav.screen === 'note' ? t('note-title') : current ? t(current.label) : '';
+  const title =
+    nav.screen === 'note'
+      ? t('note-title')
+      : nav.screen === 'meeting'
+        ? t('meeting-title')
+        : current
+          ? t(current.label)
+          : '';
 
   return (
     <MotionConfig reducedMotion={reduceMotion ? 'always' : 'user'}>
@@ -138,15 +159,31 @@ export function App() {
           onNavigate={nav.navigate}
           onToggle={toggleSidebar}
           onRecord={record}
+          recording={
+            recording.status
+              ? { label: t('record-in-progress-short', { clock: formatClock(elapsed) }) }
+              : undefined
+          }
           onCommandBar={bar.open}
         />
         <main className="sheet">
-          <TopBar title={title} canGoBack={nav.canGoBack} onBack={nav.back} jobs={jobs} />
+          <TopBar
+            title={title}
+            canGoBack={nav.canGoBack}
+            onBack={nav.back}
+            jobs={jobs}
+            recordingClock={recording.status ? formatClock(elapsed) : undefined}
+            onShowRecording={showPanel}
+          />
           <div className="stage">
             <AnimatePresence mode="wait" initial={false} custom={nav.direction}>
               <motion.div
                 // Every note gets its own transition, and its own editor.
-                key={nav.screen === 'note' ? `note-${nav.entry}` : nav.screen}
+                key={
+                  nav.screen === 'note' || nav.screen === 'meeting'
+                    ? `${nav.screen}-${nav.entry}`
+                    : nav.screen
+                }
                 className="stage-screen"
                 custom={nav.direction}
                 variants={stage}
@@ -154,7 +191,7 @@ export function App() {
                 animate="center"
                 exit="exit"
               >
-                <Screen id={nav.screen} nav={nav} onNotice={notice.show} />
+                <Screen id={nav.screen} nav={nav} jobs={jobs} onNotice={notice.show} />
               </motion.div>
             </AnimatePresence>
           </div>

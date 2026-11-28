@@ -12,7 +12,47 @@ nav-home = Home
 nav-sources = Fonti
 nav-settings = Impostazioni
 record-meeting = Registra meeting
-record-unavailable = La registrazione non è ancora disponibile: arriva con la finestra di registrazione.
+record-stop-meeting = Ferma la registrazione
+# Pulsante della barra laterale durante la registrazione.
+record-in-progress-short = In corso · { $clock }
+record-show-panel = Mostra la finestra di registrazione
+
+## Finestra di registrazione
+
+record-panel-label = Finestra di registrazione
+record-in-progress = Registrazione in corso
+# Segue il tasto ⌥⌘R.
+record-stop-hint = per fermare
+record-track-me = Io
+record-track-others = Altri
+record-note-placeholder = Scrivi un appunto: si aggancia al minuto
+record-note-label = Appunto
+record-notes-label = Appunti
+record-note-failed = Appunto non salvato: il testo è tornato nel campo, riprova.
+record-reduce = Riduci
+record-expand = Espandi
+record-stop = Stop
+record-stopping = Chiudo…
+record-notice-microphone-silent = Nessun suono dal microfono: controlla che sia acceso e non silenziato.
+record-notice-system-audio-silent = Nessun audio dagli altri: controlla il permesso «Registrazione audio di sistema» in Impostazioni di sistema.
+record-notice-interrupted = Dispositivo audio perso: riprovo a collegarlo, la registrazione continua.
+record-notice-frames-dropped = Il Mac è sotto sforzo: qualche istante di audio potrebbe mancare.
+record-notice-write-failed = Non riesco a scrivere l'audio: il disco potrebbe essere pieno.
+record-notice-track-size-limit = La registrazione ha raggiunto la durata massima di una traccia.
+
+## Errori della registrazione
+
+record-error-microphone-denied = { -brand } non può usare il microfono: consentilo in Impostazioni di sistema → Privacy e sicurezza → Microfono.
+record-error-microphone-restricted = Il microfono è bloccato da un criterio di questo Mac.
+record-error-no-input-device = Nessun microfono collegato.
+record-error-device-open-failed = Non riesco ad aprire il dispositivo audio. Ricollegalo e riprova.
+record-error-system-audio-denied = { -brand } non può registrare l'audio degli altri: consenti «Registrazione audio di sistema» in Impostazioni di sistema → Privacy e sicurezza.
+record-error-system-audio-unavailable = Non riesco a registrare l'audio del Mac: nessuna uscita audio disponibile.
+record-error-write-failed = Non riesco a scrivere l'audio: il disco potrebbe essere pieno.
+record-error-track-size-limit = La registrazione ha superato la durata massima di una traccia.
+record-error-storage-failed = Non riesco a salvare il meeting nella libreria.
+record-error-already-recording = Una registrazione è già in corso.
+record-error-generic = La registrazione non è riuscita ({ $code }).
 
 ## Barra in alto e avvisi
 
@@ -48,7 +88,7 @@ home-empty-title = La tua panoramica parte da qui
 home-empty-body = Qui compariranno gli ultimi meeting, le azioni aperte e i progetti attivi.
 sources-description = Meeting, note e documenti, tenuti così come li hai portati.
 sources-empty-title = Qui arriva tutto quello che porti in { -brand }
-sources-empty-body = Inizia scrivendo una nota. L'elenco completo, con filtri e ricerca, arriva in una prossima versione.
+sources-empty-body = Inizia registrando un meeting o scrivendo una nota. L'elenco completo, con filtri e ricerca, arriva in una prossima versione.
 
 ## Notes
 
@@ -92,3 +132,38 @@ sources-list-label = Fonti
 source-kind-note = Nota
 # Shown when quitting is cancelled because a note could not be saved.
 quit-unsaved = Una nota non è ancora salvata, quindi { -brand } è rimasta aperta. Esci di nuovo entro 30 secondi per uscire comunque.
+
+## Meeting
+
+meeting-title = Meeting
+source-kind-meeting = Meeting
+# Titolo di un meeting finché il riassunto non ne dà uno.
+meeting-untitled = Meeting del { $date }
+meeting-missing = Meeting non trovato
+meeting-minutes = { $count ->
+    [one] 1 minuto
+   *[other] { $count } minuti
+}
+meeting-recording = Registrazione in corso
+meeting-show-panel = Mostra la finestra
+meeting-queued = In attesa della trascrizione
+meeting-transcribing = Trascrizione in corso
+meeting-summarizing = Riassunto in corso
+meeting-retry = Riprova
+meeting-retry-failed = Non riesco a riprovare adesso.
+meeting-summary = Riassunto
+meeting-summary-none = Nessun riassunto.
+meeting-summary-failed = Il riassunto non è riuscito: la trascrizione è comunque pronta.
+meeting-summary-generate = Genera riassunto
+meeting-transcript = Trascrizione
+meeting-transcript-pending = La trascrizione compare qui quando è pronta.
+meeting-note = Appunto
+meeting-error-model-missing = Il modello di trascrizione non è scaricato: scaricalo e riprova.
+meeting-error-no-audio = Il meeting non ha audio da trascrivere.
+meeting-error-audio-missing = L'audio del meeting non c'è più.
+meeting-error-audio-invalid = L'audio del meeting non si legge.
+meeting-error-language-unsupported = La lingua del meeting non è supportata dal modello.
+meeting-error-cancelled = Trascrizione annullata.
+meeting-error-recording-interrupted = L'app si è chiusa durante la registrazione: l'audio potrebbe essere incompleto.
+meeting-error-write-failed = La registrazione non è stata salvata per intero: il disco potrebbe essere pieno.
+meeting-error-generic = La trascrizione non è riuscita ({ $code }).

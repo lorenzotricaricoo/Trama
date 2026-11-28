@@ -79,6 +79,7 @@ vi.mock('@tauri-apps/api/core', () => ({
       }
       case 'quit_ready':
       case 'quit_cancelled':
+      case 'recording_status':
         return Promise.resolve(null);
       default:
         return Promise.reject(new Error(`unexpected command ${cmd}`));

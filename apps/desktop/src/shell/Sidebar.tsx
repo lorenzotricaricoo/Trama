@@ -14,6 +14,8 @@ interface SidebarProps {
   onNavigate: (screen: ScreenId) => void;
   onToggle: () => void;
   onRecord: () => void;
+  /** While recording, the button stops it and shows the time. */
+  recording?: { label: string };
   onCommandBar: () => void;
 }
 
@@ -41,6 +43,7 @@ export function Sidebar({
   onNavigate,
   onToggle,
   onRecord,
+  recording,
   onCommandBar,
 }: SidebarProps) {
   const { t } = useI18n();
@@ -101,10 +104,19 @@ export function Sidebar({
             </kbd>
           </Button>
         </Hint>
-        <Hint label={t('record-meeting')} shortcut={SHORTCUTS.record.label} isDisabled={!collapsed}>
-          <Button className="side-rec" onPress={onRecord}>
+        <Hint
+          label={recording ? t('record-stop-meeting') : t('record-meeting')}
+          shortcut={SHORTCUTS.record.label}
+          isDisabled={!collapsed && !recording}
+        >
+          <Button
+            className="side-rec"
+            data-recording={recording ? true : undefined}
+            aria-label={recording ? t('record-stop-meeting') : undefined}
+            onPress={onRecord}
+          >
             <span className="side-recdot" aria-hidden />
-            <span className="side-label">{t('record-meeting')}</span>
+            <span className="side-label">{recording ? recording.label : t('record-meeting')}</span>
             <kbd className="kbd side-kbd" aria-hidden>
               {SHORTCUTS.record.label}
             </kbd>

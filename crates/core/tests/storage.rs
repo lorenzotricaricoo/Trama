@@ -141,6 +141,21 @@ fn records_a_meeting_with_tracks_and_a_transcription() {
 }
 
 #[test]
+fn a_meeting_that_never_recorded_can_be_discarded() {
+    let (_dir, _clock, mut library) = library();
+    let empty = library.create_meeting("it", ManualClock::START).unwrap();
+    library.discard_meeting(empty.id).unwrap();
+    assert!(library.source(empty.id).is_err());
+
+    let started = library.create_meeting("it", ManualClock::START).unwrap();
+    library
+        .add_track(started.id, &track(started.id, Role::Me))
+        .unwrap();
+    assert!(library.discard_meeting(started.id).is_err());
+    assert!(library.source(started.id).is_ok());
+}
+
+#[test]
 fn one_track_per_role_and_paths_inside_the_library() {
     let (_dir, _, mut library) = library();
     let meeting = library.create_meeting("en", ManualClock::START).unwrap();

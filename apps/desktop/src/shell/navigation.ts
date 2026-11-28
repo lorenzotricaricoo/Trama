@@ -4,12 +4,16 @@ import { GearIcon, HouseIcon, StackIcon, type Icon } from '../ui/icons';
 /**
  * Screens of the app (see docs/design/information-architecture.md). Only phase 1 screens
  * exist: Projects, People and Doubts join in phase 2, Chat in phase 3, each added here when
- * its phase ships. A note is opened from Sources or with ⌘N, not from the sidebar.
+ * its phase ships. A note is opened from Sources or with ⌘N, a meeting from Sources or when
+ * its recording stops; neither from the sidebar.
  */
-export type ScreenId = 'home' | 'sources' | 'settings' | 'note';
+export type ScreenId = 'home' | 'sources' | 'settings' | 'note' | 'meeting';
+
+/** Screens that show one source, below Sources in the sidebar. */
+const SOURCE_SCREENS: readonly ScreenId[] = ['note', 'meeting'];
 
 export interface NavItem {
-  id: Exclude<ScreenId, 'note'>;
+  id: Exclude<ScreenId, 'note' | 'meeting'>;
   /** Message id of the label in the catalogs. */
   label: string;
   icon: Icon;
@@ -24,16 +28,16 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'settings', label: 'nav-settings', icon: GearIcon, place: 'bottom' },
 ];
 
-/** The sidebar item a screen belongs to: a note is a source. */
+/** The sidebar item a screen belongs to: a note or a meeting is a source. */
 export function navItemOf(screen: ScreenId): NavItem['id'] {
-  return screen === 'note' ? 'sources' : screen;
+  return screen === 'note' || screen === 'meeting' ? 'sources' : screen;
 }
 
 /** Position of a screen in the sidebar, used for the direction of the screen transition. */
 function order(screen: ScreenId): number {
   const index = NAV_ITEMS.findIndex((item) => item.id === navItemOf(screen));
-  // A note sits just below Sources.
-  return screen === 'note' ? index + 0.5 : index;
+  // A source sits just below Sources.
+  return SOURCE_SCREENS.includes(screen) ? index + 0.5 : index;
 }
 
 /** Direction of a transition: down when moving further down the sidebar, up otherwise. */
@@ -43,12 +47,17 @@ export interface Navigation {
   screen: ScreenId;
   /** The note shown by the note screen; undefined for a new note not saved yet. */
   noteId: string | undefined;
+  /** The meeting shown by the meeting screen. */
+  meetingId: string | undefined;
   /** Changes at every navigation, even between two notes: a key for the screen transition. */
   entry: number;
   direction: Direction;
   canGoBack: boolean;
-  /** Goes to a screen; for the note screen, to a note or (without an id) to a new one. */
-  navigate: (screen: ScreenId, noteId?: string) => void;
+  /**
+   * Goes to a screen; for the note screen, to a note or (without an id) to a new one; for
+   * the meeting screen, to a meeting.
+   */
+  navigate: (screen: ScreenId, id?: string) => void;
   back: () => void;
   /**
    * Records the id of a new note once it is saved, in the navigation entry that created it
@@ -61,7 +70,8 @@ const MAX_HISTORY = 40;
 
 interface Route {
   screen: ScreenId;
-  noteId?: string;
+  /** The source shown by the note or meeting screen. */
+  id?: string;
   entry: number;
 }
 
@@ -86,17 +96,17 @@ export function useNavigation(initial: ScreenId = 'home'): Navigation {
     direction: 'down',
   }));
 
-  const navigate = useCallback((screen: ScreenId, noteId?: string) => {
+  const navigate = useCallback((screen: ScreenId, id?: string) => {
     setState((current) => {
-      if (current.screen === screen && current.noteId === noteId) return current;
+      if (current.screen === screen && current.id === id) return current;
       const route: Route = {
         screen: current.screen,
-        noteId: current.noteId,
+        id: current.id,
         entry: current.entry,
       };
       return {
         screen,
-        noteId,
+        id,
         entry: nextEntry(),
         history: [...current.history, route].slice(-MAX_HISTORY),
         direction: towards(current.screen, screen),
@@ -119,13 +129,14 @@ export function useNavigation(initial: ScreenId = 'home'): Navigation {
 
   const setNoteId = useCallback((entry: number, noteId: string) => {
     const update = <T extends Route>(route: T): T =>
-      route.entry === entry && route.screen === 'note' ? { ...route, noteId } : route;
+      route.entry === entry && route.screen === 'note' ? { ...route, id: noteId } : route;
     setState((current) => ({ ...update(current), history: current.history.map(update) }));
   }, []);
 
   return {
     screen: state.screen,
-    noteId: state.noteId,
+    noteId: state.screen === 'note' ? state.id : undefined,
+    meetingId: state.screen === 'meeting' ? state.id : undefined,
     entry: state.entry,
     direction: state.direction,
     canGoBack: state.history.length > 0,

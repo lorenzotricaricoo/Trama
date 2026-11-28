@@ -11,10 +11,20 @@ interface TopBarProps {
   canGoBack: boolean;
   onBack: () => void;
   jobs: readonly Job[];
+  /** The time recorded, while recording: a pill that shows the recording panel. */
+  recordingClock?: string;
+  onShowRecording: () => void;
 }
 
 /** Bar at the top of the sheet: Back, where you are, background work. It also moves the window. */
-export function TopBar({ title, canGoBack, onBack, jobs }: TopBarProps) {
+export function TopBar({
+  title,
+  canGoBack,
+  onBack,
+  jobs,
+  recordingClock,
+  onShowRecording,
+}: TopBarProps) {
   const { t } = useI18n();
   return (
     <div className="topbar" data-tauri-drag-region>
@@ -37,6 +47,18 @@ export function TopBar({ title, canGoBack, onBack, jobs }: TopBarProps) {
       </span>
       <div className="topbar-end" data-tauri-drag-region>
         <JobIndicator jobs={jobs} />
+        {recordingClock !== undefined && (
+          <Hint label={t('record-show-panel')} placement="bottom">
+            <Button
+              className="recpill"
+              aria-label={`${t('record-show-panel')} · ${recordingClock}`}
+              onPress={onShowRecording}
+            >
+              <span className="rec-live" aria-hidden />
+              {recordingClock}
+            </Button>
+          </Hint>
+        )}
       </div>
     </div>
   );

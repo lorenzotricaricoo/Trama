@@ -28,7 +28,6 @@ export { SlidersHorizontalIcon } from '@phosphor-icons/react/dist/csr/SlidersHor
 export { SparkleIcon } from '@phosphor-icons/react/dist/csr/Sparkle';
 export { TrashIcon } from '@phosphor-icons/react/dist/csr/Trash';
 export { WarningIcon } from '@phosphor-icons/react/dist/csr/Warning';
-export { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 export { CloudIcon } from '@phosphor-icons/react/dist/csr/Cloud';
 export { DesktopIcon } from '@phosphor-icons/react/dist/csr/Desktop';
 export { HardDrivesIcon } from '@phosphor-icons/react/dist/csr/HardDrives';
@@ -48,4 +47,6 @@ export { LinkIcon } from '@phosphor-icons/react/dist/csr/Link';
 export { PencilSimpleLineIcon } from '@phosphor-icons/react/dist/csr/PencilSimpleLine';
 export { ColumnsIcon } from '@phosphor-icons/react/dist/csr/Columns';
 export { EyeIcon } from '@phosphor-icons/react/dist/csr/Eye';
+export { ArrowsOutSimpleIcon } from '@phosphor-icons/react/dist/csr/ArrowsOutSimple';
+export { WaveformIcon } from '@phosphor-icons/react/dist/csr/Waveform';
 export type { Icon } from '@phosphor-icons/react/dist/lib/types';
