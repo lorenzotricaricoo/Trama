@@ -2,7 +2,8 @@
 # Builds Trama.app and the .dmg, signed with a stable identity, and checks the result.
 #
 #   scripts/bundle-macos.sh            release build
-#   scripts/bundle-macos.sh --debug    debug build (faster, same signature)
+#   scripts/bundle-macos.sh --debug    debug build (faster, same signature), named
+#                                      "Trama Dev" with the DEV icon (tauri.debug.conf.json)
 #
 # The signing identity is never committed. It is read from, in order:
 #   1. the TRAMA_SIGNING_IDENTITY environment variable
@@ -17,10 +18,12 @@ cd "$(dirname "$0")/.."
 REPO_ROOT="$(cd ../.. && pwd)"
 
 PROFILE=release
+APP_NAME=Trama
 TAURI_ARGS=()
 if [[ "${1:-}" == "--debug" ]]; then
   PROFILE=debug
-  TAURI_ARGS+=(--debug)
+  APP_NAME="Trama Dev"
+  TAURI_ARGS+=(--debug --config src-tauri/tauri.debug.conf.json)
 elif [[ -n "${1:-}" ]]; then
   echo "Unknown option: $1 (use --debug or nothing)" >&2
   exit 2
@@ -54,7 +57,7 @@ fi
 APPLE_SIGNING_IDENTITY="$IDENTITY" npx tauri build ${TAURI_ARGS[@]+"${TAURI_ARGS[@]}"} --bundles app,dmg
 
 BUNDLE="$REPO_ROOT/target/$PROFILE/bundle"
-APP="$BUNDLE/macos/Trama.app"
+APP="$BUNDLE/macos/$APP_NAME.app"
 DMG="$(ls -t "$BUNDLE"/dmg/*.dmg | head -n 1)"
 
 codesign --verify --strict --deep "$APP"

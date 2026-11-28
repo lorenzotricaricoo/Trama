@@ -41,7 +41,7 @@ From `apps/desktop`:
 
 ```sh
 npm run bundle              # release: target/release/bundle/{macos,dmg}
-npm run bundle -- --debug   # debug build, same signature
+npm run bundle -- --debug   # debug build "Trama Dev" with the DEV icon, same signature
 ```
 
 The script signs `Trama.app` and the `.dmg`, verifies the signature and prints the
