@@ -231,6 +231,9 @@ so they survive a restart, and run one at a time.
   queue after 30 seconds, doubling at each attempt up to one hour; after the last
   attempt, or on a permanent error, the job is `failed` and the interface shows why
   ([A4](../principles.md#a4--llm-calls-are-robust-from-day-one)). The user can retry it.
+- **Closing the window** does not stop anything: Trama stays in the menu bar and jobs
+  go on until the user quits. While a meeting is recorded or processed the Mac does not
+  go to sleep, and quitting asks for confirmation.
 - **Quitting the app** stops the running job and leaves it in the queue, without
   counting the attempt; it resumes at the next start in the same place.
 - **After a crash**, opening the library puts running jobs back in the queue (or marks

@@ -19,6 +19,9 @@ settings-edit = Modifica
 settings-interface-language = Lingua dell'interfaccia
 settings-interface-language-desc = La lingua di menu, pulsanti e messaggi.
 settings-language-system = Come macOS
+settings-group-startup = Avvio
+settings-open-at-login = Apri all'accesso
+settings-open-at-login-desc = Trama si avvia nella barra dei menu, senza aprire la finestra, così la scorciatoia e il menu sono pronti.
 settings-meeting-language = Lingua delle riunioni
 settings-meeting-language-desc = La lingua in cui si svolgono le tue riunioni. Trascrizioni e riassunti la usano; non viene mai indovinata.
 settings-theme = Tema
@@ -192,7 +195,6 @@ settings-shortcut-stop = Annulla
 settings-shortcut-press = Premi i tasti…
 settings-shortcut-recording = Premi la nuova scorciatoia, con almeno ⌘, ⌥ o ⌃. Premi Esc per annullare.
 settings-shortcut-reset = Ripristina predefinita
-settings-shortcut-note = Trama ascolta questa scorciatoia quando potrà funzionare dalla barra dei menu.
 settings-key-space = Spazio
 
 ## Dati e privacy
@@ -260,6 +262,9 @@ settings-error-url-insecure = Il semplice http:// funziona solo per server su qu
 settings-error-unsupported-language = Questa lingua non è disponibile.
 settings-error-unknown-appearance = Questo aspetto non è disponibile.
 settings-error-invalid-shortcut = Usa un tasto con almeno ⌘, ⌥ o ⌃, per esempio ⌥⌘R.
+settings-error-shortcut-reserved = macOS o Trama usano già questa scorciatoia. Scegline un'altra, per esempio con ⌥ o ⌃.
+settings-error-shortcut-taken = Trama non riesce ad ascoltare questa scorciatoia: forse la usa un'altra app. Scegline un'altra.
+settings-error-login-item-failed = Non è stato possibile cambiare l'apertura all'accesso. Riprova o controlla Impostazioni di Sistema › Generali › Elementi login.
 settings-error-library-not-absolute = Scegli una cartella su un disco.
 settings-error-library-not-a-folder = Questa non è una cartella.
 settings-error-library-folder-not-empty = Questa cartella contiene altri file. Scegli una cartella vuota o una che contiene già una libreria di Trama.

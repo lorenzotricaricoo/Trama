@@ -126,6 +126,8 @@ pub struct AppSettingsPayload {
     pub microphone: Option<String>,
     pub global_shortcut: String,
     pub default_global_shortcut: &'static str,
+    /// Why the stored shortcut is not listening (`shortcut_taken`), if it is not.
+    pub global_shortcut_error: Option<&'static str>,
     pub library: LibraryLocation,
 }
 
@@ -144,7 +146,7 @@ fn location(settings: &Settings) -> LibraryLocation {
     }
 }
 
-fn payload(settings: &Settings) -> AppSettingsPayload {
+fn payload(settings: &Settings, shortcut_error: Option<&'static str>) -> AppSettingsPayload {
     let config = settings.config().clone();
     AppSettingsPayload {
         interface_language: config.interface_language,
@@ -155,6 +157,7 @@ fn payload(settings: &Settings) -> AppSettingsPayload {
         microphone: config.microphone,
         global_shortcut: config.global_shortcut,
         default_global_shortcut: trama_core::config::DEFAULT_GLOBAL_SHORTCUT,
+        global_shortcut_error: shortcut_error,
         library: location(settings),
     }
 }
@@ -184,8 +187,11 @@ pub fn storage_code(err: StorageError) -> String {
 
 /// The app configuration.
 #[tauri::command]
-pub fn app_settings(settings: State<'_, Settings>) -> AppSettingsPayload {
-    payload(&settings)
+pub fn app_settings(
+    settings: State<'_, Settings>,
+    shortcut: State<'_, crate::shortcut::GlobalShortcut>,
+) -> AppSettingsPayload {
+    payload(&settings, shortcut.error())
 }
 
 /// Sets the interface language (`None` follows macOS), translates the native menus again
@@ -260,13 +266,25 @@ pub fn set_microphone(settings: State<'_, Settings>, device: Option<String>) -> 
         .map(drop)
 }
 
-/// Sets the global shortcut that starts and stops recording. It is stored here; the menu
-/// bar item (#32) registers it with the system.
+/// Sets the global shortcut that starts and stops recording, and listens for it instead of
+/// the current one. A shortcut that macOS or Trama already uses, or that cannot be
+/// registered, is refused and the current one stays.
 #[tauri::command]
-pub fn set_global_shortcut(settings: State<'_, Settings>, shortcut: String) -> Result<(), String> {
-    settings
-        .update(|config| config.set_global_shortcut(&shortcut))
-        .map(drop)
+pub fn set_global_shortcut<R: Runtime>(
+    app: AppHandle<R>,
+    settings: State<'_, Settings>,
+    shortcut: String,
+) -> Result<(), String> {
+    if !trama_core::config::is_valid_shortcut(&shortcut) {
+        return Err(config_error::INVALID_SHORTCUT.to_owned());
+    }
+    crate::shortcut::replace(&app, &shortcut, || {
+        settings
+            .update(|config| config.set_global_shortcut(&shortcut))
+            .map(drop)
+    })?;
+    crate::tray::refresh(&app);
+    Ok(())
 }
 
 /// A microphone, as the frontend sees it.
@@ -796,9 +814,11 @@ mod tests {
     #[test]
     fn payloads_use_the_frontend_names() {
         let dir = tempfile::tempdir().unwrap();
-        let json = serde_json::to_value(payload(&settings(dir.path()))).unwrap();
+        let json =
+            serde_json::to_value(payload(&settings(dir.path()), Some("shortcut_taken"))).unwrap();
         assert_eq!(json["theme"], "system");
         assert_eq!(json["globalShortcut"], "Alt+Super+KeyR");
+        assert_eq!(json["globalShortcutError"], "shortcut_taken");
         assert_eq!(json["library"]["restartRequired"], false);
 
         let library: LibrarySettingsPayload = LibrarySettings::default().into();

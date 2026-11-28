@@ -22,6 +22,7 @@ import {
 import { SHORTCUTS } from './shell/shortcuts';
 import { Sidebar } from './shell/Sidebar';
 import { TopBar } from './shell/TopBar';
+import { useShellEvents } from './shell/useShellEvents';
 import { useSidebarCollapsed } from './shell/useSidebarCollapsed';
 import { ArrowBendUpLeftIcon, NotePencilIcon, RecordIcon, SidebarSimpleIcon } from './ui/icons';
 import { useAppearance } from './appearance';
@@ -68,6 +69,15 @@ export function App() {
       : startRecording().then(recording.set);
     action.catch(failed).finally(() => setBusy(false));
   };
+  // The menu bar item and the global shortcut act without the window; it shows what failed
+  // and opens the meetings chosen there.
+  useShellEvents({
+    onRecordingError: (code) => failed(code),
+    onOpenMeeting: (meetingId) => {
+      bar.close();
+      nav.navigate('meeting', meetingId);
+    },
+  });
   const showPanel = () => {
     showRecordingPanel().catch((error: unknown) => {
       console.error('Cannot show the recording panel', error);

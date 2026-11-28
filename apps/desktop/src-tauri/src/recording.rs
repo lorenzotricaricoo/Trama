@@ -44,6 +44,10 @@ pub const RECORDING_LEVEL_EVENT: &str = "recording-level";
 /// Sent to every window for a warning or a device change during the recording.
 pub const RECORDING_NOTICE_EVENT: &str = "recording-notice";
 
+/// Sent to the main window when starting or stopping from the menu bar item or the global
+/// shortcut failed. The payload is the error code.
+pub const RECORDING_ERROR_EVENT: &str = "recording-error";
+
 /// Error codes of this module, on top of the capture codes
 /// (`trama_core::capture::error_code`). The interface translates them.
 pub mod error_code {
@@ -347,6 +351,7 @@ fn close_panel<R: Runtime>(app: &AppHandle<R>) {
 }
 
 fn emit_state<R: Runtime>(app: &AppHandle<R>, payload: RecordingStatePayload) {
+    crate::activity::set_recording(app, payload.recording.is_some());
     if let Err(err) = app.emit(RECORDING_STATE_EVENT, payload) {
         eprintln!("trama: cannot send the recording state: {err}");
     }
@@ -508,6 +513,39 @@ pub async fn stop_recording<R: Runtime>(app: AppHandle<R>) -> Result<String, Str
         },
     );
     result.map(|()| meeting_id.to_string())
+}
+
+/// Starts or stops recording from the menu bar item or the global shortcut, with or
+/// without the main window. A failure brings the main window up, which explains it; a
+/// press while the recording is starting or stopping does nothing.
+pub fn toggle<R: Runtime>(app: &AppHandle<R>) {
+    let recording = match &*app.state::<Recorder>().phase() {
+        Phase::Idle => false,
+        Phase::Recording(_) => true,
+        Phase::Starting | Phase::Stopping => return,
+    };
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = if recording {
+            stop_recording(app.clone()).await.map(drop)
+        } else {
+            start_recording(app.clone()).await.map(drop)
+        };
+        match result {
+            Ok(()) => {}
+            // Started or stopped meanwhile from elsewhere: nothing to tell.
+            Err(code)
+                if code == error_code::ALREADY_RECORDING || code == error_code::NOT_RECORDING => {}
+            Err(code) => {
+                crate::background::show_main(&app);
+                if let Err(err) =
+                    app.emit_to(crate::background::MAIN_WINDOW, RECORDING_ERROR_EVENT, code)
+                {
+                    eprintln!("trama: cannot report the recording error: {err}");
+                }
+            }
+        }
+    });
 }
 
 /// Stops and keeps a running recording when the app quits. Its transcription runs at the

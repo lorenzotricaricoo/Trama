@@ -23,6 +23,8 @@ export interface AppSettings {
   microphone: string | null;
   globalShortcut: string;
   defaultGlobalShortcut: string;
+  /** Why the stored shortcut is not listening (`shortcut_taken`), if it is not. */
+  globalShortcutError: string | null;
   library: LibraryLocation;
 }
 
@@ -163,6 +165,8 @@ export const api = {
   setReduceMotion: (enabled: boolean) => invoke<void>('set_reduce_motion', { enabled }),
   setMicrophone: (device: string | null) => invoke<void>('set_microphone', { device }),
   setGlobalShortcut: (shortcut: string) => invoke<void>('set_global_shortcut', { shortcut }),
+  openAtLogin: () => invoke<boolean>('open_at_login'),
+  setOpenAtLogin: (enabled: boolean) => invoke<void>('set_open_at_login', { enabled }),
   inputDevices: () => invoke<InputDevices>('input_devices'),
   chooseLibraryFolder: () => invoke<ChosenFolder | null>('choose_library_folder'),
   setLibraryLocation: (path: string | null) =>
