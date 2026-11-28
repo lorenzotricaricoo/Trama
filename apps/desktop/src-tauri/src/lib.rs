@@ -298,6 +298,7 @@ pub fn run() {
             settings::app_settings,
             settings::set_interface_language,
             settings::set_appearance,
+            settings::set_reduce_transparency,
             settings::set_microphone,
             settings::set_global_shortcut,
             settings::input_devices,

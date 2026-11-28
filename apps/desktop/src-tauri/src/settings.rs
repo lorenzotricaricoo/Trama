@@ -116,6 +116,7 @@ pub struct AppSettingsPayload {
     pub interface_language: Option<String>,
     pub theme: String,
     pub accent: String,
+    pub reduce_transparency: bool,
     /// Microphone by device id; `None` follows the system default.
     pub microphone: Option<String>,
     pub global_shortcut: String,
@@ -144,6 +145,7 @@ fn payload(settings: &Settings) -> AppSettingsPayload {
         interface_language: config.interface_language,
         theme: config.theme,
         accent: config.accent,
+        reduce_transparency: config.reduce_transparency,
         microphone: config.microphone,
         global_shortcut: config.global_shortcut,
         default_global_shortcut: trama_core::config::DEFAULT_GLOBAL_SHORTCUT,
@@ -204,6 +206,17 @@ pub fn set_appearance(
 ) -> Result<(), String> {
     settings
         .update(|config| config.set_appearance(&theme, &accent))
+        .map(drop)
+}
+
+/// Keeps the window opaque even when macOS keeps transparency on.
+#[tauri::command]
+pub fn set_reduce_transparency(settings: State<'_, Settings>, enabled: bool) -> Result<(), String> {
+    settings
+        .update(|config| {
+            config.reduce_transparency = enabled;
+            Ok(())
+        })
         .map(drop)
 }
 

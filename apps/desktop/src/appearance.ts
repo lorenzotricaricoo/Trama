@@ -22,9 +22,11 @@ export type Accent = (typeof ACCENTS)[number];
 export interface Appearance {
   theme: Theme;
   accent: Accent;
+  /** Opaque window even when macOS keeps transparency on. */
+  reduceTransparency: boolean;
 }
 
-const DEFAULT: Appearance = { theme: 'system', accent: 'lime' };
+const DEFAULT: Appearance = { theme: 'system', accent: 'lime', reduceTransparency: false };
 
 let current: Appearance = DEFAULT;
 const listeners = new Set<() => void>();
@@ -62,10 +64,13 @@ export async function loadAppearance(): Promise<void> {
     return;
   }
   try {
-    const saved = await invoke<{ theme: unknown; accent: unknown }>('app_settings');
+    const saved = await invoke<{ theme: unknown; accent: unknown; reduceTransparency: unknown }>(
+      'app_settings',
+    );
     publish({
       theme: isTheme(saved.theme) ? saved.theme : DEFAULT.theme,
       accent: isAccent(saved.accent) ? saved.accent : DEFAULT.accent,
+      reduceTransparency: saved.reduceTransparency === true,
     });
   } catch (error) {
     console.error('Cannot read the appearance, using the defaults', error);

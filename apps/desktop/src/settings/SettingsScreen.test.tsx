@@ -15,6 +15,7 @@ const appSettings: AppSettings = {
   interfaceLanguage: null,
   theme: 'system',
   accent: 'lime',
+  reduceTransparency: false,
   microphone: null,
   globalShortcut: 'Alt+Super+KeyR',
   defaultGlobalShortcut: 'Alt+Super+KeyR',
@@ -159,6 +160,20 @@ describe('SettingsScreen', () => {
         args: { settings: { ...librarySettings, audioRetention: '30_days' } },
       }),
     );
+  });
+
+  it('saves Reduce transparency and makes the window opaque', async () => {
+    const calls = mockShell();
+    const user = renderSettings();
+    await sections();
+
+    const toggle = await screen.findByRole('switch', { name: /Reduce transparency/ });
+    expect(toggle).not.toBeChecked();
+    await user.click(toggle);
+    await waitFor(() =>
+      expect(calls).toContainEqual({ cmd: 'set_reduce_transparency', args: { enabled: true } }),
+    );
+    expect(toggle).toBeChecked();
   });
 
   it('translates an error code and undoes the change', async () => {

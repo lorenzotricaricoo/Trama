@@ -141,6 +141,9 @@ pub struct AppConfig {
     pub theme: String,
     /// One of [`ACCENTS`].
     pub accent: String,
+    /// Opaque window even when macOS keeps transparency on (macOS's own Reduce
+    /// transparency always wins).
+    pub reduce_transparency: bool,
     /// Microphone by device id; `None` follows the system default.
     pub microphone: Option<String>,
     /// Global shortcut to start and stop recording, as `Modifier+…+Code` with
@@ -157,6 +160,7 @@ impl Default for AppConfig {
             interface_language: None,
             theme: THEMES[0].to_owned(),
             accent: ACCENTS[0].to_owned(),
+            reduce_transparency: false,
             microphone: None,
             global_shortcut: DEFAULT_GLOBAL_SHORTCUT.to_owned(),
             other: Map::new(),
@@ -168,6 +172,7 @@ const KEY_LIBRARY_DIR: &str = "libraryDir";
 const KEY_INTERFACE_LANGUAGE: &str = "interfaceLanguage";
 const KEY_THEME: &str = "theme";
 const KEY_ACCENT: &str = "accent";
+const KEY_REDUCE_TRANSPARENCY: &str = "reduceTransparency";
 const KEY_MICROPHONE: &str = "microphone";
 const KEY_GLOBAL_SHORTCUT: &str = "globalShortcut";
 const KNOWN_KEYS: &[&str] = &[
@@ -175,6 +180,7 @@ const KNOWN_KEYS: &[&str] = &[
     KEY_INTERFACE_LANGUAGE,
     KEY_THEME,
     KEY_ACCENT,
+    KEY_REDUCE_TRANSPARENCY,
     KEY_MICROPHONE,
     KEY_GLOBAL_SHORTCUT,
 ];
@@ -254,6 +260,10 @@ impl AppConfig {
             accent: string(&map, KEY_ACCENT)
                 .filter(|accent| ACCENTS.contains(&accent.as_str()))
                 .unwrap_or(defaults.accent),
+            reduce_transparency: map
+                .get(KEY_REDUCE_TRANSPARENCY)
+                .and_then(Value::as_bool)
+                .unwrap_or(defaults.reduce_transparency),
             microphone: string(&map, KEY_MICROPHONE).filter(|id| !id.is_empty()),
             global_shortcut: string(&map, KEY_GLOBAL_SHORTCUT)
                 .filter(|shortcut| is_valid_shortcut(shortcut))
@@ -286,6 +296,10 @@ impl AppConfig {
         put(KEY_ACCENT, Some(self.accent.clone()));
         put(KEY_MICROPHONE, self.microphone.clone());
         put(KEY_GLOBAL_SHORTCUT, Some(self.global_shortcut.clone()));
+        map.insert(
+            KEY_REDUCE_TRANSPARENCY.to_owned(),
+            Value::Bool(self.reduce_transparency),
+        );
         let mut text =
             serde_json::to_string_pretty(&Value::Object(map)).unwrap_or_else(|_| "{}".to_owned());
         text.push('\n');
@@ -539,6 +553,7 @@ mod tests {
         config.set_appearance("dark", "blue").unwrap();
         config.set_global_shortcut("Control+Shift+KeyM").unwrap();
         config.microphone = Some("BuiltInMicrophoneDevice".into());
+        config.reduce_transparency = true;
         config.library_dir = Some(PathBuf::from("/Volumes/Data/Trama"));
         config.save(&path).unwrap();
         assert_eq!(AppConfig::load(&path).config, config);
@@ -549,8 +564,10 @@ mod tests {
     fn bad_values_fall_back_one_by_one_and_unknown_keys_are_kept() {
         let config = AppConfig::parse(
             r#"{"theme":"neon","accent":"blue","interfaceLanguage":"fr",
-                "libraryDir":"relative/path","globalShortcut":"KeyR","future":{"x":1}}"#,
+                "libraryDir":"relative/path","globalShortcut":"KeyR",
+                "reduceTransparency":"yes","future":{"x":1}}"#,
         );
+        assert!(!config.reduce_transparency);
         assert_eq!(config.theme, "system");
         assert_eq!(config.accent, "blue");
         assert_eq!(config.interface_language, None);

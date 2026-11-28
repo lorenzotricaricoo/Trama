@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Label, Radio, RadioGroup } from 'react-aria-components';
+import { Label, Radio, RadioGroup, Switch } from 'react-aria-components';
 import { ACCENTS, THEMES, setAppearance, type Accent, type Theme } from '../appearance';
 import { isSupportedLocale, SUPPORTED_LOCALES } from '../i18n/catalogs';
 import { useI18n } from '../i18n/I18nProvider';
+import { useSystemReducedTransparency } from '../shell/useTranslucency';
 import { CheckIcon } from '../ui/icons';
 import { api, errorCode, type AppSettings, type LibrarySettings } from './api';
 import type { UpdateLibrary } from './SettingsScreen';
@@ -60,6 +61,8 @@ export function GeneralSection({ app, onApp, library, onLibrary }: Props) {
   const [languageError, setLanguageError] = useState<string | null>(null);
   const [meetingError, setMeetingError] = useState<string | null>(null);
   const [appearanceError, setAppearanceError] = useState<string | null>(null);
+  const [transparencyError, setTransparencyError] = useState<string | null>(null);
+  const systemReduced = useSystemReducedTransparency();
 
   // Each interface language is written in itself, so it can be found in any language.
   const interfaceOptions = [
@@ -88,15 +91,30 @@ export function GeneralSection({ app, onApp, library, onLibrary }: Props) {
 
   const changeAppearance = async (theme: Theme, accent: Accent) => {
     const previous = { theme: app.theme, accent: app.accent };
+    const { reduceTransparency } = app;
     setAppearanceError(null);
-    setAppearance({ theme, accent });
+    setAppearance({ theme, accent, reduceTransparency });
     onApp({ ...app, theme, accent });
     try {
       await api.setAppearance(theme, accent);
     } catch (error) {
-      setAppearance(previous);
+      setAppearance({ ...previous, reduceTransparency });
       onApp({ ...app, ...previous });
       setAppearanceError(errorCode(error));
+    }
+  };
+
+  const changeTransparency = async (reduceTransparency: boolean) => {
+    const { theme, accent } = app;
+    setTransparencyError(null);
+    setAppearance({ theme, accent, reduceTransparency });
+    onApp({ ...app, reduceTransparency });
+    try {
+      await api.setReduceTransparency(reduceTransparency);
+    } catch (error) {
+      setAppearance({ theme, accent, reduceTransparency: !reduceTransparency });
+      onApp({ ...app, reduceTransparency: !reduceTransparency });
+      setTransparencyError(errorCode(error));
     }
   };
 
@@ -168,6 +186,27 @@ export function GeneralSection({ app, onApp, library, onLibrary }: Props) {
             </div>
           </RadioGroup>
           <ErrorText code={appearanceError} />
+        </Row>
+        <Row wide>
+          <Switch
+            className="set-switch"
+            isSelected={systemReduced || app.reduceTransparency}
+            onChange={(value) => void changeTransparency(value)}
+            isDisabled={systemReduced}
+          >
+            <span className="set-switch-track" aria-hidden>
+              <span className="set-switch-thumb" />
+            </span>
+            <span className="set-switch-text">
+              <span className="set-row-label">{t('settings-reduce-transparency')}</span>
+              <span className="set-row-desc">
+                {systemReduced
+                  ? t('settings-reduce-transparency-system')
+                  : t('settings-reduce-transparency-desc')}
+              </span>
+            </span>
+          </Switch>
+          <ErrorText code={transparencyError} />
         </Row>
       </Group>
     </>
