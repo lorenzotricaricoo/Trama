@@ -21,7 +21,10 @@
         "center": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 18, "y": 30 },
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 30
+        },
         "transparent": true,
         "windowEffects": {
           "effects": ["liquidGlassRegular", "sidebar"],
@@ -30,8 +33,12 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; connect-src ipc: http://ipc.localhost",
-      "devCsp": null
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; media-src 'self' asset: http://asset.localhost; connect-src ipc: http://ipc.localhost",
+      "devCsp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
     }
   },
   "bundle": {

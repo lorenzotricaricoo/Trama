@@ -7,7 +7,8 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use super::{
     Id, KeyPoint, LIST_TEXT_CHARS, Library, NOTE_VERSION_PAUSE_MS, NewSummary, Purged, Result,
     Source, SourceCursor, SourceKind, SourceListItem, StorageError, Summary, Timestamp,
-    TitleOrigin, Version, VersionOrigin, enum_column, id_column, new_id, parse_id,
+    TitleOrigin, USER_SUMMARY_MODEL, Version, VersionOrigin, enum_column, id_column, new_id,
+    parse_id,
 };
 
 const SOURCE_COLUMNS: &str =
@@ -364,6 +365,32 @@ impl Library {
         )?;
         tx.commit()?;
         Ok(stored)
+    }
+
+    /// Stores the user's edit of the newest summary of a source: a new summary of the same
+    /// version with [`USER_SUMMARY_MODEL`] as its model, so the generated one stays in the
+    /// history and a later regeneration replaces the edit. The title stays the source's
+    /// (see [`Library::set_title`]).
+    pub fn edit_summary(
+        &mut self,
+        source_id: Id,
+        body: &str,
+        key_points: &[KeyPoint],
+    ) -> Result<Summary> {
+        let latest = self
+            .latest_summary(source_id)?
+            .ok_or_else(|| StorageError::not_found("summary", source_id))?;
+        self.add_summary(
+            latest.version_id,
+            &NewSummary {
+                title: latest.title,
+                body: body.to_owned(),
+                key_points: key_points.to_vec(),
+                language: latest.language,
+                model: USER_SUMMARY_MODEL.to_owned(),
+                prompt_version: USER_SUMMARY_MODEL.to_owned(),
+            },
+        )
     }
 
     /// The newest summary of the source's current version.

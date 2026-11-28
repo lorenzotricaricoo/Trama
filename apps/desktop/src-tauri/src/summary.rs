@@ -2,7 +2,7 @@
 //! summary, generate it again and edit the title. Generation runs as a `summarize` job,
 //! so its progress and failures arrive through the `job` event (see `jobs.rs`).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 use trama_core::jobs::lock;
 use trama_core::storage::{Id, KeyPoint, Source, Summary, TitleOrigin};
@@ -100,6 +100,51 @@ pub fn regenerate_summary(core: State<'_, Core>, source_id: String) -> Result<Jo
     let job = trama_core::summary::regenerate(&core.runner, parse_id(&source_id)?)
         .map_err(|err| err.to_string())?;
     Ok(JobPayload::new(&job, None))
+}
+
+/// A key point as the user edited it.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyPointInput {
+    pub text: String,
+    pub at_ms: Option<i64>,
+}
+
+/// Longest summary the user can write, in characters.
+const MAX_SUMMARY_CHARS: usize = 20_000;
+
+/// Most key points kept.
+const MAX_KEY_POINTS: usize = 50;
+
+/// Stores the user's edit of the summary and its key points. Empty key points are
+/// dropped; the generated summary stays in the history.
+#[tauri::command]
+pub fn edit_summary(
+    core: State<'_, Core>,
+    source_id: String,
+    body: String,
+    key_points: Vec<KeyPointInput>,
+) -> Result<SummaryPayload, String> {
+    let body: String = body.trim().chars().take(MAX_SUMMARY_CHARS).collect();
+    let points: Vec<KeyPoint> = key_points
+        .iter()
+        .map(|point| {
+            (
+                point.text.split_whitespace().collect::<Vec<_>>().join(" "),
+                point.at_ms,
+            )
+        })
+        .filter(|(text, _)| !text.is_empty())
+        .take(MAX_KEY_POINTS)
+        .map(|(text, at_ms)| match at_ms {
+            Some(at) => KeyPoint::at(text, at.max(0)),
+            None => KeyPoint::new(text),
+        })
+        .collect();
+    let summary = lock(&core.library)
+        .edit_summary(parse_id(&source_id)?, &body, &points)
+        .map_err(|err| err.to_string())?;
+    Ok((&summary).into())
 }
 
 /// Sets the title written by the user, which summaries never replace. An empty title

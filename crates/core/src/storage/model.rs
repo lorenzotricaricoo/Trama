@@ -235,6 +235,9 @@ impl KeyPoint {
     }
 }
 
+/// [`Summary::model`] of a summary edited by the user.
+pub const USER_SUMMARY_MODEL: &str = "user";
+
 /// Title, summary and key points generated for a version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Summary {

@@ -1,21 +1,30 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { motion, type Variants } from 'motion/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from 'react-aria-components';
+import { useAppearance } from '../appearance';
 import { useI18n } from '../i18n/I18nProvider';
 import type { Job } from '../jobs/useJobs';
 import { duration, ease } from '../motion';
 import { recordingNotes, showRecordingPanel, type RecordingNote } from '../recording/api';
 import { formatClock, minutes } from '../recording/format';
+import { api as settingsApi, type Retention } from '../settings/api';
+import { AudioPlayer, type PlayerHandle } from './AudioPlayer';
 import {
+  editSummary,
   getMeeting,
   regenerateSummary,
+  retranscribe,
   retryJob,
+  setSourceTitle,
   sourceSummary,
+  type KeyPoint,
   type Meeting,
   type Summary,
 } from './api';
 import { meetingErrorMessage } from './errors';
+import { MeetingTitle } from './MeetingTitle';
+import { SummaryTile, Timestamp } from './SummaryTile';
 
 interface MeetingScreenProps {
   meetingId: string;
@@ -28,6 +37,9 @@ const rise: Variants = {
   hide: { opacity: 0, y: 10 },
   show: { opacity: 1, y: 0, transition: { duration: duration.d4, ease: ease.out } },
 };
+
+/** How long a line jumped to stays marked. */
+const FLASH_MS = 1600;
 
 /** A line of the transcript: what was said, or a note taken at that moment. */
 type Line =
@@ -52,17 +64,85 @@ function lines(meeting: Meeting, notes: readonly RecordingNote[]): Line[] {
   return [...said, ...noted].sort((a, b) => a.atMs - b.atMs || (a.kind === 'note' ? 1 : -1));
 }
 
+/** The line being said at `ms`: the last one that started by then. */
+function lineAt(transcript: readonly Line[], ms: number, kinds: Line['kind'][]): Line | undefined {
+  let found: Line | undefined;
+  for (const line of transcript) {
+    if (line.atMs > ms) break;
+    if (kinds.includes(line.kind)) found = line;
+  }
+  return found;
+}
+
+/** The summary as plain text, for the clipboard. */
+function summaryText(title: string, summary: Summary): string {
+  const points = summary.keyPoints.map(
+    (point) => `- ${point.text}${point.atMs === null ? '' : ` (${formatClock(point.atMs)})`}`,
+  );
+  return [title, summary.body, points.join('\n')].filter(Boolean).join('\n\n');
+}
+
+const TranscriptLine = memo(function TranscriptLine({
+  line,
+  current,
+  flash,
+  onSeek,
+  meLabel,
+  othersLabel,
+  noteLabel,
+}: {
+  line: Line;
+  current: boolean;
+  flash: boolean;
+  /** Present while there is audio to move. */
+  onSeek: ((ms: number) => void) | undefined;
+  meLabel: string;
+  othersLabel: string;
+  noteLabel: string;
+}) {
+  return (
+    <li
+      className="mt-line"
+      data-key={line.key}
+      data-note={line.kind === 'note' || undefined}
+      data-current={current || undefined}
+      data-flash={flash || undefined}
+    >
+      {onSeek ? (
+        <Timestamp ms={line.atMs} onJump={onSeek} />
+      ) : (
+        <span className="mt-ts">{formatClock(line.atMs)}</span>
+      )}
+      {line.kind === 'note' ? (
+        <span className="mt-notew">{noteLabel}</span>
+      ) : (
+        <span className={line.role === 'me' ? 'mt-me' : 'mt-oth'}>
+          {line.role === 'me' ? meLabel : othersLabel}
+        </span>
+      )}
+      <span className="mt-text">{line.text}</span>
+    </li>
+  );
+});
+
 /**
- * The meeting page, kept minimal until the full one (#33): title, where the processing
- * stands, the summary with its key points, and the transcript with the notes taken while
- * recording.
+ * The meeting page (flow F4): the title and summary the user can rewrite, the key points
+ * whose timestamps lead to that moment, where the processing stands, the audio while it is
+ * kept, and the transcript of the two tracks with the notes taken while recording.
  */
 export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScreenProps) {
   const { t, locale } = useI18n();
+  const { reduceMotion } = useAppearance();
   const [meeting, setMeeting] = useState<Meeting | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [notes, setNotes] = useState<RecordingNote[]>([]);
   const [missing, setMissing] = useState(false);
+  const [retention, setRetention] = useState<Retention | null>(null);
+  const [playingMs, setPlayingMs] = useState<number | null>(null);
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+  const player = useRef<PlayerHandle>(null);
+  const transcriptList = useRef<HTMLOListElement>(null);
+  const flashTimer = useRef<number | undefined>(undefined);
 
   const load = useCallback(async () => {
     const [found, latest, taken] = await Promise.all([
@@ -96,6 +176,24 @@ export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScre
     };
   }, [load, jobsKey]);
 
+  // Why the audio is gone: the retention setting, named in the transcript header.
+  const audioDeleted = meeting?.audioDeleted ?? false;
+  useEffect(() => {
+    if (!audioDeleted) return;
+    let active = true;
+    settingsApi
+      .librarySettings()
+      .then((settings) => {
+        if (active) setRetention(settings.audioRetention);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [audioDeleted]);
+
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
   const when = useMemo(
     () =>
       new Intl.DateTimeFormat(locale, {
@@ -106,6 +204,26 @@ export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScre
       }),
     [locale],
   );
+
+  const transcript = useMemo(() => (meeting ? lines(meeting, notes) : []), [meeting, notes]);
+  const hasAudio = (meeting?.audio.length ?? 0) > 0;
+
+  /** Moves the player and the transcript to a moment. */
+  const jump = useCallback(
+    (ms: number) => {
+      player.current?.seek(ms);
+      const line = lineAt(transcript, ms, ['segment', 'note']);
+      if (!line) return;
+      const element = transcriptList.current?.querySelector(`[data-key="${line.key}"]`);
+      element?.scrollIntoView?.({ block: 'center', behavior: reduceMotion ? 'auto' : 'smooth' });
+      setFlashKey(line.key);
+      window.clearTimeout(flashTimer.current);
+      flashTimer.current = window.setTimeout(() => setFlashKey(null), FLASH_MS);
+    },
+    [transcript, reduceMotion],
+  );
+
+  const seekOnly = useCallback((ms: number) => player.current?.seek(ms), []);
 
   if (missing) {
     return (
@@ -124,22 +242,70 @@ export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScre
     (job) => job.kind === 'transcribe' && job.state === 'failed',
   );
   const failedSummary = mine.find((job) => job.kind === 'summarize' && job.state === 'failed');
+  const summarizing = mine.some(
+    (job) => job.kind === 'summarize' && (job.state === 'running' || job.state === 'queued'),
+  );
   const current = running ?? queued;
-  const title = meeting.title || t('meeting-untitled', { date: when.format(meeting.occurredAt) });
+  const date = when.format(meeting.occurredAt);
+  const placeholder = t('meeting-untitled', { date });
+  const shownTitle = meeting.title || placeholder;
+
+  const failedAction = (error: unknown, what: string, message: string) => {
+    console.error(what, error);
+    onNotice(t(message));
+  };
 
   const retry = (job: Job) => {
-    retryJob(job.id).catch((error: unknown) => {
-      console.error('Cannot retry the job', error);
-      onNotice(t('meeting-retry-failed'));
-    });
+    retryJob(job.id).catch((error: unknown) =>
+      failedAction(error, 'Cannot retry the job', 'meeting-retry-failed'),
+    );
+  };
+
+  const transcribeAgain = () => {
+    retranscribe(meetingId).catch((error: unknown) =>
+      failedAction(error, 'Cannot transcribe again', 'meeting-retry-failed'),
+    );
   };
 
   const regenerate = () => {
-    regenerateSummary(meetingId).catch((error: unknown) => {
-      console.error('Cannot generate the summary', error);
-      onNotice(t('meeting-retry-failed'));
-    });
+    regenerateSummary(meetingId).catch((error: unknown) =>
+      failedAction(error, 'Cannot generate the summary', 'meeting-retry-failed'),
+    );
   };
+
+  const rename = async (title: string) => {
+    try {
+      const renamed = await setSourceTitle(meetingId, title);
+      setMeeting((found) => found && { ...found, title: renamed.title });
+    } catch (error) {
+      failedAction(error, 'Cannot rename the meeting', 'meeting-rename-failed');
+    }
+  };
+
+  const saveSummary = async (body: string, keyPoints: KeyPoint[]) => {
+    try {
+      setSummary(await editSummary(meetingId, body, keyPoints));
+    } catch (error) {
+      failedAction(error, 'Cannot save the summary', 'meeting-summary-save-failed');
+      throw error;
+    }
+  };
+
+  const copySummary = (from: Summary) => {
+    navigator.clipboard
+      .writeText(summaryText(shownTitle, from))
+      .then(() => onNotice(t('meeting-summary-copied')))
+      .catch((error: unknown) =>
+        failedAction(error, 'Cannot copy the summary', 'meeting-copy-failed'),
+      );
+  };
+
+  // A failure the job can retry, or one the audio still on disk can recover from.
+  const canTranscribeAgain =
+    !failedTranscription &&
+    meeting.errorCode !== 'audio_missing' &&
+    !meeting.audioDeleted &&
+    hasAudio;
 
   const status = (() => {
     switch (meeting.status) {
@@ -200,6 +366,11 @@ export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScre
                 {t('meeting-retry')}
               </Button>
             )}
+            {canTranscribeAgain && (
+              <Button className="btn" onPress={transcribeAgain}>
+                {t('meeting-retry')}
+              </Button>
+            )}
           </div>
         );
       case 'ready':
@@ -207,22 +378,49 @@ export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScre
     }
   })();
 
-  const transcript = lines(meeting, notes);
+  const language = (() => {
+    if (!meeting.language) return null;
+    try {
+      return new Intl.DisplayNames([locale], { type: 'language' }).of(meeting.language) ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const metas = [
+    date,
+    meeting.durationMs === null
+      ? null
+      : t('meeting-minutes', { count: minutes(meeting.durationMs) }),
+    language,
+  ].filter(Boolean);
+
+  const audioNote =
+    meeting.audioDeleted && meeting.status !== 'recording'
+      ? retention
+        ? t('meeting-audio-deleted', { setting: t(`settings-retention-${retention}`) })
+        : t('meeting-audio-deleted-plain')
+      : null;
+
+  const currentKey =
+    hasAudio && playingMs !== null && playingMs > 0
+      ? lineAt(transcript, playingMs, ['segment'])?.key
+      : undefined;
 
   return (
     <motion.div className="screen mt" variants={list} initial="hide" animate="show">
-      <motion.header className="screen-top" variants={rise}>
-        <h1 className="screen-title mt-title" data-untitled={!meeting.title || undefined}>
-          {title}
-        </h1>
-        <div className="mt-metas">
-          <span className="mt-chip">{t('source-kind-meeting')}</span>
-          <span className="mt-meta">
-            {when.format(meeting.occurredAt)}
-            {meeting.durationMs !== null &&
-              ` · ${t('meeting-minutes', { count: minutes(meeting.durationMs) })}`}
-          </span>
+      <motion.header className="screen-top screen-top-row" variants={rise}>
+        <div className="mt-head">
+          <MeetingTitle title={meeting.title} placeholder={placeholder} onRename={rename} />
+          <div className="mt-metas">
+            <span className="mt-chip">{t('source-kind-meeting')}</span>
+            <span className="mt-meta">{metas.join(' · ')}</span>
+          </div>
         </div>
+        {summary && (
+          <Button className="btn" onPress={() => copySummary(summary)}>
+            {t('meeting-copy-summary')}
+          </Button>
+        )}
       </motion.header>
       <div className="mt-body">
         {status && (
@@ -230,62 +428,48 @@ export default function MeetingScreen({ meetingId, jobs, onNotice }: MeetingScre
             {status}
           </motion.section>
         )}
+        {hasAudio && (
+          <motion.section className="mt-tile" variants={rise}>
+            <AudioPlayer
+              ref={player}
+              tracks={meeting.audio}
+              durationMs={meeting.durationMs}
+              onTime={setPlayingMs}
+            />
+          </motion.section>
+        )}
         {(summary || meeting.status === 'ready') && (
           <motion.section className="mt-tile" variants={rise} aria-labelledby="mt-summary">
-            <h2 className="mt-th" id="mt-summary">
-              {t('meeting-summary')}
-            </h2>
-            {summary ? (
-              <>
-                <p className="mt-sum">{summary.body}</p>
-                {summary.keyPoints.map((point, index) => (
-                  <div className="mt-kp" key={index}>
-                    <span>{point.text}</span>
-                    {point.atMs !== null && (
-                      <span className="mt-ts">{formatClock(point.atMs)}</span>
-                    )}
-                  </div>
-                ))}
-              </>
-            ) : (
-              <div className="mt-empty-row">
-                <span>
-                  {failedSummary ? t('meeting-summary-failed') : t('meeting-summary-none')}
-                </span>
-                <Button
-                  className="btn"
-                  onPress={() => (failedSummary ? retry(failedSummary) : regenerate())}
-                >
-                  {failedSummary ? t('meeting-retry') : t('meeting-summary-generate')}
-                </Button>
-              </div>
-            )}
+            <SummaryTile
+              summary={summary}
+              failed={!!failedSummary}
+              busy={summarizing}
+              onGenerate={() => (failedSummary ? retry(failedSummary) : regenerate())}
+              onSave={saveSummary}
+              onJump={jump}
+            />
           </motion.section>
         )}
         <motion.section className="mt-tile" variants={rise} aria-labelledby="mt-transcript">
           <h2 className="mt-th" id="mt-transcript">
-            {t('meeting-transcript')}
+            <span>{t('meeting-transcript')}</span>
+            {audioNote && <span className="mt-meta">{audioNote}</span>}
           </h2>
           {transcript.length === 0 ? (
             <p className="mt-none">{t('meeting-transcript-pending')}</p>
           ) : (
-            <ol className="mt-lines">
+            <ol className="mt-lines" ref={transcriptList}>
               {transcript.map((line) => (
-                <li
+                <TranscriptLine
                   key={line.key}
-                  className="mt-line"
-                  data-note={line.kind === 'note' || undefined}
-                >
-                  <span className="mt-ts">{formatClock(line.atMs)}</span>
-                  {line.kind === 'note' ? (
-                    <span className="mt-notew">{t('meeting-note')}</span>
-                  ) : (
-                    <span className={line.role === 'me' ? 'mt-me' : 'mt-oth'}>
-                      {line.role === 'me' ? t('record-track-me') : t('record-track-others')}
-                    </span>
-                  )}
-                  <span className="mt-text">{line.text}</span>
-                </li>
+                  line={line}
+                  current={line.key === currentKey}
+                  flash={line.key === flashKey}
+                  onSeek={hasAudio ? seekOnly : undefined}
+                  meLabel={t('record-track-me')}
+                  othersLabel={t('record-track-others')}
+                  noteLabel={t('meeting-note')}
+                />
               ))}
             </ol>
           )}

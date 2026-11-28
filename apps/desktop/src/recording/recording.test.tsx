@@ -96,6 +96,9 @@ function meeting(overrides: Partial<Meeting> = {}): Meeting {
     durationMs: 3 * 60_000,
     errorCode: null,
     segments: [],
+    language: null,
+    audio: [],
+    audioDeleted: false,
     ...overrides,
   };
 }
