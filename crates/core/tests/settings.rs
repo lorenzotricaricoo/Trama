@@ -138,6 +138,19 @@ fn damaged_settings_fall_back_to_their_defaults() {
     );
 }
 
+#[test]
+fn the_meeting_language_is_the_one_summaries_use() {
+    let (_dir, _clock, mut library) = library();
+    assert_eq!(
+        library.meeting_language().unwrap(),
+        library.library_settings().unwrap().meeting_language
+    );
+    let mut settings = library.library_settings().unwrap();
+    settings.meeting_language = "it".into();
+    library.set_library_settings(&settings).unwrap();
+    assert_eq!(library.meeting_language().unwrap(), "it");
+}
+
 /// A library with one provider, one priced model chosen for the summary.
 fn priced_library(server: &MockServer) -> (tempfile::TempDir, ManualClock, Library, MemorySecrets) {
     let (dir, clock, mut library) = library();
@@ -308,6 +321,77 @@ fn the_budget_warns_then_blocks_when_enforced() {
     clock.advance(31 * DAY);
     assert_eq!(library.budget_status().unwrap().state, BudgetState::Ok);
     assert!(providers::task_client(&library, &secrets, ModelTask::Summary, config()).is_ok());
+}
+
+/// Turns on an enforced monthly budget of `micros`.
+fn enforce_budget(library: &mut Library, micros: u64) {
+    let mut settings = library.library_settings().unwrap();
+    settings.usage.monthly_budget_micros = Some(micros);
+    settings.usage.enforce_budget = true;
+    library.set_library_settings(&settings).unwrap();
+}
+
+#[test]
+fn an_enforced_budget_refuses_models_without_a_price() {
+    let server = MockServer::start();
+    let (_dir, _clock, mut library, secrets) = priced_library(&server);
+    let provider = library.providers().unwrap()[0].clone();
+    library
+        .set_model_prices(
+            provider.id,
+            "cheap",
+            ModelPrices {
+                input_micros: Some(3_000_000),
+                output_micros: None,
+            },
+        )
+        .unwrap();
+    // Without a budget, or with one that is only a warning, the price isn't needed.
+    assert!(providers::task_client(&library, &secrets, ModelTask::Summary, config()).is_ok());
+
+    enforce_budget(&mut library, 1_000_000);
+    let err = providers::task_client(&library, &secrets, ModelTask::Summary, config()).unwrap_err();
+    assert_eq!(err.code(), "price_missing");
+    assert!(!err.is_retryable());
+
+    library
+        .set_model_prices(provider.id, "cheap", priced(3_000_000, 15_000_000))
+        .unwrap();
+    assert!(providers::task_client(&library, &secrets, ModelTask::Summary, config()).is_ok());
+}
+
+#[test]
+fn the_budget_is_checked_again_before_every_request() {
+    let server = MockServer::start();
+    // 4000 prompt tokens at 3 millionths each: 12 000, past a budget of 10 000.
+    server.push(reply_with_usage(4000, 0));
+    server.push(reply_with_usage(10, 0));
+    let (_dir, _clock, mut library, secrets) = priced_library(&server);
+    enforce_budget(&mut library, 10_000);
+    let library = Arc::new(Mutex::new(library));
+
+    let task = {
+        let guard = library.lock().unwrap();
+        providers::task_client(&guard, &secrets, ModelTask::Summary, config()).unwrap()
+    }
+    .recording_usage(Arc::clone(&library));
+    task.chat(vec![Message::user("one")], None).unwrap();
+    let err = task.chat(vec![Message::user("two")], None).unwrap_err();
+    assert_eq!(err.code(), "budget_exceeded");
+    // The refused request was never sent.
+    assert_eq!(server.requests().len(), 1);
+
+    // Prices removed during a task stop it too.
+    let mut guard = library.lock().unwrap();
+    let provider = guard.providers().unwrap()[0].clone();
+    enforce_budget(&mut guard, 1_000_000);
+    guard
+        .set_model_prices(provider.id, "cheap", ModelPrices::default())
+        .unwrap();
+    drop(guard);
+    let err = task.chat(vec![Message::user("three")], None).unwrap_err();
+    assert_eq!(err.code(), "price_missing");
+    assert_eq!(server.requests().len(), 1);
 }
 
 #[test]

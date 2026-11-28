@@ -18,6 +18,8 @@ described in the [data model](data-model.md#provider). The code is in
   debug output hides it. A key belongs to the origin (scheme, host and port) it was
   entered for: changing the URL to another origin needs a new key in the same change
   (`key_required_for_new_url`), so a stored key is never sent to another server.
+  Removing a provider deletes its key first: if the Keychain refuses, the provider stays
+  and can be removed again, so no key is left behind without its provider.
 - The **model catalogue** is read with `GET /models`. Limits (context window, longest
   reply) come from the catalogue when the provider exposes them; otherwise the user sets
   them by hand. A model whose context window is unknown can't be used for a task.
@@ -35,12 +37,16 @@ described in the [data model](data-model.md#provider). The code is in
 - **Usage.** `TaskModelClient::recording_usage` records the tokens of every reply the
   provider sends (the `usage` object), with its cost, in the library
   ([model usage](data-model.md#model-usage)). Retried and refused replies are recorded
-  too, since they are billed. Every job that calls a model wraps its client with it.
+  too, since they are billed. Every job that calls a model wraps its client with it (the
+  summary does).
 - **Budget.** A monthly budget (UTC calendar month) with a warning threshold, 80% by
   default. Settings shows the month's spend and warns from the threshold on. If the user
-  turns on the limit, `task_client` refuses a task once the spend reaches the budget,
-  with `budget_exceeded` (not retried: the user raises the budget or turns the limit
-  off). A call already running is never cut off.
+  turns on the limit, the budget is checked when a task gets its client and again before
+  every request of that client (`providers::check_budget`), so a task with many calls
+  stops at the budget: `budget_exceeded`, not retried (the user raises the budget or
+  turns the limit off). A request already sent is never cut off. The limit can only
+  count what has a price, so with it on a model without both prices is refused with
+  `price_missing`, and Settings says so next to the limit.
 
 ## Robust calls
 
@@ -64,7 +70,8 @@ translates (`locales/<locale>/providers.ftl`).
 | Structured reply that matches the schema but is empty or placeholder text | Asks again | `degenerate_output` | yes |
 | Prompt too long for the context window | Refuses before sending | `context_exceeded` | no |
 | Unknown context window, no model for the task, missing key | Refuses before sending | `limits_unknown`, `no_model_for_task`, `missing_key` | no |
-| The month's spend reached an enforced budget | Refuses before sending | `budget_exceeded` | no |
+| The month's spend reached an enforced budget (checked before every request) | Refuses before sending | `budget_exceeded` | no |
+| An enforced budget and a model without a price | Refuses before sending | `price_missing` | no |
 
 - **Backoff**: 1 s before the first retry, doubling up to 30 s, with up to 25% jitter;
   4 attempts per request. A reply with bad content is asked for up to 3 times.

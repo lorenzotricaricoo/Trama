@@ -7,13 +7,11 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, State};
-use trama_core::config::{AppConfig, config_error};
+use trama_core::config::{AppConfig, config_error, resolve_path};
 use trama_core::jobs::lock;
 use trama_core::storage::{
     AudioRetention, BudgetStatus, LibrarySettings, StorageError, UsageSettings,
 };
-
-use crate::jobs::Core;
 
 /// Code of a library that could not be read or written.
 pub const STORAGE_ERROR: &str = "storage";
@@ -35,6 +33,28 @@ pub struct Settings {
     pub library_overridden: bool,
     /// The user's home folder, to recognise synced folders.
     pub home: Option<PathBuf>,
+    /// The configuration file couldn't be read nor set aside: saving would destroy it.
+    pub save_blocked: bool,
+    /// Problems found at start, for the frontend to tell the user.
+    pub notices: Vec<StartupNotice>,
+}
+
+/// A problem found at start (a `config_notice` code); Trama started anyway.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct StartupNotice {
+    pub code: &'static str,
+    /// The folder or file it is about.
+    pub path: Option<String>,
+}
+
+impl StartupNotice {
+    pub fn new(code: &'static str, path: Option<&Path>) -> Self {
+        Self {
+            code,
+            path: path.map(path_text),
+        }
+    }
 }
 
 impl Settings {
@@ -50,6 +70,9 @@ impl Settings {
         let mut config = self.config();
         let mut next = config.clone();
         change(&mut next)?;
+        if self.save_blocked {
+            return Err(config_error::CONFIG_WRITE.to_owned());
+        }
         next.save(&self.path).map_err(|err| {
             eprintln!("trama: cannot save {}: {err}", self.path.display());
             config_error::CONFIG_WRITE.to_owned()
@@ -100,7 +123,7 @@ pub struct AppSettingsPayload {
     pub library: LibraryLocation,
 }
 
-fn path_text(path: &Path) -> String {
+pub fn path_text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
@@ -108,7 +131,7 @@ fn location(settings: &Settings) -> LibraryLocation {
     let next = settings.next_library();
     LibraryLocation {
         current: path_text(&settings.open_library),
-        restart_required: next != settings.open_library,
+        restart_required: resolve_path(&next) != resolve_path(&settings.open_library),
         next: path_text(&next),
         default: path_text(&settings.default_library),
         overridden: settings.library_overridden,
@@ -269,12 +292,20 @@ pub struct ChosenFolder {
     pub error: Option<&'static str>,
 }
 
-fn check_folder(settings: &Settings, path: PathBuf) -> ChosenFolder {
-    let checked = trama_core::config::check_library_dir(&path, settings.home.as_deref());
-    ChosenFolder {
-        path: path_text(&path),
-        warning: checked.ok().flatten(),
-        error: checked.err(),
+/// Checks a folder; the path returned is the resolved one (links and `..` followed),
+/// which is what gets stored.
+fn check_folder(settings: &Settings, path: &Path) -> ChosenFolder {
+    match trama_core::config::check_library_dir(path, settings.home.as_deref()) {
+        Ok(checked) => ChosenFolder {
+            path: path_text(&checked.path),
+            warning: checked.warning,
+            error: None,
+        },
+        Err(error) => ChosenFolder {
+            path: path_text(path),
+            warning: None,
+            error: Some(error),
+        },
     }
 }
 
@@ -298,7 +329,7 @@ pub async fn choose_library_folder(app: AppHandle) -> Result<Option<ChosenFolder
             .blocking_pick_folder();
         Ok(picked
             .and_then(|path| path.into_path().ok())
-            .map(|path| check_folder(&settings, path)))
+            .map(|path| check_folder(&settings, &path)))
     })
     .await
 }
@@ -310,14 +341,18 @@ pub fn set_library_location(
     settings: State<'_, Settings>,
     path: Option<String>,
 ) -> Result<LibraryLocation, String> {
+    set_location(&settings, path)
+}
+
+fn set_location(settings: &Settings, path: Option<String>) -> Result<LibraryLocation, String> {
     let dir = match path {
         Some(path) => {
-            let path = PathBuf::from(path);
-            if let Some(error) = check_folder(&settings, path.clone()).error {
-                return Err(error.to_owned());
-            }
+            let checked =
+                trama_core::config::check_library_dir(Path::new(&path), settings.home.as_deref())
+                    .map_err(str::to_owned)?;
             // The default location is stored as "no choice", so it follows the app.
-            (path != settings.default_library).then_some(path)
+            let default = resolve_path(&settings.default_library);
+            (checked.path != default).then_some(checked.path)
         }
         None => None,
     };
@@ -325,7 +360,14 @@ pub fn set_library_location(
         config.library_dir = dir;
         Ok(())
     })?;
-    Ok(location(&settings))
+    Ok(location(settings))
+}
+
+/// Problems found at start, to tell the user: a configuration file set aside, a library
+/// that couldn't be opened.
+#[tauri::command]
+pub fn startup_notices(settings: State<'_, Settings>) -> Vec<StartupNotice> {
+    settings.notices.clone()
 }
 
 /// Shows the open library in the Finder.
@@ -401,7 +443,7 @@ impl TryFrom<LibrarySettingsPayload> for LibrarySettings {
 #[tauri::command]
 pub async fn library_settings(app: AppHandle) -> Result<LibrarySettingsPayload, String> {
     blocking(app, |app| {
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let settings = lock(&core.library)
             .library_settings()
             .map_err(storage_code)?;
@@ -418,7 +460,7 @@ pub async fn set_library_settings(
 ) -> Result<LibrarySettingsPayload, String> {
     blocking(app, move |app| {
         let settings = LibrarySettings::try_from(settings)?;
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let stored = lock(&core.library)
             .set_library_settings(&settings)
             .map_err(storage_code)?;
@@ -467,7 +509,7 @@ impl From<BudgetStatus> for BudgetPayload {
 #[tauri::command]
 pub async fn budget_status(app: AppHandle) -> Result<BudgetPayload, String> {
     blocking(app, |app| {
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let status = lock(&core.library).budget_status().map_err(storage_code)?;
         Ok(status.into())
     })
@@ -486,6 +528,8 @@ mod tests {
             default_library: dir.join("Library"),
             library_overridden: false,
             home: None,
+            save_blocked: false,
+            notices: Vec::new(),
         }
     }
 
@@ -502,7 +546,7 @@ mod tests {
         settings
             .update(|config| config.set_appearance("dark", "blue"))
             .unwrap();
-        let saved = AppConfig::load(&settings.path).unwrap();
+        let saved = AppConfig::load(&settings.path).config;
         assert_eq!(
             (saved.theme.as_str(), saved.accent.as_str()),
             ("dark", "blue")
@@ -524,6 +568,39 @@ mod tests {
         assert!(moved.restart_required);
         assert_eq!(moved.current, path_text(&dir.path().join("Library")));
         assert_eq!(moved.next, path_text(&dir.path().join("Elsewhere")));
+    }
+
+    #[test]
+    fn a_config_file_that_could_not_be_set_aside_is_never_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = Settings {
+            save_blocked: true,
+            ..settings(dir.path())
+        };
+        let err = settings
+            .update(|config| config.set_appearance("dark", "blue"))
+            .unwrap_err();
+        assert_eq!(err, config_error::CONFIG_WRITE);
+        assert!(!settings.path.exists());
+        assert_eq!(settings.config().theme, "system");
+    }
+
+    #[test]
+    fn a_chosen_folder_is_stored_resolved() {
+        let dir = tempfile::tempdir().unwrap();
+        let settings = settings(dir.path());
+        let chosen = dir.path().join("Data/x/../Trama");
+        let location = set_location(&settings, Some(path_text(&chosen))).unwrap();
+        let resolved = resolve_path(&dir.path().join("Data/Trama"));
+        assert_eq!(location.next, path_text(&resolved));
+        assert_eq!(settings.config().library_dir, Some(resolved));
+        assert!(location.restart_required);
+
+        // The default location, however it is written, is stored as no choice.
+        let default = dir.path().join("Data/../Library");
+        let location = set_location(&settings, Some(path_text(&default))).unwrap();
+        assert_eq!(settings.config().library_dir, None);
+        assert!(!location.restart_required);
     }
 
     #[test]

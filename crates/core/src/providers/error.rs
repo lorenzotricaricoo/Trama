@@ -54,6 +54,9 @@ pub mod error_code {
     /// The provider's URL moved to another origin: its stored key is never sent there, so
     /// a new key must come with the new URL.
     pub const KEY_REQUIRED_FOR_NEW_URL: &str = "key_required_for_new_url";
+    /// The user enforces a monthly budget and the model has no price, so its cost could
+    /// not be counted against the budget.
+    pub const PRICE_MISSING: &str = "price_missing";
 
     /// Every code, for the translation tests.
     pub const ALL: &[&str] = &[
@@ -79,6 +82,7 @@ pub mod error_code {
         STORAGE,
         BUDGET_EXCEEDED,
         KEY_REQUIRED_FOR_NEW_URL,
+        PRICE_MISSING,
     ];
 }
 
@@ -115,6 +119,7 @@ pub enum ErrorKind {
     Storage,
     BudgetExceeded,
     KeyRequiredForNewUrl,
+    PriceMissing,
 }
 
 /// A failed provider call (principle A4: surfaced with a code, never silent).
@@ -160,6 +165,7 @@ impl ProviderError {
             ErrorKind::Storage => STORAGE,
             ErrorKind::BudgetExceeded => BUDGET_EXCEEDED,
             ErrorKind::KeyRequiredForNewUrl => KEY_REQUIRED_FOR_NEW_URL,
+            ErrorKind::PriceMissing => PRICE_MISSING,
         }
     }
 

@@ -3,7 +3,7 @@
 //! Keychain; the frontend only ever learns whether a key is stored, never the key.
 
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
 use trama_core::jobs::lock;
 use trama_core::providers::{self, ClientConfig, Keychain, ProviderError, Secret, SecretStore};
 use trama_core::storage::{
@@ -11,7 +11,6 @@ use trama_core::storage::{
     check_provider_input,
 };
 
-use crate::jobs::Core;
 use crate::settings::{INVALID_SETTING, blocking, storage_code};
 
 /// A model of a provider, as the frontend sees it. Prices are per million tokens in
@@ -139,7 +138,7 @@ fn has_key(provider: &Provider) -> bool {
 
 fn provider_payload(app: &AppHandle, provider: &Provider) -> Result<ProviderPayload, String> {
     let models = {
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let library = lock(&core.library);
         library.provider_models(provider.id).map_err(storage_code)?
     };
@@ -159,7 +158,7 @@ fn provider_payload(app: &AppHandle, provider: &Provider) -> Result<ProviderPayl
 pub async fn list_providers(app: AppHandle) -> Result<Vec<ProviderPayload>, String> {
     blocking(app, |app| {
         let providers = {
-            let core = app.state::<Core>();
+            let core = crate::jobs::core_state(app)?;
             let library = lock(&core.library);
             library.providers().map_err(storage_code)?
         };
@@ -179,7 +178,7 @@ pub async fn add_provider(app: AppHandle, input: ProviderInput) -> Result<Provid
             return Err(code.to_owned());
         }
         let provider = {
-            let core = app.state::<Core>();
+            let core = crate::jobs::core_state(app)?;
             let mut library = lock(&core.library);
             let new = NewProvider {
                 name: input.name.clone(),
@@ -209,7 +208,7 @@ pub async fn update_provider(
             return Err(code.to_owned());
         }
         let provider = {
-            let core = app.state::<Core>();
+            let core = crate::jobs::core_state(app)?;
             let mut library = lock(&core.library);
             providers::update_provider(
                 &mut library,
@@ -231,7 +230,7 @@ pub async fn update_provider(
 pub async fn remove_provider(app: AppHandle, id: String) -> Result<(), String> {
     blocking(app, move |app| {
         let id = parse_id(&id)?;
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let mut library = lock(&core.library);
         providers::remove_provider(&mut library, &Keychain, id).map_err(provider_code)
     })
@@ -243,7 +242,7 @@ pub async fn remove_provider(app: AppHandle, id: String) -> Result<(), String> {
 pub async fn test_provider(app: AppHandle, id: String) -> Result<ProviderPayload, String> {
     blocking(app, move |app| {
         let id = parse_id(&id)?;
-        let library = app.state::<Core>().library.clone();
+        let library = crate::jobs::core_state(app)?.library.clone();
         // A quick answer matters more than retries while the user waits.
         let config = ClientConfig {
             timeout: std::time::Duration::from_secs(20),
@@ -268,7 +267,7 @@ pub async fn set_model_settings(
 ) -> Result<ModelPayload, String> {
     blocking(app, move |app| {
         let provider_id = parse_id(&input.provider_id)?;
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let mut library = lock(&core.library);
         library
             .set_model_overrides(
@@ -299,7 +298,7 @@ pub async fn set_model_settings(
 #[tauri::command]
 pub async fn task_models(app: AppHandle) -> Result<Vec<TaskModelPayload>, String> {
     blocking(app, |app| {
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let choices = lock(&core.library).task_models().map_err(storage_code)?;
         Ok(choices
             .into_iter()
@@ -322,7 +321,7 @@ pub async fn set_task_model(
 ) -> Result<(), String> {
     blocking(app, move |app| {
         let task = parse_task(&task)?;
-        let core = app.state::<Core>();
+        let core = crate::jobs::core_state(app)?;
         let mut library = lock(&core.library);
         match choice {
             Some(choice) => library

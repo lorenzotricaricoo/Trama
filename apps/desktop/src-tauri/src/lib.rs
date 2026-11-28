@@ -14,7 +14,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use tauri::menu::{AboutMetadata, Menu, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Runtime, State};
-use trama_core::config::{AppConfig, CONFIG_FILE};
+use trama_core::config::{AppConfig, CONFIG_FILE, config_notice};
 use trama_core::i18n::{Catalog, Localizer, system_locales};
 use trama_core::jobs::{DeleteAudio, JobHandler, Runner, Transcribe};
 use trama_core::providers::{ClientConfig, Keychain};
@@ -81,27 +81,93 @@ fn library_dir(config: &AppConfig, default: &Path) -> (PathBuf, bool) {
     }
 }
 
-/// Reads the app configuration from the app data folder.
+/// Reads the app configuration from the app data folder. A file that can't be read is set
+/// aside (or, failing that, never overwritten) and reported as a startup notice.
 fn load_settings<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<settings::Settings> {
     let data_dir = app.path().app_data_dir()?;
     let path = data_dir.join(CONFIG_FILE);
-    let config = AppConfig::load(&path).unwrap_or_else(|err| {
-        eprintln!(
-            "trama: cannot read {}: {err}; using the defaults",
-            path.display()
-        );
-        AppConfig::default()
-    });
+    let loaded = AppConfig::load(&path);
+    let notices = loaded
+        .notice
+        .map(|code| settings::StartupNotice::new(code, Some(&path)))
+        .into_iter()
+        .collect();
     let default_library = data_dir.join(LIBRARY_DIR);
-    let (open_library, library_overridden) = library_dir(&config, &default_library);
+    let (open_library, library_overridden) = library_dir(&loaded.config, &default_library);
     Ok(settings::Settings {
         path,
-        config: Mutex::new(config),
+        config: Mutex::new(loaded.config),
         open_library,
         default_library,
         library_overridden,
         home: app.path().home_dir().ok(),
+        save_blocked: loaded.save_blocked,
+        notices,
     })
+}
+
+/// What opening the library at start gave.
+struct LibraryOpening<T> {
+    /// The open library, if any could be opened.
+    core: Option<T>,
+    /// The folder of the open library (the one tried last when none opened).
+    dir: PathBuf,
+    notice: Option<settings::StartupNotice>,
+}
+
+/// Opens the library in `wanted`. If it can't be opened (a disconnected disk, a folder
+/// without permission, a newer version of Trama, another copy holding it) the default
+/// library is opened instead when `may_fall_back`, and the user is told; the chosen
+/// location stays saved, so it is tried again at the next start. Never fails: without
+/// any library the app still starts and says so.
+fn open_with_fallback<T, E: std::fmt::Display>(
+    wanted: &Path,
+    default: &Path,
+    may_fall_back: bool,
+    mut open: impl FnMut(&Path) -> Result<T, E>,
+) -> LibraryOpening<T> {
+    let err = match open(wanted) {
+        Ok(core) => {
+            return LibraryOpening {
+                core: Some(core),
+                dir: wanted.to_path_buf(),
+                notice: None,
+            };
+        }
+        Err(err) => err,
+    };
+    eprintln!(
+        "trama: cannot open the library in {}: {err}",
+        wanted.display()
+    );
+    let failed = |dir: &Path| LibraryOpening {
+        core: None,
+        dir: dir.to_path_buf(),
+        notice: Some(settings::StartupNotice::new(
+            config_notice::LIBRARY_FAILED,
+            Some(dir),
+        )),
+    };
+    if !may_fall_back || wanted == default {
+        return failed(wanted);
+    }
+    match open(default) {
+        Ok(core) => LibraryOpening {
+            core: Some(core),
+            dir: default.to_path_buf(),
+            notice: Some(settings::StartupNotice::new(
+                config_notice::LIBRARY_UNAVAILABLE,
+                Some(wanted),
+            )),
+        },
+        Err(err) => {
+            eprintln!(
+                "trama: cannot open the default library in {} either: {err}",
+                default.display()
+            );
+            failed(default)
+        }
+    }
 }
 
 /// Negotiates the interface locale from the configuration and translates the native
@@ -249,16 +315,27 @@ pub fn run() {
             providers::set_model_settings,
             providers::task_models,
             providers::set_task_model,
+            settings::startup_notices,
             summary::source_summary,
             summary::regenerate_summary,
             summary::set_source_title
         ])
         .setup(move |app| {
-            let settings = load_settings(app.handle())?;
-            let library_dir = settings.open_library.clone();
+            let mut settings = load_settings(app.handle())?;
+            // A library chosen with TRAMA_LIBRARY is never swapped for the real one.
+            let opening = open_with_fallback(
+                &settings.open_library,
+                &settings.default_library,
+                !settings.library_overridden,
+                |dir| start_core(app.handle(), dir),
+            );
+            settings.open_library = opening.dir;
+            settings.notices.extend(opening.notice);
             app.manage(settings);
             apply_locale(app.handle())?;
-            app.manage(start_core(app.handle(), &library_dir)?);
+            if let Some(core) = opening.core {
+                app.manage(core);
+            }
             app.manage(models::start(app.handle())?);
             if let Some(window) = app.get_webview_window("main") {
                 window.set_title(&app.package_info().name)?;
@@ -346,6 +423,47 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_library_that_cannot_be_opened_falls_back_to_the_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let default = dir.path().join("Library");
+        // A file where the chosen library should be: like a disk that is gone.
+        let broken = dir.path().join("Gone");
+        std::fs::write(&broken, b"not a folder").unwrap();
+
+        let opening = open_with_fallback(&broken, &default, true, |d: &Path| Library::open(d));
+        assert!(opening.core.is_some());
+        assert_eq!(opening.dir, default);
+        let notice = opening.notice.unwrap();
+        assert_eq!(notice.code, config_notice::LIBRARY_UNAVAILABLE);
+        assert_eq!(notice.path, Some(settings::path_text(&broken)));
+
+        // A library that opens gives no notice.
+        drop(opening.core);
+        let opening = open_with_fallback(&default, &default, true, |d: &Path| Library::open(d));
+        assert!(opening.core.is_some() && opening.notice.is_none());
+    }
+
+    #[test]
+    fn without_any_library_the_app_still_starts() {
+        let dir = tempfile::tempdir().unwrap();
+        let broken = dir.path().join("Gone");
+        std::fs::write(&broken, b"not a folder").unwrap();
+        let default = dir.path().join("AlsoGone");
+        std::fs::write(&default, b"not a folder").unwrap();
+
+        let opening = open_with_fallback(&broken, &default, true, |d: &Path| Library::open(d));
+        assert!(opening.core.is_none());
+        assert_eq!(opening.notice.unwrap().code, config_notice::LIBRARY_FAILED);
+
+        // TRAMA_LIBRARY in development: no silent switch to the real library.
+        let ok_default = dir.path().join("Library");
+        let opening = open_with_fallback(&broken, &ok_default, false, |d: &Path| Library::open(d));
+        assert!(opening.core.is_none());
+        assert_eq!(opening.dir, broken);
+        assert!(!ok_default.exists());
     }
 
     #[test]

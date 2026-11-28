@@ -317,11 +317,14 @@ What belongs to one Mac rather than to the library lives in `settings.json`, nex
 default library location (`~/Library/Application Support/io.github.lorenzotricaricoo.trama/`),
 because some of it is needed before the library is opened. The file is JSON, written
 atomically; a value that can't be read gives its default, and keys written by a newer
-version are kept.
+version are kept. A file that can't be read at all is renamed `settings.json.corrupt`
+before anything is saved, and Trama starts with the defaults and tells the user
+(`settings_reset`); if it can't even be renamed, changes are not saved, so it is never
+overwritten (`settings_unreadable`).
 
 | Key | Value | Default |
 |-----|-------|---------|
-| `libraryDir` | Absolute path of the library; it must be empty, new or an existing library, and not inside iCloud Drive or another synced folder | the default location |
+| `libraryDir` | Absolute path of the library, stored with links and `..` resolved; it must be empty, new or an existing library, writable, and not inside iCloud Drive or another synced folder (checked on the resolved path) | the default location |
 | `interfaceLanguage` | `en` or `it` | follows macOS |
 | `theme` | `system`, `light` or `dark` | `system` |
 | `accent` | One of the accents of the [visual direction](../design/visual-direction.md#accent) | `lime` |
@@ -330,6 +333,13 @@ version are kept.
 
 `TRAMA_LIBRARY` and `TRAMA_LOCALE` still override the library location and the language
 in development.
+
+A chosen library that can't be opened at start (a disconnected disk, no permission, a
+newer version of Trama, another copy of Trama using it) never stops Trama: it opens the
+default library instead and tells the user (`library_unavailable`); the chosen location
+stays saved and is tried again at the next start. If no library opens, Trama still
+starts and says so (`library_failed`). With `TRAMA_LIBRARY` there is no fallback, so
+development never touches the real library.
 
 ## Search
 

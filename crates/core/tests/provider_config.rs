@@ -373,6 +373,30 @@ fn removing_a_provider_removes_its_key_models_and_task_choices() {
 }
 
 #[test]
+fn a_key_the_keychain_keeps_keeps_its_provider() {
+    let (_dir, _clock, mut library) = library();
+    let secrets = MemorySecrets::new();
+    let provider = providers::add_provider(
+        &mut library,
+        &secrets,
+        &new_provider("https://x.example.com/v1"),
+        Some(&Secret::new(KEY)),
+    )
+    .unwrap();
+
+    let err = providers::remove_provider(&mut library, &BrokenStore, provider.id).unwrap_err();
+    assert_eq!(err.code(), "keychain");
+    assert_eq!(library.providers().unwrap().len(), 1);
+
+    // Removing again works, also when the key is already gone.
+    secrets
+        .delete(provider.key_ref.as_deref().unwrap())
+        .unwrap();
+    providers::remove_provider(&mut library, &secrets, provider.id).unwrap();
+    assert!(library.providers().unwrap().is_empty());
+}
+
+#[test]
 fn refreshing_the_catalogue_reads_the_provider_and_stores_it() {
     let server = MockServer::start();
     server.push(Reply::json(

@@ -11,8 +11,8 @@ use super::{Library, Result, StorageError};
 /// Keys of the library settings in the `setting` table.
 pub mod setting_key {
     /// Language meetings are recorded in and summaries written in (BCP 47, for example
-    /// `it`). Shared with the summary job.
-    pub const MEETING_LANGUAGE: &str = "meeting.language";
+    /// `it`): the key the summary job reads with [`super::Library::meeting_language`].
+    pub const MEETING_LANGUAGE: &str = super::super::MEETING_LANGUAGE_SETTING;
     /// How long a meeting's audio is kept after a successful transcription
     /// ([`super::AudioRetention`]).
     pub const AUDIO_RETENTION: &str = "audio.retention";
@@ -91,7 +91,7 @@ pub struct LibrarySettings {
 impl Default for LibrarySettings {
     fn default() -> Self {
         Self {
-            meeting_language: "en".to_owned(),
+            meeting_language: super::DEFAULT_MEETING_LANGUAGE.to_owned(),
             audio_retention: AudioRetention::Never,
             usage: UsageSettings::default(),
         }

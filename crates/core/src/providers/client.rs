@@ -203,6 +203,10 @@ pub struct TokenUsage {
 /// replies included, since they are billed too.
 pub type UsageHook = Arc<dyn Fn(TokenUsage) + Send + Sync>;
 
+/// Called before every chat request; an error refuses the request without sending it.
+/// Used to stop at the monthly budget between the calls of one task.
+pub type RequestGuard = Arc<dyn Fn() -> Result<(), ProviderError> + Send + Sync>;
+
 /// A client for one provider.
 #[derive(Clone)]
 pub struct Client {
@@ -212,6 +216,7 @@ pub struct Client {
     config: ClientConfig,
     sleep: Sleeper,
     usage_hook: Option<UsageHook>,
+    request_guard: Option<RequestGuard>,
 }
 
 impl std::fmt::Debug for Client {
@@ -246,6 +251,7 @@ impl Client {
             config,
             sleep: Arc::new(std::thread::sleep),
             usage_hook: None,
+            request_guard: None,
         }
     }
 
@@ -258,6 +264,13 @@ impl Client {
     /// Reports the tokens of every chat reply to `hook`, to track usage and cost.
     pub fn with_usage_hook(mut self, hook: UsageHook) -> Self {
         self.usage_hook = Some(hook);
+        self
+    }
+
+    /// Asks `guard` before every chat request, retries included; a request it refuses is
+    /// not sent and fails with the guard's error.
+    pub fn with_request_guard(mut self, guard: RequestGuard) -> Self {
+        self.request_guard = Some(guard);
         self
     }
 
@@ -364,6 +377,9 @@ impl Client {
             _ => {}
         }
 
+        if let Some(guard) = &self.request_guard {
+            guard()?;
+        }
         let text = self.request("chat/completions", Some(&body))?;
         if let (Some(hook), Some(usage)) = (&self.usage_hook, parse_usage(&text)) {
             hook(usage);
