@@ -74,6 +74,7 @@ download ([downloaded models](docs/architecture/models.md)).
 - [Information architecture](docs/design/information-architecture.md) — objects, screens, navigation and flows of the MVP
 - [Visual direction](docs/design/visual-direction.md) — look, colours, type, motion and design tokens
 - [Data model](docs/architecture/data-model.md) — how sources, meetings and notes are stored, versioned and searched
+- [Audio capture](docs/architecture/audio-capture.md) — how a meeting is recorded on two aligned tracks ([manual checks](docs/development/audio-capture.md))
 - [Downloaded models](docs/architecture/models.md) — the pinned transcription model, where it lives and how it is downloaded
 - [AI providers](docs/architecture/providers.md) — providers, models per task and how calls stay robust
 - [Principles](docs/principles.md) — rules for process and architecture

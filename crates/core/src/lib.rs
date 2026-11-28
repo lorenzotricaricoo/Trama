@@ -4,6 +4,7 @@
 //! dependency on the user interface (principle A1). The desktop app, and later the CLI
 //! and the MCP server, are clients of this library.
 
+pub mod capture;
 pub mod i18n;
 pub mod jobs;
 pub mod models;
