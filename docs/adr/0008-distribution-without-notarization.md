@@ -1,6 +1,6 @@
 # 0008. Distribution without notarization
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-11-28
 - **Replaces:** the *Packaging* row of [ADR 0007](0007-tech-stack.md)
 

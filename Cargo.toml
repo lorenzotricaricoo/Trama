@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/core", "apps/desktop/src-tauri"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2024"
 rust-version = "1.96"
 license = "MIT"
@@ -17,3 +17,9 @@ unsafe_code = "deny"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
+
+# Cargo strips debug info from release builds by default. On this macOS the stripped
+# proc-macro libraries fail to load ("mis-aligned LINKEDIT string pool") and the build
+# stops, so release builds are not stripped. Release has no debug info of its own.
+[profile.release]
+strip = false

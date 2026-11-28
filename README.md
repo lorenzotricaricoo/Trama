@@ -2,9 +2,10 @@
 
 Desktop app for meetings, transcription and dictation — macOS & Windows.
 
-> **Status: early development.** No release is available yet. The tech stack is
-> decided ([ADR 0007](docs/adr/0007-tech-stack.md)): a Rust core with a Tauri and React
-> interface. Work on the first phase of the MVP has started.
+> **Status: early development.** The first pre-release of phase 1 is out for macOS
+> ([changelog](CHANGELOG.md)): it records, transcribes and summarizes meetings, but
+> search, the Home, onboarding and the menu bar are still missing. A Rust core with a
+> Tauri and React interface ([ADR 0007](docs/adr/0007-tech-stack.md)).
 
 ## Goals
 
@@ -16,8 +17,29 @@ Desktop app for meetings, transcription and dictation — macOS & Windows.
 
 | Platform | Status  |
 |----------|---------|
-| macOS    | Planned |
+| macOS    | Pre-release (macOS 14.2 or later, Apple silicon) |
 | Windows  | Planned |
+
+## Install
+
+Trama is signed but not notarized by Apple
+([ADR 0008](docs/adr/0008-distribution-without-notarization.md)), so macOS asks for
+confirmation the first time:
+
+1. Download the `.dmg` from the [latest release](https://github.com/lorenzotricaricoo/Trama/releases).
+2. Open it and drag **Trama** to **Applications**.
+3. Open Trama. macOS says it cannot verify the app: click **Done**.
+4. Open **System Settings → Privacy & Security**, scroll to *Security* and click
+   **Open Anyway** next to the message about Trama, then confirm.
+
+From then on Trama opens normally. Before the first meeting, in Trama's settings:
+download the transcription model (**Transcription**) and add an AI provider with a
+model for the summary (**Providers**). The first recording asks for the microphone and
+the system audio.
+
+Your data stays on your Mac, in
+`~/Library/Application Support/io.github.lorenzotricaricoo.trama`; a new version keeps
+it.
 
 ## Development
 
@@ -84,6 +106,7 @@ Tests that need the transcription model are ignored by default; see
 - [Downloaded models](docs/architecture/models.md) — the pinned transcription model, where it lives and how it is downloaded
 - [AI providers](docs/architecture/providers.md) — providers, models per task and how calls stay robust
 - [Transcription](docs/architecture/transcription.md) — the local engine, how both tracks become one timeline, the background job and its tests
+- [Releasing](docs/development/releasing.md) — versions, how a release is built and published, manual checks
 - [Principles](docs/principles.md) — rules for process and architecture
 - [Architecture Decision Records](docs/adr/) — decisions and their reasons
 
