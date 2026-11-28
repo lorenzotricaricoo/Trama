@@ -4,6 +4,7 @@ import { afterEach, vi } from 'vitest';
 
 afterEach(() => {
   cleanup();
+  document.documentElement.className = '';
 });
 
 // jsdom has no matchMedia.
