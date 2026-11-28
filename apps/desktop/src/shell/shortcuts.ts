@@ -68,27 +68,31 @@ function isTextField(target: EventTarget | null): boolean {
 
 /**
  * Runs the handler of a shell shortcut pressed anywhere in the window. Only the shortcuts in
- * `enabled` act (all by default); the others are left to the page.
+ * `enabled` act (all by default); the others are left to the page. `onKey` hears every shell
+ * shortcut pressed, whether it acts or not (held down, in a text field, not enabled), so the
+ * native menu item with the same shortcut can be told apart (see `actions.ts`).
  */
 export function useShortcuts(
   handlers: Record<ShortcutId, () => void>,
   enabled?: readonly ShortcutId[],
+  onKey?: (id: ShortcutId) => void,
 ) {
   // The latest values, so the listener is added once.
-  const latest = useRef({ handlers, enabled });
+  const latest = useRef({ handlers, enabled, onKey });
   useEffect(() => {
-    latest.current = { handlers, enabled };
+    latest.current = { handlers, enabled, onKey };
   });
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      // Keys pressed while composing (accents, IME) belong to the text being typed.
-      if (event.defaultPrevented || event.repeat || event.isComposing) return;
       const id = (Object.keys(SHORTCUTS) as ShortcutId[]).find((key) =>
         SHORTCUTS[key].matches(event),
       );
       if (id === undefined) return;
-      const { handlers: current, enabled: allowed } = latest.current;
+      const { handlers: current, enabled: allowed, onKey: heard } = latest.current;
+      heard?.(id);
+      // Keys pressed while composing (accents, IME) belong to the text being typed.
+      if (event.defaultPrevented || event.repeat || event.isComposing) return;
       if (allowed && !allowed.includes(id)) return;
       if (id === 'back' && isTextField(event.target)) return;
       event.preventDefault();
